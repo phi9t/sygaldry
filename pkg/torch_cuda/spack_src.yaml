@@ -1,0 +1,202 @@
+# =============================================================================
+# PyTorch CUDA Machine Learning Environment - Spack Configuration Template
+# =============================================================================
+#
+# This specialized Spack environment provides a complete machine learning stack
+# with GPU acceleration through CUDA. It's optimized for deep learning, data
+# science, and computational research requiring high-performance GPU computing.
+#
+# TEMPLATE USAGE:
+# ---------------
+# This file demonstrates how to create specialized ML environments:
+# 1. Copy this file as `spack_src.yaml` in your new package directory
+# 2. Modify the `specs` section for your ML framework needs
+# 3. Configure CUDA architecture targets in the `packages` section
+# 4. Adjust Python packages and data science tools as needed
+# 5. Run `./build.sh` to convert to `spack.yaml` and install
+#
+# ARCHITECTURE NOTES:
+# -------------------
+# - GPU Support: Configured for CUDA with specific architecture targeting
+# - Python Ecosystem: Includes modern data science and ML packages
+# - Interactive Development: Jupyter integration for notebook workflows
+# - Data Processing: High-performance data manipulation with polars/DuckDB
+# - Container Integration: Uses container-compatible paths for persistent storage
+#
+# CUSTOMIZATION EXAMPLES:
+# -----------------------
+# - CUDA Architectures: Update cuda_arch values for your specific GPU
+# - ML Frameworks: Add TensorFlow, JAX, or other frameworks as needed
+# - Data Science: Include additional packages like pandas, matplotlib, etc.
+# - Compute Libraries: Add CuPY, CuDF, or other CUDA-accelerated libraries
+#
+
+spack:
+  # ==========================================================================
+  # Concretizer Configuration
+  # ==========================================================================
+  # Optimized for ML environments with complex dependency graphs
+  
+  concretizer:
+    # unify: Critical for ML environments to ensure CUDA/Python compatibility
+    # All packages will use the same Python and CUDA versions
+    unify: true
+    
+    # reuse: Speeds up environment creation by reusing compatible packages
+    # Especially important for large ML frameworks with many dependencies
+    reuse: dependencies
+
+  # ==========================================================================
+  # Machine Learning Package Specifications
+  # ==========================================================================
+  # Curated selection of ML and data science packages with GPU acceleration
+  
+  specs:
+    # ========================================================================
+    # Core Python Environment
+    # ========================================================================
+    
+    - python         # Python interpreter (will be unified across all packages)
+    - python-venv    # Virtual environment support for Python packages
+    - py-pip         # Package installer for additional ML packages
+    
+    # ========================================================================
+    # Scientific Computing Foundation
+    # ========================================================================
+    
+    - py-numpy       # Fundamental package for scientific computing
+    
+    # ========================================================================
+    # Deep Learning Frameworks
+    # ========================================================================
+    
+    - py-torch       # PyTorch deep learning framework (with CUDA support)
+    - py-torchvision # Computer vision utilities and pre-trained models
+    
+    # ========================================================================
+    # Data Science and Analytics
+    # ========================================================================
+    
+    - py-polars      # Fast DataFrame library with lazy evaluation
+    - duckdb         # In-process analytical database with Python bindings
+    
+    # ========================================================================
+    # Interactive Development Environment
+    # ========================================================================
+    
+    - py-jupyterlab  # Modern notebook interface for interactive ML development
+
+  # ==========================================================================
+  # Package-Specific Configuration
+  # ==========================================================================
+  # Fine-tuned build options for optimal ML performance
+  
+  packages:
+    # DuckDB configuration for data science workflows
+    duckdb:
+      require:
+        - "+python"       # Enable Python bindings for data analysis
+        - "+parquet"      # Support for Parquet columnar data format
+    
+    # PyTorch configuration for CUDA-enabled deep learning
+    py-torch:
+      require:
+        - "+cuda cuda_arch=61,75,80,86,89,90"  # Support multiple GPU architectures
+        - "+distributed"  # Enable distributed training capabilities
+        - "-magma"        # Disable MAGMA for compatibility (can be enabled if needed)
+
+  # ==========================================================================
+  # Environment View Configuration
+  # ==========================================================================
+  # Creates unified package view for Bazel and other build systems
+  
+  view: /opt/spack_store/view
+
+  # ==========================================================================
+  # Build and Storage Configuration
+  # ==========================================================================
+  # Container-compatible paths for persistent ML environments
+  
+  config:
+    # Installation tree: Compiled packages and libraries
+    install_tree:
+      root: /opt/spack_store/install_tree
+    
+    # Build staging: Temporary compilation workspace
+    build_stage: /opt/spack_store/build_stage
+    
+    # Source cache: Downloaded ML framework source code
+    source_cache: /opt/spack_store/source_cache
+    
+    # Misc cache: Metadata and build artifacts
+    misc_cache: /opt/spack_store/misc_cache
+    
+    # Build optimization for ML packages (resource-intensive)
+    build_jobs: 8        # Increased for ML compilation (adjust for your system)
+    ccache: true         # Essential for iterative ML framework development
+
+# =============================================================================
+# TEMPLATE CUSTOMIZATION EXAMPLES FOR ML ENVIRONMENTS
+# =============================================================================
+#
+# TensorFlow GPU Environment:
+# ---------------------------
+# Add to specs:
+#   - py-tensorflow+cuda
+#   - py-tensorboard
+#   - py-keras
+#   - py-tensorflow-datasets
+#
+# Add to packages:
+#   py-tensorflow:
+#     require: "+cuda +tensorrt cuda_arch=75,80,86"
+#
+# Computer Vision Specialized:
+# ----------------------------
+# Add to specs:
+#   - py-opencv+python3+cuda
+#   - py-pillow+jpeg+png+tiff
+#   - py-albumentations
+#   - py-timm
+#   - py-detectron2
+#
+# Natural Language Processing:
+# ----------------------------
+# Add to specs:
+#   - py-transformers
+#   - py-tokenizers
+#   - py-datasets
+#   - py-sentencepiece
+#   - py-spacy
+#
+# Scientific Computing Enhanced:
+# ------------------------------
+# Add to specs:
+#   - py-scipy
+#   - py-matplotlib
+#   - py-seaborn
+#   - py-pandas
+#   - py-xarray
+#   - py-dask+complete
+#
+# Distributed Computing:
+# -----------------------
+# Add to specs:
+#   - py-ray+default
+#   - py-horovod+pytorch+mpi
+#   - nccl@2.18:
+#   - openmpi+cuda
+#
+# CUDA Architecture Guide:
+# -------------------------
+# Tesla V100: cuda_arch=70
+# Tesla T4: cuda_arch=75
+# A100: cuda_arch=80
+# RTX 30xx: cuda_arch=86
+# RTX 40xx: cuda_arch=89
+# H100: cuda_arch=90
+#
+# Multiple architectures can be specified: cuda_arch=75,80,86,89,90
+# This creates binaries optimized for multiple GPU generations
+#
+# =============================================================================

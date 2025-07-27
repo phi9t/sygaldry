@@ -1,0 +1,210 @@
+# =============================================================================
+# Sygaldry Base Development Environment - Spack Configuration Template
+# =============================================================================
+#
+# This is the primary Spack environment template for the Sygaldry build system.
+# It defines a comprehensive development environment with essential tools for
+# mixed-language development, system administration, and scientific computing.
+#
+# TEMPLATE USAGE:
+# ---------------
+# This file serves as a template for creating new Spack environments:
+# 1. Copy this file to your package directory as `spack_src.yaml`
+# 2. Modify the `specs` section for your specific needs
+# 3. Update package-specific configurations in the `packages` section
+# 4. Run `./build.sh` to convert to `spack.yaml` and install
+#
+# ARCHITECTURE INTEGRATION:
+# -------------------------
+# - Container paths: All paths are container-compatible (/opt/spack_store/*)
+# - Bazel integration: View generated at /opt/spack_store/view for Bazel consumption
+# - Build caching: Uses ccache and optimized build_jobs for faster compilation
+# - Persistent storage: All data persists across container restarts via volume mounts
+#
+# CUSTOMIZATION GUIDELINES:
+# -------------------------
+# - specs: Add/remove packages as needed for your environment
+# - packages: Configure package-specific build options and variants
+# - config: Adjust build_jobs based on your system's CPU cores
+# - view: Keep as /opt/spack_store/view for Bazel integration
+#
+
+spack:
+  # ==========================================================================
+  # Concretizer Configuration
+  # ==========================================================================
+  # Controls how Spack resolves dependencies and creates concrete specs
+  
+  concretizer:
+    # unify: Ensures all packages in the environment use compatible versions
+    # This prevents version conflicts and creates a cohesive environment
+    unify: true
+    
+    # reuse: Leverages existing installations to speed up environment creation
+    # 'dependencies' means reuse packages that are dependencies of specs in this env
+    reuse: dependencies
+
+  # ==========================================================================
+  # Package Specifications
+  # ==========================================================================
+  # List of packages to install in this environment
+  # Format: package[@version][%compiler][+variant][-variant][^dependency]
+  
+  specs:
+    # ========================================================================
+    # Core Development Tools
+    # ========================================================================
+    
+    # Build Systems and Project Management
+    - cmake          # Cross-platform build system generator
+    - ninja          # Fast build system designed for speed
+    
+    # Version Control and Collaboration
+    - git            # Distributed version control system
+    - git-lfs        # Git extension for large file storage
+    
+    # Programming Language Toolchains
+    - python         # Python interpreter and standard library
+    - go             # Go programming language compiler and tools
+    - rust           # Rust systems programming language
+    
+    # Python Package Management
+    - py-build       # Modern Python package build backend
+    - py-pip         # Python package installer
+    - py-setuptools  # Python package development utilities
+    - py-wheel       # Python wheel package format support
+    
+    # ========================================================================
+    # System Utilities and CLI Tools
+    # ========================================================================
+    
+    # Network and Download Tools
+    - aria2          # High-speed download utility with metalink support
+    - curl           # Data transfer tool with URL syntax
+    - wget           # Network downloader with recursive capabilities
+    - openssh        # Secure shell implementation for remote access
+    
+    # Text Processing and Search
+    - ripgrep        # Fast text search tool (modern grep replacement)
+    - jq             # Command-line JSON processor
+    - py-yq          # YAML/XML processor (jq wrapper)
+    
+    # File Management and Navigation
+    - dust           # Disk usage analyzer (modern du replacement)
+    - eza            # Modern file listing tool (ls replacement)
+    
+    # System Monitoring and Administration
+    - htop           # Interactive process viewer (top replacement)
+    - tmux           # Terminal multiplexer for session management
+    
+    # ========================================================================
+    # Development and Productivity Tools
+    # ========================================================================
+    
+    # Text Editors and IDEs
+    - emacs          # Extensible text editor and development environment
+    - libvterm       # Terminal emulator library (for emacs vterm)
+    
+    # Documentation and Publishing
+    - pandoc         # Universal document converter (Markdown, LaTeX, etc.)
+    - aspell         # Spell checker for multiple languages
+    
+    # System Integration
+    - scrot          # Screenshot utility for documentation
+    - zsh            # Advanced shell with powerful features
+
+  # ==========================================================================
+  # Package-Specific Configuration
+  # ==========================================================================
+  # Custom build options and variant selections for specific packages
+  
+  packages:
+    # Emacs configuration for modern development features
+    emacs:
+      require: [
+        "@29:",          # Require Emacs version 29 or later
+        "+json",         # Enable JSON support for LSP and modern tooling
+        "+native",       # Enable native compilation for better performance
+        "+treesitter",   # Enable tree-sitter for advanced syntax highlighting
+      ]
+
+  # ==========================================================================
+  # Environment View Configuration
+  # ==========================================================================
+  # The view creates a unified directory structure with symlinks to all
+  # installed packages, making them available to Bazel and other build systems
+  
+  view: /opt/spack_store/view
+
+  # ==========================================================================
+  # Build and Storage Configuration
+  # ==========================================================================
+  # Controls where Spack stores packages, builds, and caches
+  
+  config:
+    # Installation tree: Final installed packages
+    install_tree:
+      root: /opt/spack_store/install_tree
+    
+    # Build staging: Temporary build directories
+    build_stage: /opt/spack_store/build_stage
+    
+    # Source cache: Downloaded source tarballs and repositories
+    source_cache: /opt/spack_store/source_cache
+    
+    # Misc cache: Metadata and other cached data
+    misc_cache: /opt/spack_store/misc_cache
+    
+    # Build optimization settings
+    build_jobs: 4        # Number of parallel compilation jobs (adjust for your CPU)
+    ccache: true         # Enable compiler cache for faster rebuilds
+
+# =============================================================================
+# TEMPLATE CUSTOMIZATION EXAMPLES
+# =============================================================================
+#
+# Machine Learning Environment:
+# -----------------------------
+# Add to specs:
+#   - py-torch+cuda
+#   - py-numpy+blas+lapack
+#   - py-scipy
+#   - py-scikit-learn
+#   - py-matplotlib
+#   - cuda@12.1:
+#   - cudnn@8.9:
+#
+# Add to packages:
+#   py-torch:
+#     require: "+cuda +distributed -magma cuda_arch=75,80,86"
+#   cuda:
+#     require: "@12.1:"
+#
+# HPC Environment:
+# ----------------
+# Add to specs:
+#   - openmpi+cuda+legacylaunchers
+#   - hdf5+mpi+threadsafe
+#   - netcdf-c+mpi
+#   - parallel-netcdf
+#   - fftw+mpi+openmp
+#   - petsc+mpi+hypre+superlu-dist
+#
+# Add to packages:
+#   openmpi:
+#     require: "+cuda +legacylaunchers fabrics=ucx"
+#   hdf5:
+#     require: "+mpi +threadsafe +fortran"
+#
+# Data Science Environment:
+# --------------------------
+# Add to specs:
+#   - py-pandas@2:
+#   - py-polars
+#   - py-dask+complete
+#   - py-jupyter
+#   - py-jupyterlab@4:
+#   - duckdb+python+parquet
+#   - sqlite@3.42:+fts+rtree
+#
+# =============================================================================
