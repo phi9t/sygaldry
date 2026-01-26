@@ -23,7 +23,8 @@ error() {
 }
 
 main() {
-    local script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    local script_dir
+    script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
     
     log "Starting PyTorch CUDA environment build..."
     

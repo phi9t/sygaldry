@@ -17,7 +17,11 @@
 # Docker image configuration
 SOURCE_SUFFIX = dockerfile
 TARGET_SUFFIX = container_image_tag.makefile.autogen
-IMAGE_REPO = sygaldry/sympathy-forgery
+IMAGE_REPO = sygaldry/zephyr
+
+# Shared host storage root (override with SYGALDRY_CONTAINER_ROOT env)
+PROJECT_ID = $(notdir $(abspath ..))
+HOST_ROOT ?= /mnt/data_infra/zephyr_container_infra/$(PROJECT_ID)
 
 # Spack environment paths
 TOOLS_DIR = ../tools
@@ -72,10 +76,9 @@ endef
 tools: container
 	@echo "🔧 Building tools Spack environment..."
 	docker run --rm \
-		--volume=$(call resolve_path,$(HOME)/.local/share/sygaldry_container/sygaldry/monorepo_home):/home/kvothe \
-		--volume=$(call resolve_path,$(HOME)/.local/share/sygaldry_container/sygaldry/spack_store):/opt/spack_store \
-		--volume=$(call resolve_path,$(HOME)/.local/share/sygaldry_container/sygaldry/bazel_cache):/opt/bazel_cache \
-		--volume=$(call resolve_path,$(HOME)/.local/share/sygaldry_container/sygaldry/spack_src):/opt/spack_src \
+		--volume=$(call resolve_path,$(HOST_ROOT)/monorepo_home):/home/kvothe \
+		--volume=$(call resolve_path,$(HOST_ROOT)/spack_store):/opt/spack_store \
+		--volume=$(call resolve_path,$(HOST_ROOT)/bazel_cache):/opt/bazel_cache \
 		--volume=$(call resolve_path,$(shell pwd)/..):/workspace \
 		--workdir=/workspace/tools \
 		--user=1000:1000 \
@@ -87,10 +90,9 @@ tools: container
 torch-cuda: container
 	@echo "🔥 Building PyTorch CUDA environment..."
 	docker run --rm \
-		--volume=$(call resolve_path,$(HOME)/.local/share/sygaldry_container/sygaldry/monorepo_home):/home/kvothe \
-		--volume=$(call resolve_path,$(HOME)/.local/share/sygaldry_container/sygaldry/spack_store):/opt/spack_store \
-		--volume=$(call resolve_path,$(HOME)/.local/share/sygaldry_container/sygaldry/bazel_cache):/opt/bazel_cache \
-		--volume=$(call resolve_path,$(HOME)/.local/share/sygaldry_container/sygaldry/spack_src):/opt/spack_src \
+		--volume=$(call resolve_path,$(HOST_ROOT)/monorepo_home):/home/kvothe \
+		--volume=$(call resolve_path,$(HOST_ROOT)/spack_store):/opt/spack_store \
+		--volume=$(call resolve_path,$(HOST_ROOT)/bazel_cache):/opt/bazel_cache \
 		--volume=$(call resolve_path,$(shell pwd)/..):/workspace \
 		--workdir=/workspace/pkg/torch_cuda \
 		--user=1000:1000 \

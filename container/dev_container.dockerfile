@@ -1,12 +1,13 @@
 # Sygaldry Development Container
-# Ubuntu 24.04 based container with Bazel + Spack + Docker build system
-FROM ubuntu:24.04
+# NVIDIA CUDA based container with Bazel + Spack + Docker build system
+FROM nvidia/cuda:12.9.1-cudnn-devel-ubuntu24.04
 
 # Build arguments
 ARG BAZEL_VERSION=6.4.0
-ARG PYTHON_VERSION=3.12
+ARG PYTHON_VERSION=3.13
 ARG RUST_VERSION=1.79.0
 ARG GO_VERSION=1.21.5
+ARG SPACK_VERSION=v1.1.0
 ARG HOST_UID=1000
 ARG HOST_GID=1000
 
@@ -15,6 +16,11 @@ ENV DEBIAN_FRONTEND=noninteractive
 ENV LANG=C.UTF-8
 ENV LC_ALL=C.UTF-8
 ENV TZ=UTC
+
+# CUDA environment variables
+ENV NVIDIA_VISIBLE_DEVICES=all
+ENV NVIDIA_DRIVER_CAPABILITIES=compute,utility
+ENV CUDA_CACHE_PATH=/opt/bazel_cache/cuda
 
 # ============================================================================
 # System Dependencies and Base Tools
@@ -120,7 +126,11 @@ ENV PATH="/usr/local/go/bin:${PATH}"
 # Python Development Tools - uv handled by setup script
 # ============================================================================
 
-# uv will be installed by setup script for proper user configuration
+# uv will be installed here for global availability
+RUN curl -LsSf https://astral.sh/uv/install.sh | \
+    UV_INSTALL_DIR=/usr/local sh && \
+    ln -sf /usr/local/uv /usr/local/bin/uv && \
+    ln -sf /usr/local/uvx /usr/local/bin/uvx
 
 # ============================================================================
 # Spack Dependencies
@@ -148,6 +158,36 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libatlas-base-dev \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
+
+# ============================================================================
+# CUDA/cuDNN Compatibility (Spack external discovery)
+# ============================================================================
+
+# Ensure cuDNN headers/libs are visible under /usr/local/cuda for Spack discovery
+RUN /bin/bash -lc "set -euo pipefail && \
+    mkdir -p /usr/local/cuda/include /usr/local/cuda/lib64 && \
+    if compgen -G '/usr/include/x86_64-linux-gnu/cudnn*.h' >/dev/null; then \
+        cp -a /usr/include/x86_64-linux-gnu/cudnn*.h /usr/local/cuda/include/; \
+    fi && \
+    if compgen -G '/usr/lib/x86_64-linux-gnu/libcudnn*.so*' >/dev/null; then \
+        cp -a /usr/lib/x86_64-linux-gnu/libcudnn*.so* /usr/local/cuda/lib64/; \
+    fi && \
+    ldconfig"
+
+# Validate cuDNN version for Spack compatibility
+RUN /bin/bash -lc "set -euo pipefail && \
+    if [[ -f /usr/local/cuda/include/cudnn_version.h ]]; then \
+        CUDNN_MAJOR=\$(grep '#define CUDNN_MAJOR' /usr/local/cuda/include/cudnn_version.h | awk '{print \$3}'); \
+        CUDNN_MINOR=\$(grep '#define CUDNN_MINOR' /usr/local/cuda/include/cudnn_version.h | awk '{print \$3}'); \
+        CUDNN_PATCH=\$(grep '#define CUDNN_PATCHLEVEL' /usr/local/cuda/include/cudnn_version.h | awk '{print \$3}'); \
+        echo \"cuDNN version: \${CUDNN_MAJOR}.\${CUDNN_MINOR}.\${CUDNN_PATCH}\"; \
+    else \
+        echo 'WARNING: cudnn_version.h not found'; \
+    fi"
+
+# Install Spack (pinned to release)
+RUN git clone -c feature.manyFiles=true --branch "${SPACK_VERSION}" --depth 1 \
+    https://github.com/spack/spack.git /opt/spack_src
 
 # Configure ccache
 RUN /usr/sbin/update-ccache-symlinks && \
@@ -182,8 +222,8 @@ RUN set -e && \
     echo 'kvothe ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
 
 # Create mount point directories with proper ownership
-RUN mkdir -p /opt/spack_store /opt/spack_src /opt/bazel_cache && \
-    chown -R kvothe:kvothe /opt/spack_store /opt/spack_src /opt/bazel_cache
+RUN mkdir -p /opt/spack_store /opt/bazel_cache /opt/bazel_cache/cuda && \
+    chown -R kvothe:kvothe /opt/spack_store /opt/bazel_cache /opt/spack_src
 
 # ============================================================================
 # Environment Configuration
@@ -210,9 +250,11 @@ CMD ["/bin/bash", "--login"]
 
 # Labels for metadata
 LABEL maintainer="Sygaldry Development Team"
-LABEL description="Ubuntu 24.04 based development container with Bazel + Spack + Docker build system"
+LABEL description="NVIDIA CUDA 12.9.1 development container with GPU support, Bazel + Spack + Docker build system"
 LABEL version="1.0"
+LABEL cuda.version="12.9.1"
 LABEL bazel.version="${BAZEL_VERSION}"
 LABEL python.version="${PYTHON_VERSION}"
 LABEL rust.version="${RUST_VERSION}"
 LABEL go.version="${GO_VERSION}"
+LABEL spack.version="${SPACK_VERSION}"

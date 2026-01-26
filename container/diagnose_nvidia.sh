@@ -23,8 +23,10 @@ set -eu -o pipefail
 # Configuration
 # ============================================================================
 
-readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-readonly SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+readonly SCRIPT_DIR
+SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
+readonly SCRIPT_NAME
 
 # Colors for output
 readonly RED='\033[0;31m'
@@ -116,8 +118,7 @@ check_nvidia_driver_installed() {
     fi
 
     # Check CUDA version reported by driver
-    local cuda_version
-    if cuda_version=$(nvidia-smi --query-gpu=driver_version --format=csv,noheader 2>/dev/null | head -1); then
+    if nvidia-smi --query-gpu=driver_version --format=csv,noheader >/dev/null 2>&1; then
         local cuda_from_smi
         cuda_from_smi=$(nvidia-smi | grep -oP 'CUDA Version: \K[0-9.]+' || echo "unknown")
         success "CUDA version (driver): ${cuda_from_smi}"

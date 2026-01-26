@@ -1,7 +1,7 @@
 # Zephyr Container Infra: Engineering System Design
 
-**Version:** 1.0
-**Date:** 2026-01-26
+**Version:** 1.1
+**Date:** 2026-01-28
 **Status:** Current Implementation
 
 ---
@@ -19,6 +19,8 @@ The Zephyr container infrastructure provides a reproducible, GPU-enabled AI/ML d
 - Host/shared storage for large build outputs
 - Simple, robust long-build logging and monitoring
 - Entry point dispatch for different workflows
+- Human ergonomics: one-line commands for Spack/uv/HF workflows
+- Agent ergonomics: structured logs + status for low-token monitoring
 
 ## Non-Goals
 
@@ -65,6 +67,10 @@ Workspace Mount
 - **Entrypoints**: `container/entrypoints/*.sh`
   - `default.sh` (interactive or run command)
   - `spack-install.sh` (runs `spack install` then shell)
+  - `spack-build.sh` (runs Zephyr build script)
+  - `uv-install.sh` (runs `uv venv` + `uv pip install`)
+  - `hf-download.sh` (downloads HF dataset to shared cache)
+  - `run-job.sh` (generic command runner)
 
 ---
 
@@ -91,6 +97,18 @@ This allows:
 2. Build Zephyr Spack env inside container:
    - `cd /workspace/pkg/zephyr && ./build.sh`
 3. Spack installs into `/opt/spack_store`
+
+### Human-Oriented Shortcuts
+
+- `SYGALDRY_ENTRYPOINT=spack-build ./container/launch_container.sh`
+- `SYGALDRY_ENTRYPOINT=uv-install ./container/launch_container.sh -- <packages...>`
+- `SYGALDRY_ENTRYPOINT=hf-download ./container/launch_container.sh -- <dataset> <config> <split>`
+
+### Agent-Oriented Job Runner
+
+- **Runner**: `tools/zephyr_job`
+- **Status**: `/mnt/data_infra/zephyr_container_infra/<project_id>/bazel_cache/zephyr_jobs/<job>.status`
+- **Logs**: `/mnt/data_infra/zephyr_container_infra/<project_id>/bazel_cache/zephyr_jobs/<job>-<timestamp>.jsonl`
 
 ### Long Build Logging (Recommended)
 
@@ -128,7 +146,8 @@ The launcher can auto-disable GPU if the host CUDA version is too low.
 
 ## Observability
 
-- **Build logs**: `/mnt/data_infra/zephyr_container_infra/build_logs/`
+- **Job logs**: `/mnt/data_infra/zephyr_container_infra/<project_id>/bazel_cache/zephyr_jobs/`
+- **Status files**: `/mnt/data_infra/zephyr_container_infra/<project_id>/bazel_cache/zephyr_jobs/`
 - **Container logs**: `docker logs <container_id>`
 
 ---
@@ -146,4 +165,3 @@ The launcher can auto-disable GPU if the host CUDA version is too low.
 - Add build-cache mirrors for faster Spack installs
 - Add a Make target to manage long build logs
 - Add CI verification of CUDA Torch/JAX runtime
-

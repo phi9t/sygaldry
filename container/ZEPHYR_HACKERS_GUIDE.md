@@ -16,6 +16,12 @@ Run a command directly:
 ./container/launch_container.sh -- bash -lc "echo hello"
 ```
 
+Run a structured job (host-side runner):
+
+```
+./tools/zephyr_job run --project-id zephyr-a --job hello -- "echo hello"
+```
+
 Pick a specific entrypoint:
 
 ```
@@ -27,15 +33,14 @@ Pick a specific entrypoint:
 ## Long Build Logging (Recommended)
 
 ```
-LOG=/mnt/data_infra/zephyr_container_infra/build_logs/zephyr-build-$(date +%Y%m%d-%H%M%S).log
-mkdir -p "$(dirname "$LOG")"
-./container/launch_container.sh -- bash -lc "cd /workspace/pkg/zephyr && ./build.sh" 2>&1 | tee "$LOG"
+./tools/zephyr_job run --project-id zephyr-a --job spack-build -- "cd /workspace/pkg/zephyr && ./build.sh"
 ```
 
 Monitor:
 
 ```
-tail -f "$LOG"
+./tools/zephyr_job tail --project-id zephyr-a --job spack-build
+./tools/zephyr_job status --project-id zephyr-a --job spack-build
 ```
 
 ---
@@ -69,6 +74,15 @@ PY"
 - `container/entrypoints/spack-install.sh`
   - Runs `spack install` with your args, then opens shell.
 
+- `container/entrypoints/spack-build.sh`
+  - Runs the Zephyr build script.
+
+- `container/entrypoints/uv-install.sh`
+  - Runs `uv venv` + `uv pip install` for provided packages.
+
+- `container/entrypoints/hf-download.sh`
+  - Downloads HF dataset into shared cache.
+
 To add a new entrypoint, drop a new script into `container/entrypoints/` and call:
 
 ```
@@ -101,12 +115,22 @@ Enter container shell:
 
 Build Zephyr Spack env:
 ```
-./container/launch_container.sh -- bash -lc "cd /workspace/pkg/zephyr && ./build.sh"
+./tools/zephyr_job run --project-id zephyr-a --job spack-build -- "cd /workspace/pkg/zephyr && ./build.sh"
 ```
 
 Show Spack env:
 ```
 ./container/launch_container.sh -- bash -lc "cd /workspace/pkg/zephyr && spack env activate . && spack find"
+```
+
+Install Python packages (uv):
+```
+SYGALDRY_ENTRYPOINT=uv-install ./container/launch_container.sh -- transformers datasets
+```
+
+Download HF dataset to shared cache:
+```
+SYGALDRY_ENTRYPOINT=hf-download ./container/launch_container.sh -- fineweb default "train[:0.1%]"
 ```
 
 ---
@@ -144,4 +168,3 @@ Show Spack env:
 - Image: `sygaldry/zephyr:base`
 - CUDA: 12.9.1
 - Spack: v1.1.0
-

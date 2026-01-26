@@ -72,32 +72,13 @@ spack:
     
     - py-torch       # PyTorch deep learning framework (with CUDA support)
     - py-torchvision # Computer vision utilities and pre-trained models
-    
-    # ========================================================================
-    # Data Science and Analytics
-    # ========================================================================
-    
-    - py-polars      # Fast DataFrame library with lazy evaluation
-    - duckdb         # In-process analytical database with Python bindings
-    
-    # ========================================================================
-    # Interactive Development Environment
-    # ========================================================================
-    
-    - py-jupyterlab  # Modern notebook interface for interactive ML development
-
+        
   # ==========================================================================
   # Package-Specific Configuration
   # ==========================================================================
   # Fine-tuned build options for optimal ML performance
   
-  packages:
-    # DuckDB configuration for data science workflows
-    duckdb:
-      require:
-        - "+python"       # Enable Python bindings for data analysis
-        - "+parquet"      # Support for Parquet columnar data format
-    
+  packages:    
     # PyTorch configuration for CUDA-enabled deep learning
     py-torch:
       require:

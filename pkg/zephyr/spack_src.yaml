@@ -1,0 +1,212 @@
+# =============================================================================
+# Zephyr AI/ML Development Environment - Spack Configuration Template
+# =============================================================================
+#
+# A comprehensive AI/ML development environment combining deep learning
+# frameworks, data science tools, development utilities, and native libraries
+# for high-performance machine learning research and development.
+#
+# FEATURES:
+# ---------
+# - Deep Learning: PyTorch with CUDA, JAX with autodiff
+# - Data Science: NumPy, SciPy, pandas, scikit-learn, matplotlib
+# - Development: LLVM/Clang, GDB, tmux, ripgrep, fd
+# - Native Libraries: Eigen, OpenBLAS, LAPACK
+# - Interactive: JupyterLab for notebook-based development
+#
+# USAGE:
+# ------
+# 1. Launch the sygaldry container: ./container/launch_container.sh
+# 2. Build this environment: cd /workspace/pkg/zephyr && ./build.sh
+# 3. Activate: spack-env-activate
+# 4. Verify: python -c "import torch; print(torch.cuda.is_available())"
+#
+# CUDA ARCHITECTURE GUIDE:
+# ------------------------
+# Tesla P100/V100: cuda_arch=60,70
+# Tesla T4: cuda_arch=75
+# A100: cuda_arch=80
+# RTX 30xx: cuda_arch=86
+# RTX 40xx: cuda_arch=89
+# H100: cuda_arch=90
+#
+
+spack:
+  # ==========================================================================
+  # Concretizer Configuration
+  # ==========================================================================
+  # Optimized for ML environments with complex dependency graphs
+
+  concretizer:
+    # unify: Critical for ML environments to ensure CUDA/Python compatibility
+    # All packages will use the same Python and CUDA versions
+    unify: true
+
+    # reuse: Speeds up environment creation by reusing compatible packages
+    reuse: dependencies
+
+  # ==========================================================================
+  # Package Specifications
+  # ==========================================================================
+
+  specs:
+    # ========================================================================
+    # Development Tools
+    # ========================================================================
+
+    # Compilers and Debuggers
+    - llvm@21.1.4+clang+lldb     # LLVM toolchain with Clang compiler and LLDB debugger
+    - gdb@16.2                 # GNU debugger for native code debugging
+
+    # Terminal and Session Management
+    - tmux@3.5a                # Terminal multiplexer for session management
+    - openssh@9.9p1             # Secure shell for remote development
+
+    # Version Control
+    - git@2.48.1                 # Distributed version control system
+
+    # Search and File Finding
+    - ripgrep@14.1.1             # Fast text search tool (modern grep replacement)
+    - fd@10.3.0                  # Fast file finder (modern find replacement)
+
+    # System Monitoring
+    - htop@3.4.1                # Interactive process viewer
+
+    # ========================================================================
+    # Native Libraries
+    # ========================================================================
+
+    - eigen@5.0.0               # C++ template library for linear algebra
+    - openblas@0.3.30            # Optimized BLAS
+    - lapack              # Linear algebra package
+
+    # ========================================================================
+    # Core Python Environment
+    # ========================================================================
+
+    - python@3.13.8              # Python interpreter (unified across all packages)
+    - python-venv@1.0         # Virtual environment support
+    - py-pip@25.1.1              # Package installer for additional packages
+
+    # ========================================================================
+    # Scientific Computing Foundation
+    # ========================================================================
+
+    - py-numpy@2.3.4              # Fundamental package for scientific computing
+    - py-scipy@1.16.3              # Scientific computing library
+
+    # ========================================================================
+    # Deep Learning Frameworks
+    # ========================================================================
+
+    - py-torch@2.9.0+cuda cuda_arch=61,75,80,86,89,90  # PyTorch deep learning framework (CUDA)
+    - py-jax@0.7.0              # JAX for autodiff and XLA acceleration
+    - py-jaxlib@0.7.0+cuda cuda_arch=61,75,80,86,89,90 # JAX runtime with CUDA
+    - py-torchvision@0.24.0      # Computer vision utilities and pre-trained models
+
+    # ========================================================================
+    # Machine Learning
+    # ========================================================================
+
+    - py-scikit-learn@1.7.0     # Traditional machine learning algorithms
+
+    # ========================================================================
+    # Data Science and Visualization
+    # ========================================================================
+
+    - py-matplotlib@3.10.7       # Plotting and visualization
+    - py-pandas@2.3.3           # DataFrames for data manipulation
+
+    # ========================================================================
+    # Interactive Development Environment
+    # ========================================================================
+
+    - py-jupyterlab@4.4.10       # Modern notebook interface for interactive ML development
+
+  # ==========================================================================
+  # Package-Specific Configuration
+  # ==========================================================================
+  # Fine-tuned build options for optimal performance
+
+  packages:
+    # PyTorch configuration for CUDA-enabled deep learning
+    py-torch:
+      require:
+        - "+cuda cuda_arch=61,75,80,86,89,90"  # Support multiple GPU architectures
+        - "+distributed"                        # Enable distributed training
+        - "-magma"                              # Disable MAGMA for compatibility
+
+    # JAX runtime (CUDA)
+    py-jaxlib:
+      require:
+        - "+cuda cuda_arch=61,75,80,86,89,90"
+
+    cuda:
+      externals:
+        - spec: cuda@12.9.1
+          prefix: /usr/local/cuda
+      buildable: false
+    cudnn:
+      externals:
+        - spec: cudnn@9.10.2
+          prefix: /usr/local/cuda
+      buildable: false
+
+    # LLVM with full toolchain
+    llvm:
+      require:
+        - "+clang"                              # Include Clang compiler
+        - "+lldb"                               # Include LLDB debugger
+
+  # ==========================================================================
+  # Environment View Configuration
+  # ==========================================================================
+  # Creates unified package view for Bazel and other build systems
+
+  view: /opt/spack_store/view
+
+  # ==========================================================================
+  # Build and Storage Configuration
+  # ==========================================================================
+  # Container-compatible paths for persistent ML environments
+
+  config:
+    # Installation tree: Compiled packages and libraries
+    install_tree:
+      root: /opt/spack_store/install_tree
+
+    # Build staging: Temporary compilation workspace
+    build_stage: /opt/spack_store/build_stage
+
+    # Source cache: Downloaded source code
+    source_cache: /opt/spack_store/source_cache
+
+    # Misc cache: Metadata and build artifacts
+    misc_cache: /opt/spack_store/misc_cache
+
+    # Build optimization for ML packages (resource-intensive)
+    build_jobs: 8        # Increased for ML compilation (adjust for your system)
+    ccache: false        # Disable ccache (permission issues in container)
+
+# =============================================================================
+# VERIFICATION COMMANDS
+# =============================================================================
+#
+# After installation, verify the environment:
+#
+# PyTorch CUDA:
+#   python -c "import torch; print(f'CUDA available: {torch.cuda.is_available()}')"
+#
+# JAX:
+#   python -c "import jax; print(f'JAX devices: {jax.devices()}')"
+#
+# NumPy with BLAS:
+#   python -c "import numpy; numpy.show_config()"
+#
+# Development tools:
+#   which gdb lldb tmux rg fd
+#
+# Native libraries:
+#   python -c "import numpy as np; a=np.random.rand(100,100); print(np.linalg.svd(a)[1][:5])"
+#
+# =============================================================================

@@ -14,8 +14,8 @@
 set -euo pipefail
 
 # Configuration
-readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-readonly WORKSPACE_DIR="${SCRIPT_DIR}/.."
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+readonly SCRIPT_DIR
 
 log() {
     echo "[$(date +'%Y-%m-%d %H:%M:%S')] [spack-build:${BASH_LINENO[0]}] $*" >&2
