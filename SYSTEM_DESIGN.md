@@ -1,8 +1,8 @@
 # Sygaldry: Bazel + Spack + Docker Build System
 ## System Design Document
 
-**Version:** 2.0  
-**Date:** 2025-07-28  
+**Version:** 2.1  
+**Date:** 2026-01-27  
 **Status:** Current Implementation
 
 ---
@@ -75,12 +75,11 @@ Sygaldry addresses these challenges through a three-tier architecture:
 │                        Host System                          │
 │                    (Any UID/GID)                            │
 ├─────────────────────────────────────────────────────────────┤
-│  XDG Data Directories (Project Isolated)                    │
-│  ~/.local/share/sygaldry_container/<project_id>/            │
+│  Shared Host Storage (Project Isolated)                    │
+│  /mnt/data_infra/zephyr_container_infra/<project_id>/       │
 │  ├─ monorepo_home/      → Container /home/kvothe            │
 │  ├─ spack_store/        → Container /opt/spack_store        │
 │  ├─ bazel_cache/        → Container /opt/bazel_cache        │
-│  ├─ spack_src/          → Container /opt/spack_src (ro)     │
 │  └─ config/             → Configuration files               │
 ├─────────────────────────────────────────────────────────────┤
 │                   Docker Container                          │
@@ -111,18 +110,16 @@ graph TB
     U --> B
     B --> A[Application Artifacts]
     
-    subgraph "Persistent Storage (XDG)"
+    subgraph "Persistent Storage (Host)"
         HC[monorepo_home/]
         SC[spack_store/]
         BC[bazel_cache/]
-        SS[spack_src/]
         CF[config/]
     end
     
     H --> HC
     H --> SC  
     H --> BC
-    H --> SS
     H --> CF
 ```
 
@@ -147,7 +144,7 @@ graph TB
 **Design Decisions:**
 - Ubuntu 24.04 LTS base (headless, no GUI components)
 - Dynamic UID/GID mapping for seamless file permissions
-- XDG Base Directory compliance with project isolation
+- Shared host storage root at `/mnt/data_infra/zephyr_container_infra`
 - Automatic Docker image building with change detection
 - GPU support auto-detection and configuration
 
@@ -163,12 +160,12 @@ graph TB
 - `spack.yaml`: Environment specifications with unified concretization
 - `spack.lock`: Lockfiles for reproducible installs
 - Spack view: Unified dependency tree at `/opt/spack_store/view`
-- Spack source: Read-only mount at `/opt/spack_src`
+- Spack source: Baked into image at `/opt/spack_src`
 
 **Design Decisions:**
 - Unified concretization for consistent dependency resolution
 - View-based integration at `/opt/spack_store` for Bazel/uv consumption
-- Automatic Spack repository cloning and management
+- Spack repository pinned and baked into the image (`SPACK_VERSION=v1.1.0`)
 - Separate environments for different use cases (tools, CUDA packages)
 - Integration with uv for Python package management
 
@@ -235,7 +232,7 @@ sequenceDiagram
 
     Dev->>Launcher: ./container/launch_container.sh
     Launcher->>Launcher: Check/build Docker image with host UID/GID
-    Launcher->>Container: Launch with XDG volume mounts
+    Launcher->>Container: Launch with host volume mounts
     Container->>Spack: source /opt/spack_src/share/spack/setup-env.sh
     Dev->>Container: spack-env-activate
     Container->>Spack: spack env activate .
@@ -284,7 +281,7 @@ graph LR
 1. **System Dependencies** (Docker layer)
    - OS packages (build-essential, git, curl)
    - Runtime libraries (libc, libssl)
-   - Language runtimes (Python 3.11)
+   - Language runtimes (Python 3.13)
 
 2. **External Libraries** (Spack layer)
    - Scientific computing (NumPy, SciPy)
@@ -338,7 +335,7 @@ Host Output Directory
 
 ### Data Persistence
 
-- **Host Volumes**: XDG-compliant directories for cross-session persistence
+- **Host Volumes**: Shared host directories for cross-session persistence
 - **Container State**: Ephemeral, recreated from reproducible specifications
 - **Cache Sharing**: Multi-developer team cache synchronization via remote backends
 
@@ -375,14 +372,13 @@ Host Output Directory
 
 **Prerequisites:**
 - Docker daemon running
-- Git (for Spack repository cloning)
 - NVIDIA Docker runtime (optional, for GPU support)
 - 50GB+ available disk space for caches
 - 16GB+ RAM for large builds
 
 **Launcher Script Features:**
 - Automatic Docker image building with change detection
-- XDG Base Directory compliant storage
+- Shared host storage root for project isolation
 - Project isolation (multiple projects supported)
 - Dynamic UID/GID mapping
 - GPU auto-detection and configuration
@@ -390,7 +386,6 @@ Host Output Directory
 
 **Setup Time:**
 - Initial container build: 15-25 minutes (includes all toolchains)
-- Spack repository clone: 2-5 minutes (first time)
 - Spack environment setup: 30-60 minutes (first time)
 - Subsequent launches: <10 seconds
 - Image rebuilds: 5-15 minutes (when Dockerfile changes)
@@ -462,6 +457,28 @@ Host Output Directory
 - Cache hit ratios across layers
 - Resource utilization (CPU, RAM, disk I/O)
 - Dependency resolution times
+
+## Human + Agent Ergonomics
+
+### Human Ergonomics Goals
+
+- One-line commands for common workflows (Spack build, uv install, HF download)
+- Clear defaults and predictable cache locations
+- Minimal environment variables to get started
+
+### Agent Ergonomics Goals
+
+- Structured JSONL logs for low-token monitoring
+- Stable status files with last-known state
+- Deterministic paths for introspection and triage
+
+### Job Runner Pattern
+
+- Host-side runner: `tools/zephyr_job`
+- Status: `/mnt/data_infra/zephyr_container_infra/<project_id>/bazel_cache/zephyr_jobs/<job>.status`
+- Logs: `/mnt/data_infra/zephyr_container_infra/<project_id>/bazel_cache/zephyr_jobs/<job>-<timestamp>.jsonl`
+
+This enables frequent, low-cost polling without streaming full logs.
 
 ### Health Checks
 
@@ -541,7 +558,7 @@ Host Output Directory
 The launcher script is the primary interface to the Sygaldry system, providing a comprehensive development environment setup:
 
 **Core Features:**
-- **XDG Compliance**: Uses `~/.local/share/sygaldry_container/<project_id>/` for isolation
+- **Shared Host Storage**: Uses `/mnt/data_infra/zephyr_container_infra/<project_id>/` for isolation
 - **Auto Image Building**: Detects Dockerfile changes and rebuilds automatically
 - **Dynamic User Mapping**: Maps host UID/GID to container user for perfect file permissions
 - **GPU Auto-Detection**: Configures NVIDIA runtime when available
@@ -549,9 +566,9 @@ The launcher script is the primary interface to the Sygaldry system, providing a
 
 **Workflow:**
 1. **System Validation**: Checks Docker daemon, NVIDIA runtime availability
-2. **Environment Setup**: Creates XDG-compliant directories, clones Spack
+2. **Environment Setup**: Creates host directories for caches and config
 3. **Image Management**: Builds or rebuilds Docker image as needed
-4. **Container Launch**: Generates entrypoint script and launches container
+4. **Container Launch**: Dispatches an entrypoint script and launches container
 
 **Environment Variables:**
 - `SYGALDRY_PROJECT_ID`: Custom project identifier
@@ -563,8 +580,9 @@ The launcher script is the primary interface to the Sygaldry system, providing a
 
 **Base Configuration:**
 - Ubuntu 24.04 LTS (headless, no GUI components)
+- CUDA 12.9.1 + cuDNN base image for GPU workloads
 - Dynamic user creation with host UID/GID via build args
-- Multi-language toolchain: Python 3.12, Rust 1.79, Go 1.21.5, Bazel 6.4.0
+- Multi-language toolchain: Python 3.13, Rust 1.79, Go 1.21.5, Bazel 6.4.0
 
 **Key Features:**
 - **Conflict Resolution**: Removes existing users/groups with target UID/GID
@@ -581,7 +599,7 @@ The Sygaldry build system provides a production-ready foundation for complex, mu
 **Key Achievements:**
 - **Zero-Configuration Setup**: Single script launch with automatic environment setup
 - **Perfect File Permissions**: Dynamic UID/GID mapping eliminates permission issues
-- **Multi-Project Support**: XDG-compliant isolation allows multiple projects
+- **Multi-Project Support**: Shared host storage root enables multiple isolated projects
 - **Intelligent Caching**: Four-tier caching (Docker, Spack, Bazel, uv) for optimal performance
 - **Scientific Computing Ready**: Optimized for ML/HPC workloads with GPU support
 
