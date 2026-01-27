@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Temporal Pipeline Visualizer</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 16px; }
+    .grid { display: grid; grid-template-columns: 1fr 2fr; gap: 16px; }
+    .card { border: 1px solid #ddd; padding: 12px; border-radius: 6px; }
+    .runs li { cursor: pointer; margin: 6px 0; }
+    .status { font-weight: bold; }
+    .success { color: #0a7; }
+    .failed { color: #c33; }
+    .running { color: #c90; }
+    .step-row { display: flex; justify-content: space-between; padding: 4px 0; }
+    .logs { white-space: pre-wrap; background: #f7f7f7; padding: 8px; border-radius: 6px; max-height: 300px; overflow: auto; }
+    .muted { color: #777; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <h1>Temporal Pipeline Visualizer</h1>
+  <div class="grid">
+    <div class="card">
+      <h3>Runs</h3>
+      <ul class="runs" id="runs"></ul>
+    </div>
+    <div class="card">
+      <h3>Run Details</h3>
+      <div id="details" class="muted">Select a run.</div>
+    </div>
+  </div>
+
+  <script>
+    const runsEl = document.getElementById('runs');
+    const detailsEl = document.getElementById('details');
+
+    async function loadRuns() {
+      const res = await fetch('/api/runs');
+      const runs = await res.json();
+      runsEl.innerHTML = '';
+      for (const run of runs) {
+        const li = document.createElement('li');
+        li.textContent = `${run.workflowId} | ${run.runId} | ${run.progress} | ${run.status}`;
+        li.className = run.status;
+        li.onclick = () => loadRun(run.runId);
+        runsEl.appendChild(li);
+      }
+    }
+
+    let currentRunId = null;
+    let eventSource = null;
+
+    async function loadRun(runId) {
+      currentRunId = runId;
+      const res = await fetch(`/api/runs/${encodeURIComponent(runId)}`);
+      const run = await res.json();
+      const lines = [];
+      lines.push(`<div class="muted">Workflow: ${run.workflowId || 'unknown'} | Run: ${run.runId}</div>`);
+      for (const step of run.steps) {
+        lines.push(`<div class="step-row"><span>${step.stepId}</span><span class="status ${step.status}">${step.status || 'unknown'}</span></div>`);
+        if (step.stdoutPath || step.stderrPath) {
+          lines.push(`<div class="muted">stdout: ${step.stdoutPath || '-'} | stderr: ${step.stderrPath || '-'}</div>`);
+          if (step.stdoutPath) {
+            lines.push(`<div class="logs" data-path="${step.stdoutPath}">Loading stdout...</div>`);
+          }
+          if (step.stderrPath) {
+            lines.push(`<div class="logs" data-path="${step.stderrPath}">Loading stderr...</div>`);
+          }
+        }
+      }
+      detailsEl.innerHTML = lines.join('');
+
+      for (const el of detailsEl.querySelectorAll('.logs')) {
+        const path = el.getAttribute('data-path');
+        const res = await fetch(`/logs/${encodeURIComponent(path.replace(/^.*logs\//, ''))}`);
+        el.textContent = await res.text();
+      }
+
+      if (eventSource) {
+        eventSource.close();
+      }
+      eventSource = new EventSource(`/api/events?runId=${encodeURIComponent(runId)}`);
+      eventSource.onmessage = (evt) => {
+        try {
+          const ev = JSON.parse(evt.data);
+          if (!currentRunId || ev.runId !== currentRunId) return;
+          loadRun(currentRunId);
+        } catch (_) {}
+      };
+    }
+
+    loadRuns();
+    setInterval(loadRuns, 5000);
+  </script>
+</body>
+</html>

@@ -1,0 +1,75 @@
+steps:
+  - id: install-uv
+    name: Install uv
+    type: command
+    command: bash
+    args: ["-lc", "curl -LsSf https://astral.sh/uv/install.sh | sh"]
+
+  - id: check-uv
+    name: Check uv
+    type: command
+    depends_on: [install-uv]
+    command: /home/phi9t/.local/bin/uv
+    args: ["--version"]
+
+  - id: install-python
+    name: Install Python via uv
+    type: command
+    depends_on: [check-uv]
+    command: /home/phi9t/.local/bin/uv
+    args: ["python", "install", "3.11"]
+
+  - id: create-venv
+    name: Create uv venv
+    type: command
+    depends_on: [install-python]
+    command: bash
+    args: ["-lc", "rm -rf .venv && /home/phi9t/.local/bin/uv venv --python 3.11 .venv"]
+
+  - id: install-torch
+    name: Install torch (CPU)
+    type: command
+    depends_on: [create-venv]
+    command: /home/phi9t/.local/bin/uv
+    args:
+      - pip
+      - install
+      - --index-strategy
+      - unsafe-best-match
+      - --python
+      - .venv
+      - torch==2.2.2+cpu
+      - --index-url
+      - https://download.pytorch.org/whl/cpu
+      - --extra-index-url
+      - https://pypi.org/simple
+
+  - id: install-ml-deps
+    name: Install transformers + datasets
+    type: command
+    depends_on: [install-torch]
+    command: /home/phi9t/.local/bin/uv
+    args:
+      - pip
+      - install
+      - --python
+      - .venv
+      - "transformers==4.51.0"
+      - "datasets==2.19.1"
+      - "accelerate==0.30.1"
+      - "huggingface_hub>=0.30.0,<1.0"
+      - "numpy<2.0"
+
+  - id: prefetch-model
+    name: Prefetch Qwen3 0.6B
+    type: command
+    depends_on: [install-ml-deps]
+    command: /home/phi9t/.local/bin/uv
+    args: ["run", "--python", ".venv", "python", "examples/qwen_demo/prefetch_model.py"]
+
+  - id: run-inference
+    name: Run inference on FineWeb sample
+    type: command
+    depends_on: [prefetch-model]
+    command: /home/phi9t/.local/bin/uv
+    args: ["run", "--python", ".venv", "python", "examples/qwen_demo/run_inference.py"]
