@@ -1,0 +1,14 @@
+steps:
+  - id: root
+    type: command
+    command: bash
+    args: ["-lc", "echo root"]
+
+  - id: child
+    type: command
+    depends_on: [root]
+    when:
+      step: root
+      status: pending
+    command: bash
+    args: ["-lc", "echo child"]

@@ -1,0 +1,30 @@
+imports:
+  - templates/gpu-steps.yaml
+
+params:
+  project_id: ml-experiments
+  model_id: Qwen/Qwen3-0.6B-Base
+  dataset_id: HuggingFaceFW/fineweb
+
+env:
+  HF_HOME: /opt/hf_cache
+
+steps:
+  - id: data
+    type: command
+    command: bash
+    args:
+      - -lc
+      - |
+        echo "download ${{ params.dataset_id }}"
+        echo "::set-output name=dataset_path::/tmp/fineweb"
+
+  - id: train
+    template: gpu-train
+    depends_on: [data]
+    container_job:
+      command: "python train.py --model ${{ params.model_id }} --data ${{ steps.data.outputs.dataset_path }}"
+
+  - id: evaluate
+    template: eval-job
+    depends_on: [train]

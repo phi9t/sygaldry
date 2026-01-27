@@ -1,0 +1,23 @@
+{
+  "steps": [
+    {
+      "name": "download-data",
+      "command": "curl",
+      "args": ["-L", "-o", "data.txt", "https://example.com"],
+      "workingDir": ".",
+      "timeoutSeconds": 120
+    },
+    {
+      "name": "prepare-image",
+      "command": "bash",
+      "args": ["-lc", "echo 'build image here'"],
+      "timeoutSeconds": 300
+    },
+    {
+      "name": "build-packages",
+      "command": "bash",
+      "args": ["-lc", "echo 'build packages here'"],
+      "timeoutSeconds": 300
+    }
+  ]
+}

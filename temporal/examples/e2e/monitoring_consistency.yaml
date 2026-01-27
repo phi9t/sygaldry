@@ -1,0 +1,23 @@
+steps:
+  - id: prep
+    type: command
+    command: bash
+    args: ["-lc", "echo prep"]
+
+  - id: fanout-a
+    type: command
+    depends_on: [prep]
+    command: bash
+    args: ["-lc", "echo fanout-a"]
+
+  - id: fanout-b
+    type: command
+    depends_on: [prep]
+    command: bash
+    args: ["-lc", "echo fanout-b"]
+
+  - id: join
+    type: command
+    depends_on: [fanout-a, fanout-b]
+    command: bash
+    args: ["-lc", "echo join"]

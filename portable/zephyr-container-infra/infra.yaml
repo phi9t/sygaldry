@@ -1,0 +1,13 @@
+# Vendored Zephyr container infra configuration.
+# image_ref and base_image_ref must be digest-pinned for reproducibility.
+
+image_ref: ghcr.io/phi9t/sygaldry/zephyr:spack@sha256:REPLACE_WITH_REAL_DIGEST
+base_image_ref: ghcr.io/phi9t/sygaldry/zephyr:spack@sha256:REPLACE_WITH_REAL_DIGEST
+runtime_image: REPLACE_WITH_RUNTIME_IMAGE_TAG
+image_mode: auto
+project_id: REPLACE_WITH_PROJECT_ID
+cache_root: /mnt/data_infra/zephyr_container_infra
+lease_mode: warn
+cache_profile: shared
+entrypoint_default: default
+extra_docker_args: ""

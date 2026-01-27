@@ -1,0 +1,12 @@
+steps:
+  - id: a
+    type: command
+    depends_on: [b]
+    command: bash
+    args: ["-lc", "echo a"]
+
+  - id: b
+    type: command
+    depends_on: [a]
+    command: bash
+    args: ["-lc", "echo b"]

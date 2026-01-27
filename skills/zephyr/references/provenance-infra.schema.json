@@ -1,0 +1,97 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/zephyr/provenance-infra-v1.schema.json",
+  "title": "Zephyr Infra Provenance v1",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "skill_name",
+    "skill_version",
+    "source_repo",
+    "source_commit",
+    "source_tree_dirty",
+    "build_timestamp_utc",
+    "builder_tool",
+    "excluded_patterns",
+    "runtime_contract",
+    "included_files"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "zephyr-infra-provenance/v1"
+    },
+    "skill_name": {
+      "type": "string"
+    },
+    "skill_version": {
+      "type": "string"
+    },
+    "source_repo": {
+      "type": "string"
+    },
+    "source_commit": {
+      "type": "string"
+    },
+    "source_tree_dirty": {
+      "type": "boolean"
+    },
+    "build_timestamp_utc": {
+      "type": "string"
+    },
+    "builder_tool": {
+      "type": "string"
+    },
+    "excluded_patterns": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "runtime_contract": {
+      "type": "object",
+      "required": [
+        "no_repo_runtime_dependency",
+        "required_clis"
+      ],
+      "properties": {
+        "no_repo_runtime_dependency": {
+          "type": "boolean"
+        },
+        "required_clis": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "included_files": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "path",
+          "sha256",
+          "size_bytes"
+        ],
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "size_bytes": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": true
+}

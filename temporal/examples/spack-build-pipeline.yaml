@@ -1,0 +1,57 @@
+# Spack Build Pipeline
+# ====================
+#
+# Replaces the shell-based zephyr_autobuild.sh / zephyr_autoretry.sh with
+# a Temporal-orchestrated pipeline. Run with:
+#
+#   go run ./cmd/orchestrate -plan examples/spack-build-pipeline.yaml
+#
+# Benefits over shell scripts:
+# - Error classification (transient vs permanent failures)
+# - Retry with backoff managed by Temporal
+# - Full build history in Temporal UI (localhost:8233)
+# - Extensible: add steps (MLSys build, push, notify) via YAML
+
+steps:
+  - id: preflight
+    type: command
+    command:
+      cmd: "container/verify_preflight.sh --smoke"
+    timeout_seconds: 300
+
+  - id: spack-build
+    type: container_job
+    depends_on: [preflight]
+    container_job:
+      project_id: sygaldry
+      entrypoint: spack-build.sh
+      gpu: true
+    timeout_seconds: 28800
+    retry:
+      max_attempts: 3
+      backoff_seconds: 600
+
+  - id: gpu-verify
+    type: container_job
+    depends_on: [spack-build]
+    container_job:
+      project_id: sygaldry
+      entrypoint: verify-gpu.sh
+      gpu: true
+    timeout_seconds: 600
+
+  - id: spack-verify
+    type: container_job
+    depends_on: [spack-build]
+    container_job:
+      project_id: sygaldry
+      entrypoint: verify-spack.sh
+      gpu: true
+    timeout_seconds: 600
+
+  - id: snapshot
+    type: command
+    depends_on: [gpu-verify, spack-verify]
+    command:
+      cmd: "container/snapshot_spack.sh --no-push"
+    timeout_seconds: 3600

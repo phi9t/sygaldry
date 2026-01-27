@@ -1,0 +1,14 @@
+imports:
+  - templates/base.yaml
+  - templates/extra.yaml
+
+steps:
+  - id: merge-check
+    template: merged-command
+    env:
+      SHARED: step
+      OVR: override
+
+  - id: helper-check
+    template: helper-command
+    depends_on: [merge-check]

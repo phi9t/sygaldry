@@ -1,0 +1,9 @@
+imports:
+  - templates/dup_one.yaml
+  - templates/dup_two.yaml
+
+steps:
+  - id: simple
+    type: command
+    command: bash
+    args: ["-lc", "echo simple"]

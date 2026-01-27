@@ -1,0 +1,1586 @@
+
+ ▐▛███▜▌   Claude Code v2.1.42
+▝▜█████▛▘  Opus 4.6 · Claude Pro
+  ▘▘ ▝▝    /mnt/data_infra/workspace/sygaldry
+
+✻ Conversation compacted (ctrl+o for history)
+
+  ⎿  Read ../../../../home/phi9t/.claude/todos/89d9351b-9864-4323-bf65-7aee6c566
+     8cd-agent-89d9351b-9864-4323-bf65-7aee6c5668cd.json (1 lines)
+  ⎿  Referenced file foundation.org
+  ⎿  Referenced file container/ZEPHYR_SYSTEM_DESIGN.md
+  ⎿  Referenced file SYSTEM_DESIGN.md
+  ⎿  Read tools/zephyr_stage_spack.sh (262 lines)
+  ⎿  Plan file referenced (~/.claude/plans/optimized-orbiting-unicorn.md)
+
+● Let me read the three files to identify what unique content needs to be merged
+   into foundation.org.
+
+● Read 3 files (ctrl+o to expand)
+
+● I've analyzed all three documents. Let me identify the unique content in the
+  other two docs that's missing from foundation.org and merge it in. Key gaps:
+
+  1. Launcher env knobs with defaults and backward compatibility (from
+  ZEPHYR_SYSTEM_DESIGN)
+  2. CLI flags (from ZEPHYR_SYSTEM_DESIGN)
+  3. Concurrency model per-run metadata paths (from ZEPHYR_SYSTEM_DESIGN)
+  4. Job runner contract (from ZEPHYR_SYSTEM_DESIGN)
+  5. Infra verification pipeline (verify_all.sh 4-stage chain) (from
+  ZEPHYR_SYSTEM_DESIGN)
+  6. Validation runbook (from ZEPHYR_SYSTEM_DESIGN)
+  7. Anti-drift contract checks (from ZEPHYR_SYSTEM_DESIGN)
+  8. Security details (dependency security, access control) (from SYSTEM_DESIGN)
+  9. Performance targets and resource requirements (from SYSTEM_DESIGN)
+  10. Expanded roadmap (from SYSTEM_DESIGN)
+
+  Let me apply these edits.
+
+● Update(foundation.org)
+  ⎿  Added 34 lines
+      1581  operations.  It handles image building, volume mounting, envi
+            ronment injection,
+      1582  entrypoint resolution, and lease management.
+      1583  
+      1584 +** Host-Side Configuration Knobs                             
+      1585 +                                                             
+      1586 +These environment variables configure the launcher itself (se
+           +t on the host before                                         
+      1587 +invocation):                                                 
+      1588 +                                                             
+      1589 +| Variable                | Default                          
+           +                   | Purpose                        |        
+      1590 +|-------------------------+----------------------------------
+           +-------------------+--------------------------------|        
+      1591 +| =ZEPHYR_CACHE_ROOT=    | =/mnt/data_infra/zephyr_container_
+           +infra=            | Top-level storage root         |         
+      1592 +| =ZEPHYR_SHARED_ROOT=   | =$ZEPHYR_CACHE_ROOT/shared=       
+           +                  | Shared caches (HF, UV, etc.)  |          
+      1593 +| =ZEPHYR_BUILD_ROOT=    | =$ZEPHYR_CACHE_ROOT/sygaldry=     
+           +                  | Builder Spack store root       |         
+      1594 +| =ZEPHYR_PROJECTS_ROOT= | =$ZEPHYR_CACHE_ROOT/projects=     
+           +                  | Per-project roots              |         
+      1595 +| =ZEPHYR_PROJECT_ROOT=  | =$ZEPHYR_PROJECTS_ROOT/$SYGALDRY_P
+           +ROJECT_ID=        | Current project root           |         
+      1596 +| =SYGALDRY_RUN_ID=      | Auto-generated =run-YYYYMMDD-HHMMS
+           +S-PID=            | Per-run identifier             |         
+      1597 +| =ZEPHYR_LEASE_MODE=    | =warn=                            
+           +                  | GPU lease: =off/warn/enforce=  |         
+      1598 +| =ZEPHYR_CACHE_PROFILE= | =shared=                          
+           +                  | Cache sharing: =shared/isolated/hybrid= |
+      1599 +                                                             
+      1600 +*** Backward Compatibility                                   
+      1601 +                                                             
+      1602 +Legacy overrides are still honored with deprecation warnings:
+      1603 +- =SYGALDRY_SPACK_STORE= → overrides Spack store mount       
+      1604 +- =SYGALDRY_HF_CACHE= → overrides HF cache mount             
+      1605 +- =SYGALDRY_UV_CACHE= → overrides UV cache mount             
+      1606 +                                                             
+      1607 +** CLI Flags                                                 
+      1608 +                                                             
+      1609 +| Flag                        | Purpose                      
+           +             |                                               
+      1610 +|-----------------------------+------------------------------
+           +-------------|                                               
+      1611 +| =--repo <path>=             | Enable multi-repo mode       
+           +             |                                               
+      1612 +| =--entrypoint <name>=       | Select entrypoint (default: =
+           +default.sh=) |                                               
+      1613 +| =--run-id <id>=             | Set explicit run ID          
+           +             |                                               
+      1614 +| =--lease-mode off/warn/enforce= | Override lease behavior  
+           +             |                                               
+      1615 +| =--cache-profile shared/isolated/hybrid= | Override cache s
+           +haring mode  |                                               
+      1616 +| =--print-effective-config=  | Print resolved config and exi
+           +t            |                                               
+      1617 +                                                             
+      1618  ** Control Flow
+      1619  
+      1620  #+begin_example
+
+● Update(foundation.org)
+  ⎿  Added 1 line
+      1659  | =JAX_COMPILATION_CACHE_DIR=   | =/opt/jax_cache=           
+                | JAX compilation cache       |
+      1660  | =XDG_CONFIG_HOME=             | =/home/kvothe/.config=     
+                | XDG config directory        |
+      1661  | =XDG_DATA_HOME=               | =/home/kvothe/.local/share=
+                | XDG data directory          |
+      1662 +| =XDG_CACHE_HOME=              | =/opt/uv_cache=            
+           +    | XDG cache directory         |                          
+      1663  
+      1664  ** GPU Validation
+      1665  
+
+● Now add the concurrency model details and job runner contract after the GPU
+  validation section:
+
+● Update(foundation.org)
+  ⎿  Added 29 lines
+      1670  
+      1671  If either fails, the launcher exits with an error.  There is 
+            no CPU-only mode.
+      1672  
+      1673 +** Concurrency Model                                         
+      1674 +                                                             
+      1675 +Run isolation is =project_id + run_id=.                      
+      1676 +                                                             
+      1677 +- Per-run metadata and logs are stored under project outputs:
+      1678 +  =projects/<id>/outputs/.run-metadata/<run_id>/=            
+      1679 +- The launcher creates an advisory GPU lease (=leases/gpu-all
+           +.lease=) with TTL.                                           
+      1680 +- Lease behavior is controlled by =ZEPHYR_LEASE_MODE= (see Ho
+           +st-Side Configuration Knobs).                                
+      1681 +                                                             
+      1682 +** Job Runner (=tools/zephyr_job=)                           
+      1683 +                                                             
+      1684 +The host-side job runner manages container jobs with structur
+           +ed logging:                                                  
+      1685 +                                                             
+      1686 +#+begin_example                                              
+      1687 +tools/zephyr_job run    --project-id <id> --job <name> -- <co
+           +mmand>                                                       
+      1688 +tools/zephyr_job status --project-id <id> --job <name>       
+      1689 +tools/zephyr_job tail   --project-id <id> --job <name> [--lin
+           +es N]                                                        
+      1690 +tools/zephyr_job stop   --project-id <id> --job <name>       
+      1691 +tools/zephyr_job health --project-id <id> --job <name>       
+      1692 +#+end_example                                                
+      1693 +                                                             
+      1694 +Storage paths:                                               
+      1695 +- Raw logs: =projects/<id>/runs/<run_id>/raw/=               
+      1696 +- JSONL + status: =projects/<id>/outputs/.run-metadata/<run_i
+           +d>/<job>.status=                                             
+      1697 +- JSONL logs: =projects/<id>/outputs/.run-metadata/<run_id>/<
+           +job>-<timestamp>.jsonl=                                      
+      1698 +                                                             
+      1699 +The job runner forwards =SYGALDRY_RUN_ID= and =ZEPHYR_LEASE_M
+           +ODE= to the launcher.                                        
+      1700 +This enables frequent, low-cost status polling without stream
+           +ing full logs.                                               
+      1701 +                                                             
+      1702  * Governance
+      1703  :PROPERTIES:
+      1704  :CUSTOM_ID: governance
+
+● Now expand the verification section with the infra pipeline, validation
+  runbook, and anti-drift checks:
+
+● Update(foundation.org)
+  ⎿  Added 51 lines
+      1479  | Serving profile  | T8.6 (vLLM), T8.8 (sglang) | Serving  |
+      1480  | datasets         | T8.7                        | Non-block 
+            |
+      1481  
+      1482 +** Infra Verification Pipeline (=container/verify_all.sh=)   
+      1483 +                                                             
+      1484 +The full infra pipeline chains four sequential stages:       
+      1485 +                                                             
+      1486 +| Step | Script                 | What it does               
+           +                                         |                   
+      1487 +|------+------------------------+----------------------------
+           +-----------------------------------------|                   
+      1488 +|    0 | =verify_preflight.sh=  | Docker check, storage layou
+           +t, host GPU (=diagnose_nvidia.sh=),     |                    
+      1489 +|      |                        | container GPU check (=verif
+           +y-gpu.sh= entrypoint)                    |                   
+      1490 +|    1 | =verify_image_build.sh= | Build/verify base Docker i
+           +mage (auto/always/never policy)          |                   
+      1491 +|    2 | =verify_build.sh=      | Run =zephyr_autobuild.sh= o
+           +r =zephyr_autoretry.sh= for Spack env  |                     
+      1492 +|    3 | =verify_epilogue.sh=   | ML validation (torch/jax), 
+           +uv install test, UV-Spack provenance    |                    
+      1493 +|      |                        | (=verify_uv_spack.py=), job
+           + status/log checks                      |                    
+      1494 +                                                             
+      1495 +Flags: =--smoke= skips steps 2-3.  =--skip-spack= skips step 
+           +2 only.  =--skip-uv= skips uv in step 3.                     
+      1496 +                                                             
+      1497 +** Anti-Drift Contract Checks                                
+      1498 +                                                             
+      1499 +=tools/check_zephyr_contracts.sh= validates that runtime beha
+           +vior matches documented                                      
+      1500 +contracts.  Invoked automatically by =validate_all.sh=.      
+      1501 +                                                             
+      1502 +** Validation Runbook                                        
+      1503 +                                                             
+      1504 +*** Developer pre-commit (fast, no Docker)                   
+      1505 +                                                             
+      1506 +#+begin_example                                              
+      1507 +./validate_all.sh --quick           # Go + Python lint (~15s)
+      1508 +./validate_all.sh --multi-repo-unit # Launcher unit tests (~5
+           +s)                                                           
+      1509 +#+end_example                                                
+      1510 +                                                             
+      1511 +*** Post image change (Docker, no GPU)                       
+      1512 +                                                             
+      1513 +#+begin_example                                              
+      1514 +./validate_all.sh --snapshot-no-gpu    # T1-T4, T7           
+      1515 +./validate_all.sh --uv-layering-no-gpu # T8.1-T8.4           
+      1516 +#+end_example                                                
+      1517 +                                                             
+      1518 +*** Full GPU validation                                      
+      1519 +                                                             
+      1520 +#+begin_example                                              
+      1521 +./validate_all.sh --snapshot         # T1-T7 (snapshot image,
+           + GPU)                                                        
+      1522 +./validate_all.sh --uv-layering      # T8.1-T8.5 (UV layering
+           +, GPU)                                                       
+      1523 +./validate_all.sh --multi-repo       # Multi-repo unit + inte
+           +gration + E2E                                                
+      1524 +#+end_example                                                
+      1525 +                                                             
+      1526 +*** Full infrastructure validation (Spack build + ML + uv)   
+      1527 +                                                             
+      1528 +#+begin_example                                              
+      1529 +./container/verify_all.sh            # All stages (30+ min)  
+      1530 +./container/verify_all.sh --smoke    # Preflight + image only
+      1531 +#+end_example                                                
+      1532 +                                                             
+      1533  * Cross-cutting concerns
+      1534  :PROPERTIES:
+      1535  :CUSTOM_ID: cross-cutting
+
+● Now expand the cross-cutting concerns section with security details,
+  performance targets, and resource requirements:
+
+● Update(foundation.org)
+  ⎿  Added 48 lines, removed 8 lines
+      1537  
+      1538  ** Security
+      1539  
+      1540 -- Dynamic user mapping: container user matches host UID/GID. 
+      1541 -- Minimal attack surface: Ubuntu 24.04 LTS base, no GUI.     
+      1542 -- Read-only mounts where possible; secrets via env or mounted
+           - files.                                                      
+      1543 -- GPU access: NVIDIA runtime only; no CPU-only mode.         
+      1540 +*** Container Security                                       
+      1541  
+      1542 +- *Dynamic user mapping*: Container user =kvothe= matches exa
+           +ct host UID/GID.                                             
+      1543 +  Automatic conflict resolution if UID/GID already exists in 
+           +image.                                                       
+      1544 +- *Minimal attack surface*: Ubuntu 24.04 LTS base, headless, 
+           +no GUI components.                                           
+      1545 +- *Network*: Host network access only when required (=--net=h
+           +ost=).                                                       
+      1546 +- *Resource limits*: CPU/memory constraints available via Doc
+           +ker.                                                         
+      1547 +- *Non-root execution*: =sudo= available for development conv
+           +enience only.                                                
+      1548 +                                                             
+      1549 +*** Dependency Security                                      
+      1550 +                                                             
+      1551 +- *Trusted sources*: Official Spack packages and verified rep
+           +ositories.                                                   
+      1552 +- *Isolation*: Sandboxed builds prevent supply chain attacks.
+      1553 +- *Reproducible builds*: Lockfile-pinned installs (=spack.loc
+           +k=) for cryptographic verification.                          
+      1554 +                                                             
+      1555 +*** Access Control                                           
+      1556 +                                                             
+      1557 +- *Volume mounts*: Read-only mounts where possible (e.g., =/o
+           +pt/sygaldry= in multi-repo mode).                            
+      1558 +- *Secrets management*: Environment variables and mounted fil
+           +es; never baked into images.                                 
+      1559 +- *GPU access*: Controlled NVIDIA runtime exposure; no CPU-on
+           +ly mode.                                                     
+      1560 +- *Builder role gate*: Only =SYGALDRY_BUILD_ROLE=builder= can
+           + mutate Spack store.                                         
+      1561 +                                                             
+      1562  ** Operational
+      1563  
+      1547 -- *Prerequisites*: Docker daemon, NVIDIA runtime (GPU workloa
+           -ds), 50GB+ disk, 16GB+ RAM.                                  
+      1548 -- *First-time*: container build 15–25 min; Spack env 30–60 mi
+           -n.                                                           
+      1549 -- *Subsequent*: launch <10 s; image rebuild 5–15 min when Doc
+           -kerfile changes.                                             
+      1550 -- *Conflict resolution*: Spack unified concretization; contai
+           -ner isolation prevents host contamination.                   
+      1564 +*** Prerequisites                                            
+      1565  
+      1566 +| Resource | Minimum          | Recommended        |         
+      1567 +|----------+------------------+--------------------|         
+      1568 +| CPU      | 4 cores          | 8+ cores           |         
+      1569 +| RAM      | 16 GB            | 32 GB              |         
+      1570 +| Storage  | 50 GB            | 100 GB+            |         
+      1571 +| GPU      | NVIDIA (any)     | NVIDIA (any)       |         
+      1572 +| Software | Docker + NVIDIA runtime | Same          |       
+      1573 +                                                             
+      1574 +*** Timing Expectations                                      
+      1575 +                                                             
+      1576 +| Operation            | Duration           |                
+      1577 +|----------------------+--------------------|                
+      1578 +| Initial image build  | 15–25 min          |                
+      1579 +| Spack env from scratch | 30–60 min (3-8 hr for full rebuild
+           +) |                                                          
+      1580 +| Subsequent launch    | <10 s              |                
+      1581 +| Image rebuild        | 5–15 min           |                
+      1582 +| Cold CI build        | 60–120 min         |                
+      1583 +| Warm CI build        | 5–15 min           |                
+      1584 +| Incremental build    | 10 s – 5 min       |                
+      1585 +                                                             
+      1586 +*** Performance Targets                                      
+      1587 +                                                             
+      1588 +- Cache hit ratio target: >80% for incremental builds.       
+      1589 +- Container launch: <10 seconds.                             
+      1590 +- Spack unified concretization prevents host contamination an
+           +d version conflicts.                                         
+      1591 +                                                             
+      1592  ** Human and agent ergonomics
+      1593  
+      1594  - *Human*: One-line commands (Spack build, uv install, HF dow
+            nload); clear defaults; minimal env vars to start.
+
+● Now expand the roadmap with more detail from SYSTEM_DESIGN.md:
+
+● Update(foundation.org)
+  ⎿  Added 14 lines, removed 2 lines
+      1835  - [X] Launcher with legacy, multi-repo, and baked modes
+      1836  - [X] Host storage layout v2 with shared caches and per-proje
+            ct isolation
+      1837  
+      1838 -*** Design Targets (Near-term)                               
+      1838 +*** Design Targets: Near-term (3-6 months)                   
+      1839  
+      1840  - [ ] Automated CI: snapshot build → verify → push on spec ch
+            ange
+      1841  - [ ] Remote Spack binary cache for team-wide sharing
+      1842  - [ ] ARM64 support for Apple Silicon and Graviton instances
+      1843  - [ ] Multi-GPU distributed training validation in T5/T8 gate
+            s
+      1844 +- [ ] Cross-language integration examples (Python-Rust FFI, C
+           +++ Python extensions)                                        
+      1845 +- [ ] IDE integration (VS Code devcontainers)                
+      1846 +- [ ] Distributed Bazel caching                              
+      1847  
+      1845 -*** Strategic Direction (Long-term)                          
+      1848 +*** Design Targets: Medium-term (6-12 months)                
+      1849  
+      1850 +- [ ] Multi-platform container images (ARM64, macOS, WSL2)   
+      1851 +- [ ] Incremental Spack rebuilds                             
+      1852 +- [ ] Build artifact signing and dependency vulnerability sca
+           +nning                                                        
+      1853 +- [ ] GitHub Actions / GitLab CI pipeline integration        
+      1854 +                                                             
+      1855 +*** Strategic Direction: Long-term (12+ months)              
+      1856 +                                                             
+      1857  - [ ] Kubernetes-native job scheduling replacing host Docker 
+            launcher
+      1858  - [ ] Pre-concretized lockfiles per GPU architecture family
+      1859  - [ ] Foundation model fine-tuning images with LoRA/QLoRA too
+            ling
+      1860 +- [ ] Serverless build execution with auto-scaling           
+      1861 +- [ ] Multi-tenancy support with advanced access controls    
+
+● Finally, update the governance section to mention anti-drift checks and the
+  deprecated pointer:
+
+● Update(foundation.org)
+  ⎿  Added 9 lines
+      1805  | =CLAUDE.md= / =AGENTS.md=          | Agent interaction and 
+            coding guidelines       |
+      1806  | =skills/zephyr-mlsys-env/SKILL.md= | MLSys env builder docu
+            mentation               |
+      1807  
+      1808 +Deprecated pointers retained for compatibility:              
+      1809 +- =container/ZEPHYR_UNIFIED_CACHE_SYSTEM_DESIGN.md= (deprecat
+           +ed, points to =ZEPHYR_SYSTEM_DESIGN.md=)                     
+      1810 +                                                             
+      1811  When in conflict:
+      1812  - For infra contracts (storage paths, mount behavior, snapsho
+            t policy):
+      1813    =container/ZEPHYR_SYSTEM_DESIGN.md= is authoritative.
+      1814  - For engineering principles and product design rationale:
+      1815    =foundation.org= (this document) is authoritative.
+      1816  
+      1817 +** Anti-Drift Enforcement                                    
+      1818 +                                                             
+      1819 +=tools/check_zephyr_contracts.sh= validates runtime behavior 
+           +against documented                                           
+      1820 +contracts.  Invoked automatically by =validate_all.sh= to pre
+           +vent configuration                                           
+      1821 +drift between docs and implementation.                       
+      1822 +                                                             
+      1823  ** Change Process
+      1824  
+      1825  Any change to a foundational mechanism (Spack specs, entrypoi
+            nt behavior,
+
+● Let me verify the final line count:
+
+● Read 1 file (ctrl+o to expand)
+
+● Done. foundation.org grew from 1695 → 1870 lines. Here's what was amalgamated:
+
+  From ZEPHYR_SYSTEM_DESIGN.md:
+  - Host-side configuration knobs table with defaults (ZEPHYR_CACHE_ROOT, etc.)
+  - Backward compatibility section (legacy env vars with deprecation warnings)
+  - CLI flags table (--run-id, --lease-mode, --cache-profile,
+  --print-effective-config)
+  - Missing XDG_CACHE_HOME in container env exports
+  - Concurrency model details (run isolation = project_id + run_id, per-run
+  metadata paths)
+  - Job runner contract (tools/zephyr_job commands, storage paths for raw
+  logs/JSONL/status)
+  - Infra verification pipeline (4-stage verify_all.sh chain with flags)
+  - Validation runbook with exact commands (pre-commit, post-image, full GPU,
+  full infra)
+  - Anti-drift contract checks (check_zephyr_contracts.sh)
+  - Deprecated pointer reference
+
+  From SYSTEM_DESIGN.md:
+  - Expanded security section (container security, dependency security, access
+  control)
+  - Expanded operational section (prerequisites table, timing expectations
+  table, performance targets)
+  - Expanded roadmap (near-term, medium-term, long-term with specific items like
+   ARM64, IDE integration, artifact signing, multi-tenancy)
+
+  Both source documents already have cross-references pointing to foundation.org
+   as the consolidated authoritative document.
+
+✻ Sautéed for 3m 54s
+
+❯ create an extensive roadmap for the next version, focusing on ease of use 
+   and ease of understanding and easy of maintenance for the core zephyr    
+  container infra;                                                          
+
+● Let me first survey the current state — complexity, pain points, and areas
+  where usability/maintainability can improve.
+
+● Task(Survey current infra complexity)
+  ⎿  Backgrounded agent (shift+↑ to manage · ctrl+o to expand)
+
+● Task(Survey tools and automation gaps)
+  ⎿  Backgrounded agent (shift+↑ to manage · ctrl+o to expand)
+
+● Waiting for both research agents to complete their surveys before drafting the
+   roadmap.
+
+✻ Brewed for 37s
+
+● Agent "Survey tools and automation gaps" completed
+
+● Good, one agent done. Waiting for the other to finish.
+
+● Agent "Survey current infra complexity" completed
+
+● Both audits are complete. The data is comprehensive. Let me now read the
+  current roadmap section and the end of foundation.org to know exactly where to
+   write.
+
+● Read 1 file (ctrl+o to expand)
+
+● Now I'll replace the existing roadmap with the extensive next-version roadmap,
+   grounded in the quantitative audit findings.
+
+● Update(foundation.org)
+  ⎿  Added 764 lines, removed 22 lines
+      1829  2. Pass the appropriate verification layer before merge.
+      1830  3. Update =container/ZEPHYR_SYSTEM_DESIGN.md= if infra contra
+            cts change.
+      1831  
+      1832 -** Engineering Roadmap                                       
+      1832 +** Implemented (Production)                                  
+      1833  
+      1834 -*** Implemented (Production)                                 
+      1835 -                                                             
+      1834  - [X] Spack foundation: PyTorch 2.9.0, JAX 0.7.0, LLVM 20.1.8
+            , Triton 3.4.0
+      1835  - [X] Eight container entrypoints (human + agent personas)
+      1836  - [X] Spack snapshot pipeline with build/verify/push to GHCR
+     ...
+      1842  - [X] Launcher with legacy, multi-repo, and baked modes
+      1843  - [X] Host storage layout v2 with shared caches and per-proje
+            ct isolation
+      1844  
+      1847 -*** Design Targets: Near-term (3-6 months)                   
+      1845 +* Next-Version Roadmap: Ease of Use, Understanding, and Maint
+           +enance                                                       
+      1846 +:PROPERTIES:                                                 
+      1847 +:CUSTOM_ID: roadmap-v3                                       
+      1848 +:END:                                                        
+      1849  
+      1849 -- [ ] Automated CI: snapshot build → verify → push on spec ch
+           -ange                                                         
+      1850 -- [ ] Remote Spack binary cache for team-wide sharing        
+      1851 -- [ ] ARM64 support for Apple Silicon and Graviton instances 
+      1852 -- [ ] Multi-GPU distributed training validation in T5/T8 gate
+           -s                                                            
+      1853 -- [ ] Cross-language integration examples (Python-Rust FFI, C
+           -++ Python extensions)                                        
+      1854 -- [ ] IDE integration (VS Code devcontainers)                
+      1855 -- [ ] Distributed Bazel caching                              
+      1850 +This roadmap is informed by a quantitative audit of the curre
+           +nt system.  Key                                              
+      1851 +metrics that motivate the changes below:                     
+      1852  
+      1857 -*** Design Targets: Medium-term (6-12 months)                
+      1853 +#+begin_example                                              
+      1854 +Component                    Lines    Observation            
+      1855 +─────────────────────────────────────────────────────────────
+           +────────                                                     
+      1856 +Entrypoints (8 files)          922    4 copies of Spack init 
+           +cascade,                                                     
+      1857 +                                      3 copies of view fallba
+           +ck,                                                          
+      1858 +                                      2 copies of MLSys venv 
+           +activation                                                   
+      1859 +Launcher                       673    23-positional-param fun
+           +ction,                                                       
+      1860 +                                      45+ env vars, dual name
+           +space                                                        
+      1861 +Verification (15+ scripts)   3,836    1.8:1 ratio to function
+           +al code,                                                     
+      1862 +                                      2 test frameworks, 5x G
+           +PU test overlap                                              
+      1863 +Snapshot scripts (2)           742    80+ lines of duplicated
+           + arg parsing,                                                
+      1864 +                                      40 lines of duplicated 
+           +push logic                                                   
+      1865 +MLSys build system           1,226    300-line fallback YAML 
+           +parser,                                                      
+      1866 +                                      overlapping validation 
+           +paths                                                        
+      1867 +Build script (build.sh)        215    5 distinct code paths, 
+           +librosa policy                                               
+      1868 +                                      for single optional pac
+           +kage                                                         
+      1869 +Documentation (.md files)    8,328    35 files, 7 arch docs i
+           +n container/,                                                
+      1870 +                                      multiple overlapping de
+           +sign docs                                                    
+      1871 +Tools (wrappers)             1,600    4-deep wrapper chain, 4
+           +79-line dead code                                            
+      1872 +Config files                    10+   6-7 files to understand
+           + one uv install                                              
+      1873 +Error messages                  26    Only 3 include remediat
+           +ion hints                                                    
+      1874 +─────────────────────────────────────────────────────────────
+           +────────                                                     
+      1875 +Total operational shell      ~7,400                          
+      1876 +#+end_example                                                
+      1877  
+      1859 -- [ ] Multi-platform container images (ARM64, macOS, WSL2)   
+      1860 -- [ ] Incremental Spack rebuilds                             
+      1861 -- [ ] Build artifact signing and dependency vulnerability sca
+           -nning                                                        
+      1862 -- [ ] GitHub Actions / GitLab CI pipeline integration        
+      1878 +The three pillars of the next version:                       
+      1879  
+      1864 -*** Strategic Direction: Long-term (12+ months)              
+      1880 +1. *Ease of use* -- fewer knobs, better defaults, actionable 
+           +errors.                                                      
+      1881 +2. *Ease of understanding* -- less duplication, consolidated 
+           +docs, standard patterns.                                     
+      1882 +3. *Ease of maintenance* -- shared libraries, single test fra
+           +mework, dead code removal.                                   
+      1883  
+      1866 -- [ ] Kubernetes-native job scheduling replacing host Docker 
+           -launcher                                                     
+      1867 -- [ ] Pre-concretized lockfiles per GPU architecture family  
+      1868 -- [ ] Foundation model fine-tuning images with LoRA/QLoRA too
+           -ling                                                         
+      1869 -- [ ] Serverless build execution with auto-scaling           
+      1870 -- [ ] Multi-tenancy support with advanced access controls    
+      1884 +** R1: Shared Entrypoint Library (=container/lib/spack_init.s
+           +h=)                                                          
+      1885 +:PROPERTIES:                                                 
+      1886 +:CUSTOM_ID: r1-shared-lib                                    
+      1887 +:END:                                                        
+      1888 +                                                             
+      1889 +*** Problem                                                  
+      1890 +                                                             
+      1891 +The Spack initialization cascade (source setup-env.sh → activ
+           +ate env from                                                 
+      1892 +candidate list → view fallback → CUDA setup → MLSys venv acti
+           +vation) is                                                   
+      1893 +duplicated across 7 of 8 entrypoints with subtle divergences.
+           +  The candidate                                              
+      1894 +path order differs between =default.sh= and =run-job.sh=, cre
+           +ating silent                                                 
+      1895 +behavioral differences.  A bug fix to the cascade requires ed
+           +iting 4+ files.                                              
+      1896 +                                                             
+      1897 +*** Current State                                            
+      1898 +                                                             
+      1899 +| Logic Block              | Copies | Divergent? | Lines (eac
+           +h) |                                                         
+      1900 +|--------------------------+--------+------------+-----------
+           +---|                                                         
+      1901 +| Spack init + activation  |      4 | Yes        | 25-30     
+           +   |                                                         
+      1902 +| View fallback            |      3 | Minor      | 10-15     
+           +   |                                                         
+      1903 +| CUDA_HOME setup          |      2 | No         | 5         
+           +   |                                                         
+      1904 +| MLSys venv activation    |      2 | Yes        | 25-40     
+           +   |                                                         
+      1905 +                                                             
+      1906 +Total duplicated lines: ~200+.                               
+      1907 +                                                             
+      1908 +*** Design                                                   
+      1909 +                                                             
+      1910 +Create =container/lib/spack_init.sh= exporting these function
+           +s:                                                           
+      1911 +                                                             
+      1912 +#+begin_example                                              
+      1913 +sygaldry_init_spack()           # Source setup-env.sh, guard 
+           +on missing                                                   
+      1914 +sygaldry_activate_env()         # Cascade: $SYGALDRY_SPACK_EN
+           +V → baked → workspace                                        
+      1915 +sygaldry_ensure_view_fallback() # Inject view into PATH/PYTHO
+           +NPATH/LD_LIBRARY_PATH                                        
+      1916 +sygaldry_setup_cuda()           # CUDA_HOME, PATH, LD_LIBRARY
+           +_PATH for CUDA                                               
+      1917 +sygaldry_activate_mlsys_venv()  # Single/multi-venv auto-acti
+           +vation                                                       
+      1918 +sygaldry_full_init()            # All of the above in sequenc
+           +e                                                            
+      1919 +#+end_example                                                
+      1920 +                                                             
+      1921 +Each entrypoint reduces to:                                  
+      1922 +                                                             
+      1923 +#+begin_example                                              
+      1924 +#!/bin/bash                                                  
+      1925 +set -euo pipefail                                            
+      1926 +source /opt/container_entrypoints/lib/spack_init.sh          
+      1927 +sygaldry_full_init                                           
+      1928 +                                                             
+      1929 +# Persona-specific dispatch (5-20 lines)                     
+      1930 +#+end_example                                                
+      1931 +                                                             
+      1932 +*** Acceptance Criteria                                      
+      1933 +                                                             
+      1934 +- [ ] All 7 Spack-using entrypoints source the shared library
+      1935 +- [ ] Candidate path order is identical across all entrypoint
+           +s                                                            
+      1936 +- [ ] =default.sh= drops from 257 to ~60 lines (banner + alia
+           +ses + dispatch)                                              
+      1937 +- [ ] =run-job.sh= drops from 90 to ~15 lines                
+      1938 +- [ ] Existing T1-T7 and T8.x tests pass without modification
+      1939 +                                                             
+      1940 +*** Estimated Impact                                         
+      1941 +                                                             
+      1942 +| Metric                   | Before | After  |               
+      1943 +|--------------------------+--------+--------|               
+      1944 +| Total entrypoint lines   |    922 | ~500   |               
+      1945 +| Files to edit for cascade bug | 4+ | 1      |              
+      1946 +| Behavioral divergence risk | High | None   |               
+      1947 +                                                             
+      1948 +** R2: Launcher Refactor (Config Struct + Tiered Env Vars)   
+      1949 +:PROPERTIES:                                                 
+      1950 +:CUSTOM_ID: r2-launcher-refactor                             
+      1951 +:END:                                                        
+      1952 +                                                             
+      1953 +*** Problem                                                  
+      1954 +                                                             
+      1955 +=launch_container.sh= has a 23-positional-parameter function 
+           +(=build_docker_args=)                                        
+      1956 +where parameters like =${10}= through =${23}= are unreadable 
+           +without                                                      
+      1957 +cross-referencing the function signature.  Adding a new cache
+           + mount requires                                              
+      1958 +changes in 4+ places.  The 45+ environment variables with dua
+           +l =SYGALDRY_*= /                                             
+      1959 +=ZEPHYR_*= namespaces confuse new users.                     
+      1960 +                                                             
+      1961 +*** Design                                                   
+      1962 +                                                             
+      1963 +**** Phase 1: Config struct                                  
+      1964 +                                                             
+      1965 +Replace positional params with an associative array or a gene
+           +rated config file:                                           
+      1966 +                                                             
+      1967 +#+begin_example                                              
+      1968 +# Before (unreadable):                                       
+      1969 +build_docker_args "$image" "$entrypoint" "$repo_path" ... "${
+           +23}"                                                         
+      1970 +                                                             
+      1971 +# After (self-documenting):                                  
+      1972 +declare -A CFG=(                                             
+      1973 +    [image]="$image"                                         
+      1974 +    [entrypoint]="$entrypoint"                               
+      1975 +    [repo_path]="$repo_path"                                 
+      1976 +    [spack_store]="$spack_store"                             
+      1977 +    ...                                                      
+      1978 +)                                                            
+      1979 +build_docker_args CFG                                        
+      1980 +#+end_example                                                
+      1981 +                                                             
+      1982 +**** Phase 2: Tiered env vars                                
+      1983 +                                                             
+      1984 +Group environment variables into tiers with explicit document
+           +ation:                                                       
+      1985 +                                                             
+      1986 +#+begin_example                                              
+      1987 +# Tier 1: Essential (3 vars -- most users need only these)   
+      1988 +SYGALDRY_PROJECT_ID     # Project name                       
+      1989 +SYGALDRY_IMAGE          # Docker image (default: auto-detecte
+           +d)                                                           
+      1990 +SYGALDRY_REPO           # External repo path (enables multi-r
+           +epo)                                                         
+      1991 +                                                             
+      1992 +# Tier 2: Shared caches (6 vars -- power users)              
+      1993 +ZEPHYR_CACHE_ROOT       # Top-level storage root             
+      1994 +HF_HOME                 # HuggingFace cache                  
+      1995 +UV_CACHE_DIR            # UV download cache                  
+      1996 +TORCH_HOME              # PyTorch hub cache                  
+      1997 +TRITON_CACHE_DIR        # Triton kernel cache                
+      1998 +JAX_COMPILATION_CACHE_DIR  # JAX compilation cache           
+      1999 +                                                             
+      2000 +# Tier 3: Advanced (remaining -- operators/infra only)       
+      2001 +ZEPHYR_LEASE_MODE, ZEPHYR_CACHE_PROFILE, SYGALDRY_BUILD_ROLE,
+           + ...                                                         
+      2002 +#+end_example                                                
+      2003 +                                                             
+      2004 +**** Phase 3: Deprecation cleanup                            
+      2005 +                                                             
+      2006 +Remove the dual namespace.  All new variables use =SYGALDRY_=
+           + prefix.  Legacy                                             
+      2007 +=ZEPHYR_*= names continue to work with warnings for two relea
+           +ses, then are removed.                                       
+      2008 +                                                             
+      2009 +**** Phase 4: Extract lease management                       
+      2010 +                                                             
+      2011 +Move lease acquire/release (~60 lines) into =container/lib/le
+           +ase.sh=.  The                                                
+      2012 +launcher imports it only when =ZEPHYR_LEASE_MODE != off=.    
+      2013 +                                                             
+      2014 +*** Acceptance Criteria                                      
+      2015 +                                                             
+      2016 +- [ ] =build_docker_args= uses named config struct, no positi
+           +onal params past $2                                          
+      2017 +- [ ] =--print-effective-config= shows tiered output with tie
+           +r labels                                                     
+      2018 +- [ ] Adding a new cache mount requires changes in exactly 2 
+           +places (config declaration + mount rule)                     
+      2019 +- [ ] All existing launcher unit tests (=launch_container_tes
+           +t.sh=, 427 lines) pass                                       
+      2020 +                                                             
+      2021 +*** Estimated Impact                                         
+      2022 +                                                             
+      2023 +| Metric                         | Before | After   |        
+      2024 +|--------------------------------+--------+---------|        
+      2025 +| Launcher lines                 |    673 | ~550    |        
+      2026 +| Params to =build_docker_args=  |     23 | 1 (ref) |        
+      2027 +| Places to change for new mount |     4+ | 2       |        
+      2028 +                                                             
+      2029 +** R3: Verification Consolidation                            
+      2030 +:PROPERTIES:                                                 
+      2031 +:CUSTOM_ID: r3-verification                                  
+      2032 +:END:                                                        
+      2033 +                                                             
+      2034 +*** Problem                                                  
+      2035 +                                                             
+      2036 +3,836 lines of verification code for ~2,100 lines of function
+           +al code (1.8:1                                               
+      2037 +ratio).  GPU validation is tested in 5+ different places.  Tw
+           +o test output                                                
+      2038 +formats coexist (pass/fail vs TAP).  Two overlapping validati
+           +on paths exist                                               
+      2039 +for MLSys images (hardcoded =verify_uv_layering.sh= and YAML-
+           +driven                                                       
+      2040 +=uv-env-validate.sh=).  NVIDIA pip leak detection is implemen
+           +ted as ~30 lines                                             
+      2041 +of inline Python in two separate scripts.                    
+      2042 +                                                             
+      2043 +*** Design                                                   
+      2044 +                                                             
+      2045 +**** Phase 1: Shared test primitives                         
+      2046 +                                                             
+      2047 +Create =container/lib/test_primitives.sh= with TAP as the sta
+           +ndard:                                                       
+      2048 +                                                             
+      2049 +#+begin_example                                              
+      2050 +tap_plan()       # Emit TAP plan line                        
+      2051 +tap_ok()         # Pass a test                               
+      2052 +tap_not_ok()     # Fail a test                               
+      2053 +tap_skip()       # Skip a test (with reason)                 
+      2054 +tap_bail_out()   # Abort the entire suite                    
+      2055 +#+end_example                                                
+      2056 +                                                             
+      2057 +Create =container/lib/verify_python.py= with reusable Python 
+           +checks:                                                      
+      2058 +                                                             
+      2059 +#+begin_example                                              
+      2060 +check_spack_provenance(packages, view_path)   # T8.2         
+      2061 +check_uv_provenance(packages, venv_path)      # T8.3         
+      2062 +check_no_nvidia_pip(view_path)                 # T8.4        
+      2063 +check_gpu_functional(framework, test_code)     # T8.5        
+      2064 +check_abi_safety(import_stmt, hard_fail_pats)  # T8.6, T8.8  
+      2065 +#+end_example                                                
+      2066 +                                                             
+      2067 +**** Phase 2: Single MLSys validation path                   
+      2068 +                                                             
+      2069 +Retire the hardcoded tests in =verify_uv_layering.sh= for T8.
+           +6-T8.8.  The                                                 
+      2070 +YAML-driven =uv-env-validate.sh= becomes the single implement
+           +ation for all                                                
+      2071 +MLSys environment validation.  =verify_uv_layering.sh= retain
+           +s only the                                                   
+      2072 +baseline tests (T8.1-T8.5) and delegates MLSys-specific tests
+           + to the YAML                                                 
+      2073 +validator.                                                   
+      2074 +                                                             
+      2075 +**** Phase 3: Collapse orchestration layers                  
+      2076 +                                                             
+      2077 +Merge =container/verify_all.sh= (188 lines) into =validate_al
+           +l.sh= (269 lines)                                            
+      2078 +as a single CI orchestrator.  The flag interface stays the sa
+           +me; the                                                      
+      2079 +implementation calls stage scripts directly instead of throug
+           +h an intermediate                                            
+      2080 +orchestrator.                                                
+      2081 +                                                             
+      2082 +*** Acceptance Criteria                                      
+      2083 +                                                             
+      2084 +- [ ] All test scripts use TAP output format                 
+      2085 +- [ ] Shared Python checks eliminate inline duplication (3 co
+           +pies → 1)                                                    
+      2086 +- [ ] GPU validation tested in exactly 2 places: entrypoint v
+           +erifier (quick) and                                          
+      2087 +  snapshot/layering suite (thorough)                         
+      2088 +- [ ] MLSys validation has one path: YAML-driven =uv-env-vali
+           +date.sh=                                                     
+      2089 +- [ ] Total verification lines reduced by ~30%               
+      2090 +                                                             
+      2091 +*** Estimated Impact                                         
+      2092 +                                                             
+      2093 +| Metric                        | Before  | After    |       
+      2094 +|-------------------------------+---------+----------|       
+      2095 +| Total verification lines      |   3,836 | ~2,600   |       
+      2096 +| Test output formats           |       2 | 1 (TAP)  |       
+      2097 +| GPU test locations            |      5+ | 2        |       
+      2098 +| NVIDIA pip check copies       |       2 | 1        |       
+      2099 +| Orchestration scripts         |       2 | 1        |       
+      2100 +                                                             
+      2101 +** R4: Configuration Consolidation                           
+      2102 +:PROPERTIES:                                                 
+      2103 +:CUSTOM_ID: r4-config                                        
+      2104 +:END:                                                        
+      2105 +                                                             
+      2106 +*** Problem                                                  
+      2107 +                                                             
+      2108 +A user must consult 6-7 separate files to understand how a si
+           +ngle                                                         
+      2109 +=uv pip install vllm= resolves: =spack_owned_packages.conf= →
+           + =nvidia_overrides.txt=                                      
+      2110 +→ =llm_serving_overrides.txt= → =spack_src.yaml= → =uv-instal
+           +l.sh=.  Config                                               
+      2111 +files are scattered across =container/=, =container/entrypoin
+           +ts/=, =pkg/zephyr/=,                                         
+      2112 +and =skills/zephyr-mlsys-env/envs/=.                         
+      2113 +                                                             
+      2114 +*** Design                                                   
+      2115 +                                                             
+      2116 +**** Phase 1: Centralize config files                        
+      2117 +                                                             
+      2118 +Create =container/config/= directory:                        
+      2119 +                                                             
+      2120 +#+begin_example                                              
+      2121 +container/config/                                            
+      2122 +├── spack_owned_packages.conf     # Moved from container/    
+      2123 +├── nvidia_overrides.txt          # Moved from container/    
+      2124 +├── llm_serving_overrides.txt     # Moved from container/    
+      2125 +└── envs/                         # Moved from skills/zephyr-
+           +mlsys-env/envs/                                              
+      2126 +    ├── hf-transformers.yaml                                 
+      2127 +    ├── vllm.yaml                                            
+      2128 +    ├── sglang.yaml                                          
+      2129 +    ├── torchtitan.yaml                                      
+      2130 +    ├── megatronlm.yaml                                      
+      2131 +    ├── hf-datasets.yaml                                     
+      2132 +    └── llm-serving-all.yaml                                 
+      2133 +#+end_example                                                
+      2134 +                                                             
+      2135 +Entrypoints and build scripts reference =container/config/= (
+           +or the baked path                                            
+      2136 +=/opt/container_config/=) as the single config root.         
+      2137 +                                                             
+      2138 +**** Phase 2: =sygaldry config show=                         
+      2139 +                                                             
+      2140 +Add a CLI subcommand that dumps the effective configuration f
+           +rom inside                                                   
+      2141 +a container:                                                 
+      2142 +                                                             
+      2143 +#+begin_example                                              
+      2144 +$ sygaldry config show                                       
+      2145 +                                                             
+      2146 +[Tier 1: Essential]                                          
+      2147 +SYGALDRY_PROJECT_ID = my-project                             
+      2148 +SYGALDRY_IMAGE      = sygaldry/zephyr:spack-20260212         
+      2149 +                                                             
+      2150 +[Spack Owned Packages] (from /opt/container_config/spack_owne
+           +d_packages.conf)                                             
+      2151 +torch==2.9.0  torchvision==0.24.0  numpy==2.3.4  scipy==1.16.
+           +3  ...                                                       
+      2152 +                                                             
+      2153 +[NVIDIA Overrides] (from /opt/container_config/nvidia_overrid
+           +es.txt)                                                      
+      2154 +nvidia-cublas-cu12: BLOCKED   nvidia-cudnn-cu12: BLOCKED   ..
+           +.                                                            
+      2155 +                                                             
+      2156 +[Active MLSys Env]                                           
+      2157 +Name: vllm   Venv: /opt/mlsys-envs/vllm   Overrides: llm_serv
+           +ing_overrides.txt                                            
+      2158 +#+end_example                                                
+      2159 +                                                             
+      2160 +**** Phase 3: Config file deduplication                      
+      2161 +                                                             
+      2162 +=tools/spack_src.yaml= is a 228-line copy of =pkg/zephyr/spac
+           +k_src.yaml= kept                                             
+      2163 +in sync by contract checks.  Replace with a symlink.         
+      2164 +                                                             
+      2165 +*** Acceptance Criteria                                      
+      2166 +                                                             
+      2167 +- [ ] All config files live under =container/config/= (or its
+           + baked image path)                                           
+      2168 +- [ ] =sygaldry config show= works inside any container      
+      2169 +- [ ] =tools/spack_src.yaml= is a symlink to =pkg/zephyr/spac
+           +k_src.yaml=                                                  
+      2170 +- [ ] The number of directories a user must search for config
+           + drops from 4 to 1                                           
+      2171 +                                                             
+      2172 +** R5: Actionable Error Messages                             
+      2173 +:PROPERTIES:                                                 
+      2174 +:CUSTOM_ID: r5-errors                                        
+      2175 +:END:                                                        
+      2176 +                                                             
+      2177 +*** Problem                                                  
+      2178 +                                                             
+      2179 +Of 26 error messages across entrypoints and build scripts, on
+           +ly 3 include                                                 
+      2180 +remediation hints.  When a user sees "ERROR: Torch/JAX unavai
+           +lable and                                                    
+      2181 +/opt/spack_store/view not found" they have no idea what to do
+           + next.                                                       
+      2182 +=default.sh= does not use =set -euo pipefail=, meaning failur
+           +es can be silently                                           
+      2183 +swallowed.                                                   
+      2184 +                                                             
+      2185 +*** Design                                                   
+      2186 +                                                             
+      2187 +**** Phase 1: Error helper library                           
+      2188 +                                                             
+      2189 +Create =container/lib/errors.sh=:                            
+      2190 +                                                             
+      2191 +#+begin_example                                              
+      2192 +# error_with_hint <message> <hint>                           
+      2193 +# Outputs:                                                   
+      2194 +#   ERROR: <message>                                         
+      2195 +#   HINT:  <hint>                                            
+      2196 +#   See:   https://docs.sygaldry.dev/troubleshooting#<auto-sl
+           +ug>                                                          
+      2197 +                                                             
+      2198 +error_with_hint() {                                          
+      2199 +    local msg="$1" hint="$2"                                 
+      2200 +    echo "ERROR: ${msg}" >&2                                 
+      2201 +    echo "HINT:  ${hint}" >&2                                
+      2202 +}                                                            
+      2203 +#+end_example                                                
+      2204 +                                                             
+      2205 +**** Phase 2: Retrofit all error messages                    
+      2206 +                                                             
+      2207 +| Current Error                                   | Added Hin
+           +t                                                          | 
+      2208 +|-------------------------------------------------+----------
+           +-----------------------------------------------------------| 
+      2209 +| Spack setup script not found at /opt/spack_src  | Are you i
+           +nside the container? Use =sygaldry= or =launch_container.sh= 
+           +|                                                            
+      2210 +| Torch/JAX unavailable, view not found           | Build wit
+           +h =spack-build.sh= or use a snapshot image                  |
+      2211 +| spack install is restricted to builder role     | Set =SYGA
+           +LDRY_BUILD_ROLE=builder= /(already good)/                   |
+      2212 +| uv not found in PATH                            | uv is ins
+           +talled in the container image; ensure you are inside        |
+      2213 +| No GPU detected                                 | Check =nv
+           +idia-smi= on host; run =container/diagnose_nvidia.sh=       |
+      2214 +| Forbidden core guard triggered (exit 10)        | Your chan
+           +ge requires rebuilding torch/jax; use full build with staging
+           + |                                                           
+      2215 +| spack concretize failed                         | Check =co
+           +ncretize_report.json= for conflicts; try =--allow-deprecated=
+           + |                                                           
+      2216 +                                                             
+      2217 +**** Phase 3: Strict error handling                          
+      2218 +                                                             
+      2219 +Standardize all entrypoints on =set -euo pipefail=.  =default
+           +.sh= currently                                               
+      2220 +omits =set -e=; this must change, with explicit trap handlers
+           + for the                                                     
+      2221 +interactive shell case.                                      
+      2222 +                                                             
+      2223 +*** Acceptance Criteria                                      
+      2224 +                                                             
+      2225 +- [ ] All entrypoints use =set -euo pipefail= (or explicit =t
+           +rap= for interactive)                                        
+      2226 +- [ ] Every error message includes a remediation hint        
+      2227 +- [ ] Error output consistently goes to stderr               
+      2228 +- [ ] =error_with_hint= function used in all entrypoints and 
+           +build scripts                                                
+      2229 +                                                             
+      2230 +** R6: Snapshot Pipeline Simplification                      
+      2231 +:PROPERTIES:                                                 
+      2232 +:CUSTOM_ID: r6-snapshot                                      
+      2233 +:END:                                                        
+      2234 +                                                             
+      2235 +*** Problem                                                  
+      2236 +                                                             
+      2237 +=snapshot_spack.sh= (353 lines) and =snapshot_mlsys.sh= (389 
+           +lines) duplicate                                             
+      2238 +~120 lines of argument parsing and push logic.  No orchestrat
+           +ion script chains                                            
+      2239 +the three build stages (base → spack → mlsys).  Users must ma
+           +nually build                                                 
+      2240 +prerequisites and run =docker login= before pushing.         
+      2241 +                                                             
+      2242 +*** Design                                                   
+      2243 +                                                             
+      2244 +**** Phase 1: Shared snapshot library                        
+      2245 +                                                             
+      2246 +Extract into =container/lib/snapshot_common.sh=:             
+      2247 +                                                             
+      2248 +#+begin_example                                              
+      2249 +parse_snapshot_args()    # --dry-run, --verify, --no-verify, 
+           +--push, --registry                                           
+      2250 +snapshot_push()          # Tag + push with date stamp, retry 
+           +on failure                                                   
+      2251 +snapshot_log() / snapshot_error()  # Consistent logging      
+      2252 +#+end_example                                                
+      2253 +                                                             
+      2254 +Both snapshot scripts reduce by ~120 lines each.             
+      2255 +                                                             
+      2256 +**** Phase 2: End-to-end =snapshot_all.sh=                   
+      2257 +                                                             
+      2258 +#+begin_example                                              
+      2259 +container/snapshot_all.sh [--push] [--registry <url>] [target
+           +s...]                                                        
+      2260 +                                                             
+      2261 +# Chains:                                                    
+      2262 +# 1. Build/verify base image (if needed)                     
+      2263 +# 2. Build/verify spack snapshot                             
+      2264 +# 3. Build/verify each MLSys image (parallel or sequential)  
+      2265 +# 4. Push all (if --push)                                    
+      2266 +# 5. Summary table with image sizes and push status          
+      2267 +                                                             
+      2268 +# Examples:                                                  
+      2269 +container/snapshot_all.sh                       # Build every
+           +thing, no push                                               
+      2270 +container/snapshot_all.sh --push vllm sglang    # Build + pus
+           +h specific images                                            
+      2271 +container/snapshot_all.sh --push all            # Build + pus
+           +h everything                                                 
+      2272 +#+end_example                                                
+      2273 +                                                             
+      2274 +**** Phase 3: Automated push with retry                      
+      2275 +                                                             
+      2276 +Replace the one-off =tools/push_mlsys_ghcr.sh= and =push_mlsy
+           +s_ghcr_resume.sh=                                            
+      2277 +(hardcoded date tags) with the parameterized push logic in =s
+           +napshot_all.sh=.                                             
+      2278 +Remove the one-off scripts.                                  
+      2279 +                                                             
+      2280 +*** Acceptance Criteria                                      
+      2281 +                                                             
+      2282 +- [ ] Shared library eliminates ~120 lines of duplication    
+      2283 +- [ ] =snapshot_all.sh= chains the full pipeline with a singl
+           +e command                                                    
+      2284 +- [ ] One-off push scripts deleted                           
+      2285 +- [ ] Push logic handles retries (3 attempts) and reports per
+           +-image status                                                
+      2286 +                                                             
+      2287 +** R7: Eliminate Dead Code and Reduce Wrapper Depth          
+      2288 +:PROPERTIES:                                                 
+      2289 +:CUSTOM_ID: r7-dead-code                                     
+      2290 +:END:                                                        
+      2291 +                                                             
+      2292 +*** Problem                                                  
+      2293 +                                                             
+      2294 +=setup_user_environment.sh= is 479 lines of dead code (commen
+           +ted out in the                                               
+      2295 +Dockerfile).  The tools wrapper chain is 4 levels deep:      
+      2296 +=autoretry_tmux → autoretry → autobuild → zephyr_job → launch
+           +_container.sh=.                                              
+      2297 +=tools/container_job= is a 7-line redirect.  =tools/build.sh=
+           + is a 19-line                                                
+      2298 +redirect.  Duplicate skills (=zephyr-container-exec= and =con
+           +tainer-infra-exec=)                                          
+      2299 +describe nearly identical workflows.                         
+      2300 +                                                             
+      2301 +*** Design                                                   
+      2302 +                                                             
+      2303 +| Item                            | Action                   
+           +                    |                                        
+      2304 +|---------------------------------+--------------------------
+           +--------------------|                                        
+      2305 +| =setup_user_environment.sh=     | Archive to =docs/archive/
+           += or delete.        |                                        
+      2306 +|                                 | Rescue =configure_uv_spac
+           +k()= into shared lib |                                       
+      2307 +| =tools/container_job=           | Delete (7-line redirect t
+           +o =zephyr_job=)     |                                        
+      2308 +| =tools/build.sh=                | Delete (19-line redirect 
+           +to =pkg/zephyr/build.sh=) |                                  
+      2309 +| =tools/push_mlsys_ghcr*.sh=    | Delete (superseded by R6 =
+           +snapshot_all.sh=)  |                                         
+      2310 +| =skills/container-infra-exec=   | Merge into =zephyr-contai
+           +ner-exec=, delete   |                                        
+      2311 +| =tools/spack_src.yaml=          | Replace with symlink (R4)
+           +                    |                                        
+      2312 +| =tools/spack.yaml=, =tools/spack.lock= | Delete (empty/stal
+           +e)                  |                                        
+      2313 +                                                             
+      2314 +Wrapper chain simplification:                                
+      2315 +                                                             
+      2316 +#+begin_example                                              
+      2317 +# Before: 4 levels                                           
+      2318 +autoretry_tmux → autoretry → autobuild → zephyr_job → launch_
+           +container.sh                                                 
+      2319 +                                                             
+      2320 +# After: 2 levels (R8 replaces autoretry with Temporal)      
+      2321 +zephyr_job → launch_container.sh                             
+      2322 +#+end_example                                                
+      2323 +                                                             
+      2324 +*** Acceptance Criteria                                      
+      2325 +                                                             
+      2326 +- [ ] No commented-out code in Dockerfiles                   
+      2327 +- [ ] No wrapper scripts that only =exec= another script     
+      2328 +- [ ] Maximum wrapper depth: 2 levels                        
+      2329 +- [ ] Zero stale/empty config files in =tools/=              
+      2330 +                                                             
+      2331 +*** Estimated Impact                                         
+      2332 +                                                             
+      2333 +| Metric             | Before | After |                      
+      2334 +|--------------------+--------+-------|                      
+      2335 +| Dead code lines    |    479 | 0     |                      
+      2336 +| Redirect wrappers  |      3 | 0     |                      
+      2337 +| Duplicate skills   |      2 | 1     |                      
+      2338 +| Wrapper depth      |      4 | 2     |                      
+      2339 +                                                             
+      2340 +** R8: Temporal-Driven Spack Builds                          
+      2341 +:PROPERTIES:                                                 
+      2342 +:CUSTOM_ID: r8-temporal-builds                               
+      2343 +:END:                                                        
+      2344 +                                                             
+      2345 +*** Problem                                                  
+      2346 +                                                             
+      2347 +The most failure-prone operation (Spack builds, 3-8 hours) us
+           +es a hand-written                                            
+      2348 +retry loop (=zephyr_autoretry.sh=) with no error classificati
+           +on, no adaptive                                              
+      2349 +remediation, and no monitoring beyond =tmux attach=.  Meanwhi
+           +le, the Temporal                                             
+      2350 +orchestration system exists in the same repo with native retr
+           +y, monitoring,                                               
+      2351 +history, and UI support -- but is not used for builds.       
+      2352 +                                                             
+      2353 +*** Design                                                   
+      2354 +                                                             
+      2355 +Create a Temporal pipeline =spack-build-pipeline.yaml= that r
+           +eplaces the                                                  
+      2356 +=autobuild/autoretry= shell scripts:                         
+      2357 +                                                             
+      2358 +#+begin_example                                              
+      2359 +steps:                                                       
+      2360 +  - id: preflight                                            
+      2361 +    type: command                                            
+      2362 +    command: container/verify_preflight.sh --smoke           
+      2363 +                                                             
+      2364 +  - id: spack-build                                          
+      2365 +    type: container_job                                      
+      2366 +    depends_on: [preflight]                                  
+      2367 +    container_job:                                           
+      2368 +      project_id: sygaldry                                   
+      2369 +      entrypoint: spack-build.sh                             
+      2370 +      gpu: true                                              
+      2371 +    timeout_seconds: 28800    # 8 hours                      
+      2372 +    retry:                                                   
+      2373 +      max_attempts: 3                                        
+      2374 +      backoff_seconds: 600                                   
+      2375 +                                                             
+      2376 +  - id: gpu-verify                                           
+      2377 +    type: container_job                                      
+      2378 +    depends_on: [spack-build]                                
+      2379 +    container_job:                                           
+      2380 +      project_id: sygaldry                                   
+      2381 +      entrypoint: verify-gpu.sh                              
+      2382 +      gpu: true                                              
+      2383 +                                                             
+      2384 +  - id: snapshot                                             
+      2385 +    type: command                                            
+      2386 +    depends_on: [gpu-verify]                                 
+      2387 +    command: container/snapshot_spack.sh --no-push           
+      2388 +                                                             
+      2389 +  - id: snapshot-verify                                      
+      2390 +    type: command                                            
+      2391 +    depends_on: [snapshot]                                   
+      2392 +    command: container/verify_snapshot.sh ${{ steps.snapshot.
+           +outputs.tag }}                                               
+      2393 +#+end_example                                                
+      2394 +                                                             
+      2395 +Benefits over the shell scripts:                             
+      2396 +- *Error classification*: Temporal activities can parse build
+           + logs for known                                              
+      2397 +  failure patterns and choose remediation (clear build cache,
+           + relax constraints,                                          
+      2398 +  notify human).                                             
+      2399 +- *Monitoring*: Temporal UI at =localhost:8233= shows live st
+           +ep progress, duration,                                       
+      2400 +  retry attempts, and full history.                          
+      2401 +- *Persistence*: Build history survives process restarts.    
+      2402 +- *Extensibility*: Adding steps (MLSys build, push, notificat
+           +ion) is a YAML edit.                                         
+      2403 +                                                             
+      2404 +*** Acceptance Criteria                                      
+      2405 +                                                             
+      2406 +- [ ] Spack build pipeline runs end-to-end via Temporal      
+      2407 +- [ ] Retry logic distinguishes transient (network, OOM) from
+           + permanent (spec conflict) failures                          
+      2408 +- [ ] Build progress visible in Temporal UI                  
+      2409 +- [ ] =zephyr_autoretry.sh= and =zephyr_autoretry_tmux.sh= de
+           +precated                                                     
+      2410 +                                                             
+      2411 +** R9: Documentation Consolidation                           
+      2412 +:PROPERTIES:                                                 
+      2413 +:CUSTOM_ID: r9-docs                                          
+      2414 +:END:                                                        
+      2415 +                                                             
+      2416 +*** Problem                                                  
+      2417 +                                                             
+      2418 +35 markdown files totaling 8,328 lines.  7 architecture docs 
+           +in =container/=                                              
+      2419 +alone with significant overlap: =ZEPHYR_SYSTEM_DESIGN.md= vs 
+           +=SYSTEM_DESIGN.md=;                                          
+      2420 +=ZEPHYR_INFRA_REVIEW_AND_IMPROVEMENT_PLAN.md= vs =REVIEW_ROAD
+           +MAP.md=;                                                     
+      2421 +=PRODUCTION_READINESS.md= vs =ZEPHYR_CONTAINER_INFRA_REQUIREM
+           +ENTS.md=.                                                    
+      2422 +Historical artifacts (=LLM_FAILURE_REVIEW.md=, =SPACK_FEATURE
+           +S_ZEPHYR_BLOG.md=)                                           
+      2423 +sit alongside active documentation.                          
+      2424 +                                                             
+      2425 +*** Design                                                   
+      2426 +                                                             
+      2427 +**** Target document hierarchy (5 active docs, not 35)       
+      2428 +                                                             
+      2429 +#+begin_example                                              
+      2430 +foundation.org               # Engineering principles (this f
+           +ile, normative)                                              
+      2431 +CLAUDE.md                    # Agent + developer quick refere
+           +nce                                                          
+      2432 +SYSTEM_DESIGN.md             # High-level architecture overvi
+           +ew (trimmed)                                                 
+      2433 +container/ZEPHYR_SYSTEM_DESIGN.md  # Infra contract (trimmed,
+           + defers to foundation.org)                                   
+      2434 +container/TROUBLESHOOTING.md # Consolidated from NVIDIA_FIXES
+           +.md, HACKERS_GUIDE, etc.                                     
+      2435 +#+end_example                                                
+      2436 +                                                             
+      2437 +**** Archive plan                                            
+      2438 +                                                             
+      2439 +Move to =docs/archive/=:                                     
+      2440 +                                                             
+      2441 +| File                                      | Reason         
+           +                       |                                     
+      2442 +|-------------------------------------------+----------------
+           +-----------------------|                                     
+      2443 +| =REVIEW_ROADMAP.md=                       | Superseded by t
+           +his roadmap            |                                     
+      2444 +| =ZEPHYR_INFRA_REVIEW_AND_IMPROVEMENT_PLAN.md= | Superseded 
+           +                      |                                      
+      2445 +| =ZEPHYR_CONTAINER_INFRA_REQUIREMENTS.md=  | Absorbed into f
+           +oundation.org          |                                     
+      2446 +| =PRODUCTION_READINESS.md=                 | Absorbed into f
+           +oundation.org          |                                     
+      2447 +| =ZEPHYR_UNIFIED_CACHE_SYSTEM_DESIGN.md=  | Deprecated point
+           +er                    |                                      
+      2448 +| =LLM_FAILURE_REVIEW.md=                  | Historical one-t
+           +ime analysis          |                                      
+      2449 +| =SPACK_FEATURES_ZEPHYR_BLOG.md=          | Blog content, no
+           +t operational doc     |                                      
+      2450 +| =multimodal_research_report.md=           | Output artifact
+           +, not system doc       |                                     
+      2451 +                                                             
+      2452 +**** Trim existing docs                                      
+      2453 +                                                             
+      2454 +=SYSTEM_DESIGN.md= and =ZEPHYR_SYSTEM_DESIGN.md= have already
+           + been                                                        
+      2455 +cross-referenced to =foundation.org=.  In the next version, t
+           +rim them to                                                  
+      2456 +concise summaries that defer to =foundation.org= for all deta
+           +ils:                                                         
+      2457 +                                                             
+      2458 +- =SYSTEM_DESIGN.md=: executive summary + architecture diagra
+           +ms only (~100 lines)                                         
+      2459 +- =ZEPHYR_SYSTEM_DESIGN.md=: infra contract tables only (~150
+           + lines)                                                      
+      2460 +                                                             
+      2461 +*** Acceptance Criteria                                      
+      2462 +                                                             
+      2463 +- [ ] Active documentation ≤ 5 files                         
+      2464 +- [ ] Archived docs in =docs/archive/= with note about succes
+           +sor                                                          
+      2465 +- [ ] No duplicate information across active docs            
+      2466 +- [ ] =SYSTEM_DESIGN.md= ≤ 150 lines                         
+      2467 +- [ ] =ZEPHYR_SYSTEM_DESIGN.md= ≤ 200 lines                  
+      2468 +                                                             
+      2469 +** R10: Librosa Policy Removal                               
+      2470 +:PROPERTIES:                                                 
+      2471 +:CUSTOM_ID: r10-librosa                                      
+      2472 +:END:                                                        
+      2473 +                                                             
+      2474 +*** Problem                                                  
+      2475 +                                                             
+      2476 +The librosa policy in =build.sh= adds 40+ lines of complexity
+           + and 3 extra code                                            
+      2477 +paths for a single optional audio library.  The =SYGALDRY_LIB
+           +ROSA_POLICY= env                                             
+      2478 +var (=guarded/remove/keep=) with dry-run guards exists becaus
+           +e librosa's                                                  
+      2479 +transitive dependencies sometimes conflict with torch/jax.  T
+           +his is a workaround                                          
+      2480 +for a package-level problem, not a systemic solution.        
+      2481 +                                                             
+      2482 +*** Design                                                   
+      2483 +                                                             
+      2484 +Move librosa out of the Spack foundation layer entirely:     
+      2485 +                                                             
+      2486 +1. Remove =py-librosa= from =pkg/zephyr/spack_src.yaml= root 
+           +specs.                                                       
+      2487 +2. Remove the librosa policy code from =build.sh= (lines ~140
+           +-215).                                                       
+      2488 +3. If librosa is needed, install it via UV with the existing 
+           +=uv-install.sh=                                              
+      2489 +   constraint mechanism (Pillar 5 already handles this correc
+           +tly).                                                        
+      2490 +4. =py-soundfile= remains in Spack (it's a build-time depende
+           +ncy for audio                                                
+      2491 +   processing that benefits from native compilation).        
+      2492 +                                                             
+      2493 +*** Acceptance Criteria                                      
+      2494 +                                                             
+      2495 +- [ ] =build.sh= has 2 code paths (locked/unlocked), not 5   
+      2496 +- [ ] =SYGALDRY_LIBROSA_POLICY= env var removed              
+      2497 +- [ ] =build.sh= drops from 215 to ~140 lines                
+      2498 +- [ ] Librosa installable via UV if needed                   
+      2499 +                                                             
+      2500 +** R11: MLSys YAML Parser Simplification                     
+      2501 +:PROPERTIES:                                                 
+      2502 +:CUSTOM_ID: r11-yaml-parser                                  
+      2503 +:END:                                                        
+      2504 +                                                             
+      2505 +*** Problem                                                  
+      2506 +                                                             
+      2507 +=parse-env-yaml.py= is 475 lines, of which 300 are a hand-wri
+           +tten recursive                                               
+      2508 +descent YAML parser as a fallback for when PyYAML is unavaila
+           +ble.  The fallback                                           
+      2509 +has duplicated code blocks within itself (~100 lines of near-
+           +identical nested                                             
+      2510 +conditional logic).  The shell-variable bridge pattern (=eval
+           + "$(python3                                                  
+      2511 +parse-env-yaml.py ...)"=) is fragile and could inject arbitra
+           +ry shell commands                                            
+      2512 +on malformed input.                                          
+      2513 +                                                             
+      2514 +*** Design                                                   
+      2515 +                                                             
+      2516 +1. *Require PyYAML*: It is available in the Spack view (=py-p
+           +yyaml= is a                                                  
+      2517 +   transitive dependency of multiple Spack packages).  Delete
+           + the 300-line                                                
+      2518 +   fallback parser.                                          
+      2519 +2. *Replace eval bridge*: Output JSON instead of shell variab
+           +le assignments.                                              
+      2520 +   Build scripts parse JSON with =python3 -c "import json; ..
+           +."= or =jq=.                                                 
+      2521 +                                                             
+      2522 +#+begin_example                                              
+      2523 +# Before (fragile):                                          
+      2524 +eval "$(python3 parse-env-yaml.py --output shell envs/vllm.ya
+           +ml)"                                                         
+      2525 +                                                             
+      2526 +# After (safe):                                              
+      2527 +python3 parse-env-yaml.py --output json envs/vllm.yaml > /tmp
+           +/env-config.json                                             
+      2528 +PACKAGES=$(python3 -c "import json; print(' '.join(json.load(
+           +open('/tmp/env-config.json'))['packages']))")                
+      2529 +#+end_example                                                
+      2530 +                                                             
+      2531 +*** Acceptance Criteria                                      
+      2532 +                                                             
+      2533 +- [ ] =parse-env-yaml.py= drops from 475 to ~175 lines       
+      2534 +- [ ] No =eval= of Python output in any shell script         
+      2535 +- [ ] PyYAML is the only parser (fallback removed)           
+      2536 +- [ ] All 7 MLSys env YAMLs parse correctly                  
+      2537 +                                                             
+      2538 +** R12: CLI Subcommands (=sygaldry= as unified interface)    
+      2539 +:PROPERTIES:                                                 
+      2540 +:CUSTOM_ID: r12-cli                                          
+      2541 +:END:                                                        
+      2542 +                                                             
+      2543 +*** Problem                                                  
+      2544 +                                                             
+      2545 +=bin/sygaldry= is a 33-line passthrough to =launch_container.
+           +sh=.  Users must                                             
+      2546 +know about separate tools: =zephyr_job= for jobs, =snapshot_s
+           +pack.sh= for                                                 
+      2547 +snapshots, =validate_all.sh= for validation.  There is no uni
+           +fied entry point                                             
+      2548 +for the system.                                              
+      2549 +                                                             
+      2550 +*** Design                                                   
+      2551 +                                                             
+      2552 +Expand =bin/sygaldry= into a subcommand dispatcher:          
+      2553 +                                                             
+      2554 +#+begin_example                                              
+      2555 +sygaldry                          # Interactive shell (defaul
+           +t, existing behavior)                                        
+      2556 +sygaldry shell [--repo .]         # Explicit interactive shel
+           +l                                                            
+      2557 +sygaldry run -- <command>         # Run a command in containe
+           +r                                                            
+      2558 +sygaldry job run <name> -- <cmd>  # Start a background job   
+      2559 +sygaldry job status <name>        # Check job status         
+      2560 +sygaldry job tail <name>          # Stream job logs          
+      2561 +sygaldry config show              # Show effective configurat
+           +ion (R4)                                                     
+      2562 +sygaldry snapshot [target]        # Build snapshot image (R6)
+      2563 +sygaldry validate [--flags]       # Run validation (R3)      
+      2564 +sygaldry version                  # Show versions (image, spa
+           +ck, torch, jax)                                              
+      2565 +#+end_example                                                
+      2566 +                                                             
+      2567 +Implementation: thin shell dispatcher (~80 lines) that routes
+           + to existing                                                 
+      2568 +scripts.  No new functionality -- only a unified discovery su
+           +rface.                                                       
+      2569 +                                                             
+      2570 +*** Acceptance Criteria                                      
+      2571 +                                                             
+      2572 +- [ ] =sygaldry --help= shows all subcommands with one-line d
+           +escriptions                                                  
+      2573 +- [ ] Existing =sygaldry= usage (no subcommand) still works (
+           +backward compatible)                                         
+      2574 +- [ ] Tab completion for subcommands (bash/zsh)              
+      2575 +- [ ] =sygaldry version= works outside and inside containers 
+      2576 +                                                             
+      2577 +** Summary: Priority and Dependency Order                    
+      2578 +:PROPERTIES:                                                 
+      2579 +:CUSTOM_ID: roadmap-summary                                  
+      2580 +:END:                                                        
+      2581 +                                                             
+      2582 +#+begin_example                                              
+      2583 +Priority  ID   Title                              Dependencie
+           +s  Est. Lines Saved                                          
+      2584 +─────────────────────────────────────────────────────────────
+           +───────────────────                                          
+      2585 + P0       R1   Shared entrypoint library           None      
+           +    ~400                                                     
+      2586 + P0       R5   Actionable error messages            R1       
+           +     ~0 (quality)                                            
+      2587 + P0       R7   Dead code / wrapper cleanup          None     
+           +     ~500+                                                   
+      2588 + P1       R2   Launcher refactor                    None     
+           +     ~120                                                    
+      2589 + P1       R4   Configuration consolidation          None     
+           +     ~0 (clarity)                                            
+      2590 + P1       R10  Librosa policy removal               None     
+           +     ~75                                                     
+      2591 + P1       R11  YAML parser simplification           None     
+           +     ~300                                                    
+      2592 + P2       R3   Verification consolidation           R1       
+           +     ~1,200                                                  
+      2593 + P2       R6   Snapshot pipeline simplification     R7       
+           +     ~240                                                    
+      2594 + P2       R9   Documentation consolidation          All P0/P1
+           +     ~4,000+ (docs)                                          
+      2595 + P3       R8   Temporal-driven Spack builds         R7       
+           +     ~100                                                    
+      2596 + P3       R12  CLI subcommands                      R4, R6   
+           +     ~0 (UX)                                                 
+      2597 +─────────────────────────────────────────────────────────────
+           +───────────────────                                          
+      2598 +Total estimated reduction: ~2,800 lines of shell, ~4,000 line
+           +s of docs                                                    
+      2599 +#+end_example                                                
+      2600 +                                                             
+      2601 +*** Execution phases                                         
+      2602 +                                                             
+      2603 +*Phase A (Foundation):* R1 + R5 + R7 + R10.  These are indepe
+           +ndent, low-risk                                              
+      2604 +changes that improve every subsequent phase.  Can be done in 
+           +parallel.                                                    
+      2605 +                                                             
+      2606 +*Phase B (Consolidation):* R2 + R4 + R11 + R3.  These restruc
+           +ture the system                                              
+      2607 +internals.  R3 depends on R1 (shared test primitives need the
+           + shared spack_init                                           
+      2608 +library to exist).                                           
+      2609 +                                                             
+      2610 +*Phase C (Polish):* R6 + R9 + R8 + R12.  These improve the us
+           +er-facing                                                    
+      2611 +surface.  R9 (doc consolidation) should happen last because e
+           +arlier phases                                                
+      2612 +change what the docs describe.                               
+
+● Read 1 file (ctrl+o to expand)
+
+● The roadmap is complete. foundation.org grew from 1,870 → 2,612 lines (+742
+  lines of roadmap).
+
+  12 roadmap items across 3 execution phases:
+
+  ┌─────────────────┬────────────────────────────────────┬─────────────────────┐
+  │      Phase      │               Items                │        Focus        │
+  ├─────────────────┼────────────────────────────────────┼─────────────────────┤
+  │                 │ R1 shared entrypoint lib, R5 error │ Independent,        │
+  │ A (Foundation)  │  messages, R7 dead code cleanup,   │ low-risk, unblocks  │
+  │                 │ R10 librosa removal                │ everything          │
+  ├─────────────────┼────────────────────────────────────┼─────────────────────┤
+  │ B               │ R2 launcher refactor, R4 config    │ Restructure         │
+  │ (Consolidation) │ consolidation, R11 YAML parser, R3 │ internals           │
+  │                 │  verification consolidation        │                     │
+  ├─────────────────┼────────────────────────────────────┼─────────────────────┤
+  │                 │ R6 snapshot pipeline, R9 doc       │                     │
+  │ C (Polish)      │ consolidation, R8 Temporal builds, │ User-facing surface │
+  │                 │  R12 CLI subcommands               │                     │
+  └─────────────────┴────────────────────────────────────┴─────────────────────┘
+
+  Projected impact:
+  - ~2,800 lines of shell code eliminated
+  - ~4,000 lines of docs consolidated/archived
+  - Entrypoint duplication: 4 copies → 1 shared library
+  - Launcher params: 23 positional → 1 config struct
+  - Verification: 3,836 lines → ~2,600, single test framework
+  - Config lookup: 6-7 directories → 1
+  - Wrapper depth: 4 levels → 2
+  - Error messages with hints: 3/26 → 26/26
+
+  Each item has a problem statement grounded in the quantitative audit, a
+  concrete design, and acceptance criteria.
+
+✻ Baked for 3m 37s
+
+❯ materialize this plan with detailed tasks for execution 
+
+● Let me first re-read the roadmap and then explore the specific files that need
+   to change to create a concrete execution plan.
+
+● Read 1 file (ctrl+o to expand)
+
+● Good, I have the full roadmap. Now let me examine the specific files that
+  Phase A would touch to create precise execution tasks.
+
+● Read 4 files (ctrl+o to expand)
+
+● Now let me check the remaining entrypoints and the key files for R7/R10:
+
+● Read 4 files (ctrl+o to expand)
+  ⎿  You've hit your limit · resets 1pm (UTC)
+     /upgrade or /extra-usage to finish what you’re working on.

@@ -1,0 +1,50 @@
+steps:
+  - id: download-data
+    name: Download dataset
+    type: download
+    download:
+      url: https://example.com
+      output: ./data/data.txt
+    timeout_seconds: 120
+
+  - id: build-image
+    name: Build container image
+    type: docker_build
+    depends_on: [download-data]
+    docker_build:
+      image: my-org/my-image:dev
+      context: .
+      dockerfile: Dockerfile
+      build_args:
+        DATA_PATH: ./data/data.txt
+    timeout_seconds: 900
+    allow_failure: true
+
+  - id: build-packages
+    name: Build packages
+    type: package_build
+    depends_on: [download-data]
+    package_build:
+      command: bash
+      args: ["-lc", "echo 'build packages here'"]
+    timeout_seconds: 600
+
+  - id: push-image
+    name: Push container image
+    type: docker_push
+    depends_on: [build-image]
+    when:
+      step: build-image
+      status: success
+    docker_push:
+      image: my-org/my-image:dev
+
+  - id: notify-image-failure
+    name: Notify image build failed
+    type: command
+    depends_on: [build-image]
+    when:
+      step: build-image
+      status: failure
+    command: bash
+    args: ["-lc", "echo 'image build failed, notify here'"]

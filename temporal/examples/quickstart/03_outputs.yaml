@@ -1,0 +1,58 @@
+# 03_outputs.yaml -- Step Outputs and Parameters
+#
+# Demonstrates the key data-passing primitives:
+#   - params: plan-level variables, overridable at runtime with -set
+#   - ::set-output: emit key=value pairs from step stdout
+#   - ${{ steps.X.outputs.Y }}: consume outputs in downstream steps
+#   - ${{ params.Z }}: reference plan parameters in any string field
+#
+# Run:
+#   ./scripts/run.sh examples/quickstart/03_outputs.yaml
+#
+# Override params at runtime:
+#   go run ./cmd/orchestrate run \
+#     -plan examples/quickstart/03_outputs.yaml \
+#     -set greeting="Bonjour" \
+#     -set subject="le monde"
+#
+# This is the critical primitive for agent-driven pipelines:
+# one step produces results, the next step consumes them.
+
+params:
+  greeting: Hello
+  subject: world
+
+steps:
+  - id: produce
+    name: Produce a message
+    type: command
+    command: bash
+    args:
+      - -lc
+      - |
+        message="${{ params.greeting }}, ${{ params.subject }}!"
+        echo "Composed message: ${message}"
+        echo "::set-output name=message::${message}"
+        echo "::set-output name=timestamp::$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+  - id: consume
+    name: Consume the message
+    type: command
+    depends_on: [produce]
+    command: bash
+    args:
+      - -lc
+      - |
+        echo "Received message: ${{ steps.produce.outputs.message }}"
+        echo "Produced at: ${{ steps.produce.outputs.timestamp }}"
+
+  - id: summary
+    name: Summarize
+    type: command
+    depends_on: [consume]
+    command: bash
+    args:
+      - -lc
+      - |
+        echo "Pipeline used greeting='${{ params.greeting }}' and subject='${{ params.subject }}'"
+        echo "Final message was: ${{ steps.produce.outputs.message }}"

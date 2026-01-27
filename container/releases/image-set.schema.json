@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sygaldry.dev/schemas/zephyr-image-set-v1.json",
+  "title": "Sygaldry Zephyr Image Set v1",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "release_id",
+    "generated_at_utc",
+    "registry_base",
+    "images"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "sygaldry-zephyr-image-set/v1"
+    },
+    "release_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "generated_at_utc": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "registry_base": {
+      "type": "string",
+      "minLength": 1
+    },
+    "images": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "name",
+          "stable_tag",
+          "candidate_tag",
+          "source_ref",
+          "source_digest"
+        ],
+        "properties": {
+          "name": { "type": "string", "minLength": 1 },
+          "stable_tag": { "type": "string", "minLength": 1 },
+          "candidate_tag": { "type": "string", "minLength": 1 },
+          "source_ref": { "type": "string", "minLength": 1 },
+          "source_digest": {
+            "type": "string",
+            "pattern": "^sha256:[a-f0-9]{64}$"
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

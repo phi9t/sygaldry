@@ -1,0 +1,23 @@
+steps:
+  - id: root
+    type: command
+    command: bash
+    args: ["-lc", "echo root"]
+
+  - id: slow-branch
+    type: command
+    depends_on: [root]
+    command: bash
+    args: ["-lc", "sleep 6; echo slow"]
+
+  - id: fast-branch
+    type: command
+    depends_on: [root]
+    command: bash
+    args: ["-lc", "sleep 1; echo fast"]
+
+  - id: fast-downstream
+    type: command
+    depends_on: [fast-branch]
+    command: bash
+    args: ["-lc", "echo fast-downstream"]

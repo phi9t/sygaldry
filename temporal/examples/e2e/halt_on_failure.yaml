@@ -1,0 +1,11 @@
+steps:
+  - id: fail-hard
+    type: command
+    command: bash
+    args: ["-lc", "exit 7"]
+
+  - id: should-not-run
+    type: command
+    depends_on: [fail-hard]
+    command: bash
+    args: ["-lc", "echo should-not-run"]

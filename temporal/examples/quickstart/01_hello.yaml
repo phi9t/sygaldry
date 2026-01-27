@@ -1,0 +1,19 @@
+# 01_hello.yaml -- Minimal Temporal Pipeline
+#
+# The simplest possible plan: one step, one command.
+# Use this to verify your Temporal setup is working.
+#
+# Run:
+#   ./scripts/run.sh examples/quickstart/01_hello.yaml
+#
+# Or manually:
+#   go run ./cmd/orchestrate run -plan examples/quickstart/01_hello.yaml
+#
+# Expected output: "Hello from Temporal" in step stdout.
+
+steps:
+  - id: hello
+    name: Say hello
+    type: command
+    command: echo
+    args: ["Hello from Temporal"]

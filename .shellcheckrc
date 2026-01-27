@@ -1,0 +1,4 @@
+# Canonical shellcheck policy for this repo.
+severity=warning
+shell=bash
+exclude=SC2034

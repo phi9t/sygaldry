@@ -1,0 +1,7 @@
+templates:
+  helper-command:
+    type: command
+    command: bash
+    args:
+      - -lc
+      - 'echo "helper-ok"'

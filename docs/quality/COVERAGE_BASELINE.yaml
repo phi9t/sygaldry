@@ -1,0 +1,29 @@
+{
+  "defaults": {
+    "target": 80.0,
+    "min_improvement": 2.0,
+    "tolerance": 0.1
+  },
+  "modules": {
+    "go:temporal/cmd/orchestrate": {
+      "baseline": 32.4,
+      "sources": ["temporal/cmd/orchestrate/"]
+    },
+    "go:temporal/cmd/run": {
+      "baseline": 0.0,
+      "sources": ["temporal/cmd/run/"]
+    },
+    "go:temporal/cmd/worker": {
+      "baseline": 17.4,
+      "sources": ["temporal/cmd/worker/"]
+    },
+    "go:temporal/internal/activities": {
+      "baseline": 65.7,
+      "sources": ["temporal/internal/activities/"]
+    },
+    "go:temporal/internal/workflows": {
+      "baseline": 39.5,
+      "sources": ["temporal/internal/workflows/"]
+    }
+  }
+}

@@ -1,0 +1,32 @@
+params:
+  src_dir: ./docs
+  summary_file: /tmp/summary.txt
+
+steps:
+  - id: collect
+    type: command
+    command: bash
+    args:
+      - -lc
+      - |
+        files=$(find "${{ params.src_dir }}" -type f \( -name '*.md' -o -name '*.org' \) | wc -l)
+        echo "found $files docs"
+        echo "::set-output name=file_count::$files"
+
+  - id: summarize
+    type: command
+    depends_on: [collect]
+    command: bash
+    args:
+      - -lc
+      - |
+        echo "summarizing ${{ steps.collect.outputs.file_count }} files" > "${{ params.summary_file }}"
+        cat "${{ params.summary_file }}"
+
+  - id: timeline
+    type: command
+    depends_on: [summarize]
+    command: bash
+    args:
+      - -lc
+      - "echo generating timeline index"

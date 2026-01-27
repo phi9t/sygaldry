@@ -1,0 +1,4 @@
+interface:
+  display_name: "NVIDIA Container Troubleshooting"
+  short_description: "Fix GPU/NVML issues in containers"
+  default_prompt: "Use -container-troubleshooting to debug NVML initialization failures in Docker containers."

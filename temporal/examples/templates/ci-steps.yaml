@@ -1,0 +1,23 @@
+templates:
+  shell-check:
+    type: command
+    command: bash
+    args:
+      - -lc
+      - "${{ params.repo_check_command }}"
+
+  docker-build:
+    type: command
+    command: bash
+    args:
+      - -lc
+      - |
+        echo "::set-output name=image_tag::${{ params.image_repo }}:${{ params.version }}"
+        echo "building image ${{ params.image_repo }}:${{ params.version }}"
+
+  docker-push:
+    type: command
+    command: bash
+    args:
+      - -lc
+      - "echo pushing image ${{ steps.build.outputs.image_tag }}"

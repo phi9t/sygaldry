@@ -1,0 +1,22 @@
+imports:
+  - templates/ci-steps.yaml
+
+params:
+  version: dev
+  image_repo: my-org/my-app
+  repo_check_command: "echo lint && echo test"
+
+env:
+  CI: "true"
+
+steps:
+  - id: lint-and-test
+    template: shell-check
+
+  - id: build
+    template: docker-build
+    depends_on: [lint-and-test]
+
+  - id: push
+    template: docker-push
+    depends_on: [build]

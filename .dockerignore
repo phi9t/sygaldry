@@ -1,0 +1,7 @@
+outputs/
+.git/
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.swp

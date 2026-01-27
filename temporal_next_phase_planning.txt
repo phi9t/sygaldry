@@ -1,0 +1,209 @@
+
+ ▐▛███▜▌   Claude Code v2.1.39
+▝▜█████▛▘  Opus 4.6 · Claude Pro
+  ▘▘ ▝▝    /mnt/data_infra/workspace/sygaldry
+
+❯ review the temporal system design 
+
+● Let me read the key design documents and code for the Temporal system.
+
+● Read 3 files (ctrl+o to expand)
+
+● Explore(Explore temporal codebase deeply)
+  ⎿  Done (27 tool uses · 73.8k tokens · 1m 16s)
+
+● Temporal System Design Review
+
+  The system is a Go-based DAG pipeline orchestrator built on Temporal, spanning
+   ~3,500 lines across 17 files. Here's the assessment:
+
+  ---
+  Architecture Overview
+
+  YAML Plan → orchestrate CLI (validate) → Temporal Pipeline Workflow → Worker
+  (8 activities) → events.jsonl + logs
+
+                       ↓
+
+        logs_cli.py / web visualizer
+
+  Two workflow modes:
+  - Pipeline (internal/workflows/pipeline.go) — DAG execution with dependency
+  resolution, parallel batches, conditional skip logic, allow_failure
+  - Orchestration (internal/workflows/orchestration.go) — Legacy sequential
+  mode, kept for backward compat
+
+  8 activity types in internal/activities/steps.go (795 lines): command,
+  download, docker_build, docker_push, package_build, container_job,
+  hf_download_dataset, hf_download_model
+
+  ---
+  Strengths
+
+  1. Three-stream structured logging — Each activity writes stdout.log,
+  stderr.log, and structured.jsonl (JSONL with timestamps, stream markers,
+  partial-line detection). Excellent for both human tailing and agent parsing.
+  2. Solid pre-flight validation (cmd/orchestrate/main.go:97-174) — Validates
+  step IDs, types, required fields per type, dependency references, and when
+  clause references before submitting to Temporal.
+  3. 89 test cases across activities, pipeline logic, and plan validation. Good
+  coverage of happy paths and edge cases.
+  4. DAG scheduling — Batch-parallel execution of all ready steps per iteration,
+   with deadlock/stall detection. When clauses enable conditional branching (run
+   step only if another succeeded/failed).
+  5. Log truncation — Stdout/stderr truncated to TEMPORAL_LOG_MAX_BYTES (10KB
+  default) in Temporal payloads, full logs preserved on disk. Prevents payload
+  bloat on long-running jobs.
+
+  ---
+  Issues Found
+
+  High priority:
+
+  1. No cycle detection in DAG (pipeline.go:147) — The scheduler loop assumes an
+   acyclic graph. Circular depends_on references would cause a deadlock error at
+   runtime rather than a clear validation error upfront. The validatePlan
+  function checks that deps exist but never checks for cycles.
+  2. Environment variable append semantics (steps.go:660-665) — Env vars are
+  appended to os.Environ() rather than overriding. If the parent process has
+  FOO=bar, a step setting FOO=baz won't override it — the OS will see both, and
+  behavior depends on which one the runtime picks first (typically the first).
+  Should use explicit override logic.
+
+  Medium priority:
+
+  3. Retry policy is global (pipeline.go:138-145) — All activities get the same
+  retry: 3 attempts, 5s initial, 2x backoff, 1min max. There's no per-step
+  override. A quick command step and a 24-hour container_job get identical retry
+   behavior.
+  4. Silent YAML field ignoring — yaml.Unmarshal silently drops unknown fields.
+  A typo like comand instead of command would pass validation as an empty
+  command step. Could use KnownFields(true) on the decoder.
+  5. Log directory fallback to /tmp (steps.go:183-184) — If the primary log
+  directory fails to create, falls back to /tmp/temporal-logs. This is
+  non-persistent and would lose logs across reboots with no warning.
+  6. HF dataset default split (steps.go:571-576) — Default split is train[:100]
+  (only 100 samples). Easy to miss and would silently produce incomplete
+  downloads.
+
+  Low priority:
+
+  7. No worker tests — cmd/worker/main.go has zero test coverage.
+  8. Visualizer has no auth — Anyone on the network can view all runs/logs at
+  port 8787.
+  9. No log retention — Logs accumulate indefinitely with no cleanup mechanism.
+
+  ---
+  Design Observations
+
+  Pipeline scheduling algorithm (pipeline.go:147-239):
+  while pending steps remain:
+      collect runnable (deps complete + not skipped)
+      skip steps with unmet `when` conditions or failed deps
+      if no progress + no runnable → deadlock error
+      execute all runnable in parallel batch
+      wait for batch to complete
+      on failure: stop pipeline (unless allow_failure)
+
+  This is correct for a single-worker model but has a subtle behavior: all steps
+   in a batch start simultaneously but the workflow waits for all to finish
+  before scheduling the next batch. A slow step in batch N blocks everything in
+  batch N+1 even if some batch-N+1 steps only depended on fast batch-N steps.
+  True streaming DAG execution (schedule-on-complete rather than
+  batch-on-complete) would improve throughput.
+
+  Structured log format is well-designed:
+  {"timestamp":"...","workflowId":"...","stepId":"...","stream":"stdout","messag
+  e":"...","partial":false}
+  The partial flag handles progress bars and incomplete lines correctly.
+  Carriage returns are stripped for clean output.
+
+  ---
+  Summary
+
+  The Temporal system is well-architected for its scope — clean separation
+  between validation, scheduling, execution, and observability. The 8 activity
+  types cover the Sygaldry use cases well (container jobs, HF downloads, Docker
+  builds). Test coverage is strong at 89 cases.
+
+  The main gaps are cycle detection and env var override semantics (both fixable
+   in <50 lines each), and the longer-term improvements would be per-step retry
+  policies and streaming DAG scheduling instead of batch scheduling. Want me to
+  implement any of these fixes?
+
+✻ Baked for 2m 4s
+
+❯ what are some steps we can do to make it easy to use the temporal infra?  
+  for instance, I would like human engineers and coding agents to write     
+  temporal based workflow to execute simple and complex tasks (e.g. run     
+  code revision, testing, quality assurance loop, then package as image and 
+   publish) or to run data-processing, training, metrics inspection &       
+  evaluation, then model opitmization; or just process a bunck of           
+  markdown/orgmode files from different sources, summarize them, create a   
+  timeline and index, and visualize                                         
+
+● Let me explore the current state of the system to understand what's easy and
+  what's friction-heavy today.
+
+● 2 Explore agents finished (ctrl+o to expand)
+   ├─ Explore workflow authoring UX · 17 tool uses · 54.6k tokens
+   │  ⎿  Done
+   └─ Explore workflow patterns needed · 43 tool uses · 69.4k tokens
+      ⎿  Done
+
+● Great exploration results. Now let me design an approach based on these
+  findings.
+
+● Plan(Design temporal UX improvements)
+  ⎿  Done (36 tool uses · 85.9k tokens · 2m 44s)
+
+● Good findings across all three explorations. Before I write the final plan,
+  let me clarify the scope with you.
+
+● User answered Claude's questions:
+  ⎿  · What should we prioritize building first? → Quick wins first 
+     (Recommended), Step output passing, Full roadmap plan only, Templates 
+     + parameterization
+     · How will coding agents primarily interact with the system? → CLI (go
+      run / shell scripts)
+
+● Clear - you want the full roadmap with quick wins as the starting point, and
+  CLI as the agent interface. Let me write the plan.
+  ⎿  Interrupted · What should Claude do instead?
+
+❯ /status 
+  ⎿  Status dialog dismissed
+
+❯ just save the detailed plan to a markdown file for later references 
+
+● Write(temporal/TEMPORAL_UX_ROADMAP.md)
+  ⎿  Wrote 475 lines to temporal/TEMPORAL_UX_ROADMAP.md
+      1 # Temporal Orchestration UX Roadmap
+      2 
+      3 **Date:** 2026-02-11
+      4 **Status:** Planned
+      5 **Goal:** Make it easy for human engineers and coding agents to a
+        uthor, run, and monitor Temporal-based workflows.
+      6 
+      7 ---
+      8 
+      9 ## Current State Summary
+     … +465 lines (ctrl+o to expand)
+
+● Saved to temporal/TEMPORAL_UX_ROADMAP.md. It covers 6 phases:
+
+  1. Quick wins — run.sh one-command launcher, --latest logs, --async mode, JSON
+   output, validate/status subcommands
+  2. Step output passing — ::set-output convention, ${{ steps.X.outputs.Y }}
+  template expansion, plan-level params
+  3. Templates — Inline templates, external imports, cookbook examples for
+  CI/CD, ML, and doc processing
+  4. Monitoring — Human-friendly colored logs, terminal DAG, web DAG
+  visualization
+  5. Schema — JSON Schema for IDE autocomplete, cycle detection in validation
+  6. Engine — Per-step retries, env var fix, streaming DAG scheduling
+
+  Each item has the files to modify, complexity estimate, and rationale. The
+  dependency graph shows what can be parallelized.
+
+✻ Cogitated for 1m 19s

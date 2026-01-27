@@ -1,0 +1,3 @@
+steps:
+  - id: t1
+    template: does-not-exist

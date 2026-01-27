@@ -1,0 +1,4 @@
+interface:
+  display_name: "Local Skills Sync"
+  short_description: "Sync LOCAL_SKILLS.md with local skill folders"
+  default_prompt: "Use local-skills-sync to regenerate skills/LOCAL_SKILLS.md from skills/*/SKILL.md and check for drift."

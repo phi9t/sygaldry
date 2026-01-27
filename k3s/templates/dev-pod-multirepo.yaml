@@ -1,0 +1,190 @@
+# Dev pod template for multi-repo mode (external repo mounted into container).
+# Variables (envsubst): PROJECT_ID, HOST_UID, HOST_GID, CONTAINER_IMAGE,
+#                       GPU_COUNT, REPO_HOST_PATH, REPO_NAME
+apiVersion: v1
+kind: Pod
+metadata:
+  name: sygaldry-dev-${PROJECT_ID}
+  namespace: sygaldry
+  labels:
+    app: sygaldry
+    sygaldry/component: dev-pod
+    sygaldry/project-id: "${PROJECT_ID}"
+    sygaldry/mode: multirepo
+spec:
+  runtimeClassName: nvidia
+  restartPolicy: Never
+  hostNetwork: true
+  hostIPC: true
+  terminationGracePeriodSeconds: 5
+
+  securityContext:
+    runAsUser: ${HOST_UID}
+    runAsGroup: ${HOST_GID}
+    fsGroup: ${HOST_GID}
+
+  containers:
+    - name: dev
+      image: "${CONTAINER_IMAGE}"
+      imagePullPolicy: Never
+      resources:
+        limits:
+          nvidia.com/gpu: "${GPU_COUNT}"
+      envFrom:
+        - configMapRef:
+            name: sygaldry-env
+      env:
+        - name: SYGALDRY_PROJECT_ID
+          value: "${PROJECT_ID}"
+        - name: SYGALDRY_ROOT
+          value: "/workspace/${REPO_NAME}"
+      command: ["/bin/bash", "-c"]
+      args:
+        - |
+          # Source Spack init if available
+          if [[ -f /opt/lib/spack_init.sh ]]; then
+            source /opt/lib/spack_init.sh
+            sygaldry_full_init 2>/dev/null || true
+          elif [[ -f /opt/container_entrypoints/spack_init.sh ]]; then
+            source /opt/container_entrypoints/spack_init.sh
+            sygaldry_full_init 2>/dev/null || true
+          fi
+          # Create tmux session for persistent interactive use
+          tmux new-session -d -s main 2>/dev/null || true
+          # Keep pod alive
+          exec sleep infinity
+      workingDir: /workspace/${REPO_NAME}
+
+      volumeMounts:
+        # Per-project mounts
+        - name: home
+          mountPath: /home/kvothe
+        - name: config
+          mountPath: /home/kvothe/.config
+        - name: local-share
+          mountPath: /home/kvothe/.local/share
+        - name: outputs
+          mountPath: /workspace/outputs
+        - name: workspace
+          mountPath: /workspace
+
+        # External repo
+        - name: external-repo
+          mountPath: /workspace/${REPO_NAME}
+
+        # Shared cache mounts
+        - name: hf-cache
+          mountPath: /opt/hf_cache
+        - name: uv-cache
+          mountPath: /opt/uv_cache
+        - name: bazel-cache
+          mountPath: /opt/bazel_cache
+        - name: torch-cache
+          mountPath: /opt/torch_cache
+        - name: triton-cache
+          mountPath: /opt/triton_cache
+        - name: nv-compute-cache
+          mountPath: /opt/nv_compute_cache
+        - name: jax-cache
+          mountPath: /opt/jax_cache
+
+        # Spack store (read-only)
+        - name: spack-store
+          mountPath: /opt/spack_store
+          readOnly: true
+
+        # Sygaldry repo (read-only)
+        - name: sygaldry-repo
+          mountPath: /opt/sygaldry
+          readOnly: true
+        - name: sygaldry-repo
+          mountPath: /opt/container_entrypoints
+          subPath: container/entrypoints
+          readOnly: true
+        - name: sygaldry-repo
+          mountPath: /opt/spack_env/entrypoints
+          subPath: container/entrypoints
+          readOnly: true
+        - name: sygaldry-repo
+          mountPath: /opt/spack_env/default
+          subPath: pkg/zephyr
+          readOnly: true
+        - name: sygaldry-repo
+          mountPath: /opt/lib
+          subPath: container/lib
+          readOnly: true
+        - name: sygaldry-repo
+          mountPath: /opt/spack_env/lib
+          subPath: container/lib
+          readOnly: true
+
+  volumes:
+    # Per-project
+    - name: home
+      hostPath:
+        path: /mnt/data_infra/zephyr_container_infra/projects/${PROJECT_ID}/home
+        type: DirectoryOrCreate
+    - name: config
+      hostPath:
+        path: /mnt/data_infra/zephyr_container_infra/projects/${PROJECT_ID}/config
+        type: DirectoryOrCreate
+    - name: local-share
+      hostPath:
+        path: /mnt/data_infra/zephyr_container_infra/projects/${PROJECT_ID}/local_share
+        type: DirectoryOrCreate
+    - name: outputs
+      hostPath:
+        path: /mnt/data_infra/zephyr_container_infra/projects/${PROJECT_ID}/outputs
+        type: DirectoryOrCreate
+    - name: workspace
+      hostPath:
+        path: /mnt/data_infra/zephyr_container_infra/projects/${PROJECT_ID}/workspace
+        type: DirectoryOrCreate
+
+    # External repo
+    - name: external-repo
+      hostPath:
+        path: ${REPO_HOST_PATH}
+        type: Directory
+
+    # Shared caches
+    - name: hf-cache
+      hostPath:
+        path: /mnt/data_infra/zephyr_container_infra/shared/hf_cache
+        type: DirectoryOrCreate
+    - name: uv-cache
+      hostPath:
+        path: /mnt/data_infra/zephyr_container_infra/shared/uv_cache
+        type: DirectoryOrCreate
+    - name: bazel-cache
+      hostPath:
+        path: /mnt/data_infra/zephyr_container_infra/shared/bazel_cache
+        type: DirectoryOrCreate
+    - name: torch-cache
+      hostPath:
+        path: /mnt/data_infra/zephyr_container_infra/shared/torch_cache
+        type: DirectoryOrCreate
+    - name: triton-cache
+      hostPath:
+        path: /mnt/data_infra/zephyr_container_infra/shared/triton_cache
+        type: DirectoryOrCreate
+    - name: nv-compute-cache
+      hostPath:
+        path: /mnt/data_infra/zephyr_container_infra/shared/nv_compute_cache
+        type: DirectoryOrCreate
+    - name: jax-cache
+      hostPath:
+        path: /mnt/data_infra/zephyr_container_infra/shared/jax_cache
+        type: DirectoryOrCreate
+
+    # Spack store
+    - name: spack-store
+      hostPath:
+        path: /mnt/data_infra/zephyr_container_infra/sygaldry/spack_store
+        type: Directory
+
+    # Sygaldry repo
+    - name: sygaldry-repo
+      hostPath:
+        path: /mnt/data_infra/workspace/sygaldry
+        type: Directory

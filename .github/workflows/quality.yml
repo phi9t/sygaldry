@@ -1,0 +1,55 @@
+name: quality-gates
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: temporal/go.mod
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.92.0
+          components: clippy,rustfmt
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v3
+
+      - name: Install quality tool dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y shellcheck shfmt clang-format clang-tidy
+          go install honnef.co/go/tools/cmd/staticcheck@latest
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+          uv venv .venv-lint
+          uv pip install --python .venv-lint/bin/python ruff black pytest pytest-cov mypy
+
+      - name: Set quality changed-base
+        run: |
+          if [[ -n "${GITHUB_BASE_REF:-}" ]]; then
+            echo "QUALITY_CHANGED_BASE=origin/${GITHUB_BASE_REF}" >> "$GITHUB_ENV"
+          elif git rev-parse HEAD~1 >/dev/null 2>&1; then
+            echo "QUALITY_CHANGED_BASE=HEAD~1" >> "$GITHUB_ENV"
+          fi
+
+      - name: Run strict engineering quality gates
+        run: ./validate_all.sh --quality-all --quality-strict

@@ -1,0 +1,102 @@
+# 04_branching.yaml -- Conditional Branching and Failure Handling
+#
+# Diamond-shaped DAG with conditional branches:
+#
+#        setup
+#          |
+#     risky-step (allow_failure: true, retries 2x)
+#        / \
+#       /   \
+#   on-success  on-failure
+#       \   /
+#        \ /
+#      cleanup
+#
+# Concepts introduced:
+#   - allow_failure: lets downstream steps run even if this step fails
+#   - retry: per-step retry policy (max_attempts, backoff)
+#   - when: conditional execution based on upstream step status
+#   - Diamond DAG: multiple paths converge on a single downstream step
+#
+# Run:
+#   ./scripts/run.sh examples/quickstart/04_branching.yaml
+#
+# The risky-step intentionally fails (exit 1). You should see:
+#   - risky-step: FAILED (after 2 retry attempts)
+#   - on-failure: runs (when condition matches)
+#   - on-success: skipped (when condition does not match)
+#   - cleanup: runs (depends on both branches)
+#
+# This pattern is essential for failure triage pipelines:
+# an agent can route to different remediation paths based on
+# whether an experiment succeeded or failed.
+
+steps:
+  - id: setup
+    name: Initialize experiment
+    type: command
+    command: bash
+    args:
+      - -lc
+      - |
+        echo "Setting up experiment environment..."
+        echo "::set-output name=experiment_id::exp-$(date +%s)"
+
+  - id: risky-step
+    name: Run risky computation
+    type: command
+    depends_on: [setup]
+    allow_failure: true
+    retry:
+      max_attempts: 2
+      initial_interval_seconds: 1
+      backoff_coefficient: 1
+      maximum_interval_seconds: 1
+    command: bash
+    args:
+      - -lc
+      - |
+        echo "Attempting computation for ${{ steps.setup.outputs.experiment_id }}..."
+        echo "Simulating failure"
+        exit 1
+
+  - id: on-success
+    name: Handle success
+    type: command
+    depends_on: [risky-step]
+    when:
+      step: risky-step
+      status: success
+    command: bash
+    args:
+      - -lc
+      - |
+        echo "Computation succeeded for ${{ steps.setup.outputs.experiment_id }}"
+        echo "::set-output name=outcome::success"
+
+  - id: on-failure
+    name: Handle failure
+    type: command
+    depends_on: [risky-step]
+    when:
+      step: risky-step
+      status: failure
+    command: bash
+    args:
+      - -lc
+      - |
+        echo "Computation failed for ${{ steps.setup.outputs.experiment_id }}"
+        echo "Triaging failure mode..."
+        echo "::set-output name=outcome::failure"
+        echo "::set-output name=triage::retry-with-lower-batch-size"
+
+  - id: cleanup
+    name: Cleanup resources
+    type: command
+    depends_on: [on-success, on-failure]
+    command: bash
+    args:
+      - -lc
+      - |
+        echo "Cleaning up experiment ${{ steps.setup.outputs.experiment_id }}"
+        echo "Pipeline complete"

@@ -1,0 +1,29 @@
+# reusable.yaml -- Shared Template Library
+#
+# Templates define reusable step patterns. Steps in a plan can reference
+# a template by name and override specific fields.
+#
+# This file is imported by 05_templates.yaml.
+
+templates:
+  run-script:
+    type: command
+    command: bash
+    args:
+      - -lc
+      - |
+        echo "Running script: ${{ params.script_name }}"
+        echo "Environment: ${{ params.environment }}"
+        echo "::set-output name=status::completed"
+    timeout_seconds: 60
+
+  validate-result:
+    type: command
+    command: bash
+    args:
+      - -lc
+      - |
+        echo "Validating results for: ${{ params.script_name }}"
+        echo "Validation passed"
+        echo "::set-output name=valid::true"
+    timeout_seconds: 30

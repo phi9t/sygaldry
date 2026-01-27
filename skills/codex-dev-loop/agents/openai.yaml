@@ -1,0 +1,4 @@
+interface:
+  display_name: "Codex Dev Loop"
+  short_description: "Run implement-review-test agent loops"
+  default_prompt: "Use codex-dev-loop to orchestrate implementation, critique iterations, and test-fix cycles with codex_run.sh."

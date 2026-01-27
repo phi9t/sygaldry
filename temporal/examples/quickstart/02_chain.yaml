@@ -1,0 +1,53 @@
+# 02_chain.yaml -- Sequential Dependencies
+#
+# Three steps in a chain: fetch -> process -> report.
+# Each step waits for the previous one via depends_on.
+# Stdout and stderr are captured separately per step.
+#
+# Run:
+#   ./scripts/run.sh examples/quickstart/02_chain.yaml
+#
+# After running, inspect per-step logs:
+#   ./scripts/logs_cli.py show-steps --latest
+#   ./scripts/logs_cli.py logs --latest
+#
+# Concepts introduced:
+#   - depends_on: declares that a step must wait for another
+#   - Multi-step pipelines with ordered execution
+#   - Per-step stdout/stderr capture
+
+steps:
+  - id: fetch
+    name: Fetch data
+    type: command
+    command: bash
+    args:
+      - -lc
+      - |
+        echo "Fetching dataset from remote source..."
+        sleep 1
+        echo "Downloaded 1000 records"
+
+  - id: process
+    name: Process data
+    type: command
+    depends_on: [fetch]
+    command: bash
+    args:
+      - -lc
+      - |
+        echo "Processing records..."
+        echo "Warning: 3 records had missing fields" >&2
+        sleep 1
+        echo "Processed 997 valid records"
+
+  - id: report
+    name: Generate report
+    type: command
+    depends_on: [process]
+    command: bash
+    args:
+      - -lc
+      - |
+        echo "Generating summary report..."
+        echo "Pipeline complete: 997/1000 records processed successfully"

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Codex Headless"
+  short_description: "Run Codex CLI in headless mode"
+  default_prompt: "Use codex-headless to execute codex commands non-interactively with explicit model, sandbox, and output controls."

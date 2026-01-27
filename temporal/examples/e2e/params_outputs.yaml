@@ -1,0 +1,18 @@
+params:
+  version: dev
+
+steps:
+  - id: produce
+    type: command
+    command: bash
+    args:
+      - -lc
+      - 'echo "::set-output name=image_tag::my-org/my-image:${{ params.version }}"'
+
+  - id: consume
+    type: command
+    depends_on: [produce]
+    command: bash
+    args:
+      - -lc
+      - 'echo "resolved=${{ steps.produce.outputs.image_tag }}"'

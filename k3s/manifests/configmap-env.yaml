@@ -1,0 +1,37 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: sygaldry-env
+  namespace: sygaldry
+  labels:
+    app: sygaldry
+data:
+  # Container identity
+  SYGALDRY_IN_CONTAINER: "1"
+  USER: "kvothe"
+  HOME: "/home/kvothe"
+  TERM: "xterm-256color"
+
+  # XDG directories
+  XDG_CONFIG_HOME: "/home/kvothe/.config"
+  XDG_DATA_HOME: "/home/kvothe/.local/share"
+  XDG_CACHE_HOME: "/opt/uv_cache"
+
+  # Cache directories
+  HF_HOME: "/opt/hf_cache"
+  UV_CACHE_DIR: "/opt/uv_cache"
+  TORCH_HOME: "/opt/torch_cache"
+  TRITON_CACHE_DIR: "/opt/triton_cache"
+  CUDA_CACHE_PATH: "/opt/nv_compute_cache"
+  JAX_COMPILATION_CACHE_DIR: "/opt/jax_cache"
+
+  # Locale (matches Dockerfile ENV)
+  LANG: "C.UTF-8"
+  LC_ALL: "C.UTF-8"
+
+  # Sygaldry defaults
+  ZEPHYR_LEASE_MODE: "off"
+  ZEPHYR_CACHE_PROFILE: "shared"
+
+  # Spack
+  SYGALDRY_SPACK_ENV: "/opt/spack_env/default"

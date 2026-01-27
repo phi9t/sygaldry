@@ -1,0 +1,28 @@
+steps:
+  - id: flaky
+    type: command
+    allow_failure: true
+    retry:
+      max_attempts: 3
+      initial_interval_seconds: 1
+      backoff_coefficient: 1
+      maximum_interval_seconds: 1
+    command: no_such_binary_temporal_e2e
+
+  - id: failure-branch
+    type: command
+    depends_on: [flaky]
+    when:
+      step: flaky
+      status: failure
+    command: bash
+    args: ["-lc", "echo failure-branch-ran"]
+
+  - id: success-branch
+    type: command
+    depends_on: [flaky]
+    when:
+      step: flaky
+      status: success
+    command: bash
+    args: ["-lc", "echo success-branch-ran"]

@@ -1,0 +1,303 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sygaldry.local/temporal/pipeline.schema.json",
+  "title": "Temporal Pipeline Plan",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "log_dir": {
+      "type": "string"
+    },
+    "params": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "env": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "imports": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "templates": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/templateStep"
+      }
+    },
+    "steps": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/step"
+      }
+    }
+  },
+  "required": [
+    "steps"
+  ],
+  "$defs": {
+    "when": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "step": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "success",
+            "failure"
+          ]
+        }
+      },
+      "required": [
+        "step",
+        "status"
+      ]
+    },
+    "retry": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "max_attempts": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "initial_interval_seconds": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "backoff_coefficient": {
+          "type": "number",
+          "minimum": 1
+        },
+        "maximum_interval_seconds": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "download": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "url": { "type": "string" },
+        "output": { "type": "string" },
+        "sha256": { "type": "string" }
+      },
+      "required": ["url", "output"]
+    },
+    "dockerBuild": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "image": { "type": "string" },
+        "context": { "type": "string" },
+        "dockerfile": { "type": "string" },
+        "build_args": {
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        },
+        "labels": {
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        },
+        "platform": { "type": "string" },
+        "target": { "type": "string" }
+      },
+      "required": ["image"]
+    },
+    "dockerPush": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "image": { "type": "string" }
+      },
+      "required": ["image"]
+    },
+    "packageBuild": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "command": { "type": "string" },
+        "args": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "env": {
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        },
+        "working_dir": { "type": "string" }
+      },
+      "required": ["command"]
+    },
+    "containerJob": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "project_id": { "type": "string" },
+        "entrypoint": { "type": "string" },
+        "command": { "type": "string" },
+        "env": {
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        },
+        "gpu": { "type": "boolean" },
+        "launcher_path": { "type": "string" }
+      },
+      "required": ["command"]
+    },
+    "hfDownloadDataset": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "dataset_id": { "type": "string" },
+        "config": { "type": "string" },
+        "split": { "type": "string" },
+        "cache_dir": { "type": "string" }
+      },
+      "required": ["dataset_id"]
+    },
+    "hfDownloadModel": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "model_id": { "type": "string" },
+        "cache_dir": { "type": "string" }
+      },
+      "required": ["model_id"]
+    },
+    "stepCommon": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "type": {
+          "type": "string",
+          "enum": [
+            "command",
+            "download",
+            "docker_build",
+            "docker_push",
+            "package_build",
+            "container_job",
+            "hf_download_dataset",
+            "hf_download_model"
+          ]
+        },
+        "template": { "type": "string" },
+        "depends_on": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "when": {
+          "$ref": "#/$defs/when"
+        },
+        "command": { "type": "string" },
+        "args": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "env": {
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        },
+        "working_dir": { "type": "string" },
+        "timeout_seconds": { "type": "integer", "minimum": 1 },
+        "allow_failure": { "type": "boolean" },
+        "retry": {
+          "$ref": "#/$defs/retry"
+        },
+        "download": {
+          "$ref": "#/$defs/download"
+        },
+        "docker_build": {
+          "$ref": "#/$defs/dockerBuild"
+        },
+        "docker_push": {
+          "$ref": "#/$defs/dockerPush"
+        },
+        "package_build": {
+          "$ref": "#/$defs/packageBuild"
+        },
+        "container_job": {
+          "$ref": "#/$defs/containerJob"
+        },
+        "hf_download_dataset": {
+          "$ref": "#/$defs/hfDownloadDataset"
+        },
+        "hf_download_model": {
+          "$ref": "#/$defs/hfDownloadModel"
+        }
+      },
+      "required": ["id"]
+    },
+    "templateStep": {
+      "allOf": [
+        { "$ref": "#/$defs/stepCommon" }
+      ]
+    },
+    "step": {
+      "allOf": [
+        { "$ref": "#/$defs/stepCommon" },
+        {
+          "if": {
+            "properties": {
+              "template": { "type": "string" }
+            },
+            "required": ["template"]
+          },
+          "then": {},
+          "else": {
+            "required": ["type"],
+            "allOf": [
+              {
+                "if": { "properties": { "type": { "const": "command" } }, "required": ["type"] },
+                "then": { "required": ["command"] }
+              },
+              {
+                "if": { "properties": { "type": { "const": "download" } }, "required": ["type"] },
+                "then": { "required": ["download"] }
+              },
+              {
+                "if": { "properties": { "type": { "const": "docker_build" } }, "required": ["type"] },
+                "then": { "required": ["docker_build"] }
+              },
+              {
+                "if": { "properties": { "type": { "const": "docker_push" } }, "required": ["type"] },
+                "then": { "required": ["docker_push"] }
+              },
+              {
+                "if": { "properties": { "type": { "const": "package_build" } }, "required": ["type"] },
+                "then": { "required": ["package_build"] }
+              },
+              {
+                "if": { "properties": { "type": { "const": "container_job" } }, "required": ["type"] },
+                "then": { "required": ["container_job"] }
+              },
+              {
+                "if": { "properties": { "type": { "const": "hf_download_dataset" } }, "required": ["type"] },
+                "then": { "required": ["hf_download_dataset"] }
+              },
+              {
+                "if": { "properties": { "type": { "const": "hf_download_model" } }, "required": ["type"] },
+                "then": { "required": ["hf_download_model"] }
+              }
+            ]
+          }
+        }
+      ]
+    }
+  }
+}

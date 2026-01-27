@@ -1,0 +1,17 @@
+[Unit]
+Description=Zephyr Spack autobuild autoretry
+After=network.target docker.service
+Wants=docker.service
+
+[Service]
+Type=simple
+WorkingDirectory=/mnt/data_infra/workspace/sygaldry
+Environment=SYGALDRY_PROJECT_ID=zephyr-validate
+ExecStart=/bin/bash -lc "./tools/zephyr_autoretry_tmux.sh"
+Restart=on-failure
+RestartSec=300
+StandardOutput=append:/mnt/data_infra/zephyr_container_infra/zephyr-validate/logs/autoretry-systemd.log
+StandardError=append:/mnt/data_infra/zephyr_container_infra/zephyr-validate/logs/autoretry-systemd.log
+
+[Install]
+WantedBy=multi-user.target

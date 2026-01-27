@@ -1,0 +1,263 @@
+#!/bin/bash
+#
+# kjob — Run and manage Sygaldry K3s batch jobs.
+#
+# USAGE
+# -----
+#   kjob run    --project-id <id> --job <name> -- <command>
+#   kjob status --project-id <id> [--job <name>]
+#   kjob tail   --project-id <id> --job <name>
+#   kjob stop   --project-id <id> --job <name>
+#   kjob list   --project-id <id>
+
+set -eu -o pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+readonly SCRIPT_DIR
+readonly K3S_ROOT="${SCRIPT_DIR}/.."
+
+# shellcheck source=../lib/k3s-common.sh
+source "${K3S_ROOT}/lib/k3s-common.sh"
+
+# ---------------------------------------------------------------------------
+# Defaults
+# ---------------------------------------------------------------------------
+PROJECT_ID="${SYGALDRY_PROJECT_ID:-}"
+JOB_NAME=""
+GPU_COUNT="${SYGALDRY_GPU_COUNT:-1}"
+CONTAINER_IMAGE="${SYGALDRY_IMAGE:-${CONTAINER_IMAGE_DEFAULT}}"
+SUBCOMMAND=""
+JOB_COMMAND=""
+
+# ---------------------------------------------------------------------------
+# Help
+# ---------------------------------------------------------------------------
+show_help() {
+    cat <<'EOF'
+Usage: kjob <subcommand> [options]
+
+Subcommands:
+  run               Submit a batch job
+  status            Show job status
+  tail              Stream job logs
+  stop              Delete a running job
+  list              List jobs for a project
+
+Options:
+  --project-id <id>   Project ID (required)
+  --job <name>        Job name (required for run/tail/stop)
+  --gpu <n>           Number of GPUs (default: 1)
+  --image <image>     Container image
+  --namespace <ns>    Kubernetes namespace (default: sygaldry)
+  --help              Show this help
+
+Examples:
+  kjob run --project-id test --job gpu-check -- "nvidia-smi"
+  kjob tail --project-id test --job gpu-check
+  kjob status --project-id test
+  kjob list --project-id test
+  kjob stop --project-id test --job gpu-check
+EOF
+}
+
+# ---------------------------------------------------------------------------
+# Argument parsing
+# ---------------------------------------------------------------------------
+parse_args() {
+    if [[ $# -eq 0 ]]; then
+        show_help
+        exit 2
+    fi
+
+    SUBCOMMAND="$1"
+    shift
+
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --project-id)
+                PROJECT_ID="$2"
+                shift 2
+                ;;
+            --job)
+                JOB_NAME="$2"
+                shift 2
+                ;;
+            --gpu)
+                GPU_COUNT="$2"
+                shift 2
+                ;;
+            --image)
+                CONTAINER_IMAGE="$2"
+                shift 2
+                ;;
+            --namespace)
+                K3S_NAMESPACE="$2"
+                shift 2
+                ;;
+            --help|-h)
+                show_help
+                exit 0
+                ;;
+            --)
+                shift
+                JOB_COMMAND="$*"
+                break
+                ;;
+            *)
+                echo "Unknown option: $1" >&2
+                show_help
+                exit 2
+                ;;
+        esac
+    done
+}
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+job_resource_name() {
+    echo "sygaldry-job-${PROJECT_ID}-${JOB_NAME}"
+}
+
+require_project_id() {
+    if [[ -z "${PROJECT_ID}" ]]; then
+        die "--project-id is required"
+    fi
+}
+
+require_job_name() {
+    if [[ -z "${JOB_NAME}" ]]; then
+        die "--job is required"
+    fi
+}
+
+# ---------------------------------------------------------------------------
+# Subcommand: run
+# ---------------------------------------------------------------------------
+cmd_run() {
+    require_project_id
+    require_job_name
+
+    if [[ -z "${JOB_COMMAND}" ]]; then
+        die "No command specified. Usage: kjob run --project-id <id> --job <name> -- <command>"
+    fi
+
+    check_k3s
+    check_namespace
+    check_nvidia_runtime
+    ensure_host_dirs "${PROJECT_ID}"
+
+    local host_uid
+    host_uid="$(id -u)"
+    local host_gid
+    host_gid="$(id -g)"
+
+    export PROJECT_ID JOB_NAME
+    export HOST_UID="${host_uid}" HOST_GID="${host_gid}"
+    export CONTAINER_IMAGE GPU_COUNT JOB_COMMAND
+
+    local resource_name
+    resource_name="$(job_resource_name)"
+
+    # Delete existing job if present
+    if kubectl get job -n "${K3S_NAMESPACE}" "${resource_name}" &>/dev/null 2>&1; then
+        log "Deleting existing job ${resource_name}..."
+        kubectl delete job -n "${K3S_NAMESPACE}" "${resource_name}" --grace-period=5 2>/dev/null || true
+        kubectl wait --for=delete job/"${resource_name}" -n "${K3S_NAMESPACE}" --timeout=30s 2>/dev/null || true
+    fi
+
+    log "Submitting job ${resource_name} (command: ${JOB_COMMAND})"
+    envsubst < "${K3S_ROOT}/templates/job.yaml" | kubectl apply -f -
+    log "Job ${resource_name} submitted."
+}
+
+# ---------------------------------------------------------------------------
+# Subcommand: status
+# ---------------------------------------------------------------------------
+cmd_status() {
+    require_project_id
+    check_k3s
+
+    if [[ -n "${JOB_NAME}" ]]; then
+        local resource_name
+        resource_name="$(job_resource_name)"
+        kubectl get job -n "${K3S_NAMESPACE}" "${resource_name}" -o wide 2>/dev/null \
+            || echo "Job ${resource_name}: not found"
+    else
+        kubectl get jobs -n "${K3S_NAMESPACE}" \
+            -l "sygaldry/project-id=${PROJECT_ID}" -o wide 2>/dev/null \
+            || echo "No jobs found for project ${PROJECT_ID}"
+    fi
+}
+
+# ---------------------------------------------------------------------------
+# Subcommand: tail
+# ---------------------------------------------------------------------------
+cmd_tail() {
+    require_project_id
+    require_job_name
+    check_k3s
+
+    local resource_name
+    resource_name="$(job_resource_name)"
+
+    # Find the pod created by this job
+    local pod_name
+    pod_name=$(kubectl get pods -n "${K3S_NAMESPACE}" \
+        -l "job-name=${resource_name}" \
+        -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "")
+
+    if [[ -z "${pod_name}" ]]; then
+        die "No pod found for job ${resource_name}"
+    fi
+
+    kubectl logs -n "${K3S_NAMESPACE}" "${pod_name}" -f
+}
+
+# ---------------------------------------------------------------------------
+# Subcommand: stop
+# ---------------------------------------------------------------------------
+cmd_stop() {
+    require_project_id
+    require_job_name
+    check_k3s
+
+    local resource_name
+    resource_name="$(job_resource_name)"
+
+    if ! kubectl get job -n "${K3S_NAMESPACE}" "${resource_name}" &>/dev/null 2>&1; then
+        log "Job ${resource_name} not found."
+        return 0
+    fi
+
+    log "Deleting job ${resource_name}..."
+    kubectl delete job -n "${K3S_NAMESPACE}" "${resource_name}" --grace-period=5
+    log "Job ${resource_name} deleted."
+}
+
+# ---------------------------------------------------------------------------
+# Subcommand: list
+# ---------------------------------------------------------------------------
+cmd_list() {
+    require_project_id
+    check_k3s
+
+    kubectl get jobs -n "${K3S_NAMESPACE}" \
+        -l "sygaldry/project-id=${PROJECT_ID}" -o wide 2>/dev/null \
+        || echo "No jobs found for project ${PROJECT_ID}"
+}
+
+# ---------------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------------
+parse_args "$@"
+
+case "${SUBCOMMAND}" in
+    run)    cmd_run ;;
+    status) cmd_status ;;
+    tail)   cmd_tail ;;
+    stop)   cmd_stop ;;
+    list)   cmd_list ;;
+    --help|-h) show_help; exit 0 ;;
+    *)      die "Unknown subcommand: ${SUBCOMMAND}" ;;
+esac

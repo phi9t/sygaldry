@@ -1,0 +1,98 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/zephyr/provenance-mlsys-v1.schema.json",
+  "title": "Zephyr MLSys Provenance v1",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "skill_name",
+    "skill_version",
+    "source_repo",
+    "source_commit",
+    "source_tree_dirty",
+    "build_timestamp_utc",
+    "builder_tool",
+    "runtime_contract",
+    "included_files"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "zephyr-mlsys-provenance/v1"
+    },
+    "skill_name": {
+      "type": "string",
+      "const": "zephyr"
+    },
+    "skill_version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "source_repo": {
+      "type": "string"
+    },
+    "source_commit": {
+      "type": "string"
+    },
+    "source_tree_dirty": {
+      "type": "boolean"
+    },
+    "build_timestamp_utc": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "builder_tool": {
+      "type": "string"
+    },
+    "excluded_patterns": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "runtime_contract": {
+      "type": "object",
+      "required": ["no_repo_runtime_dependency", "required_clis", "required_python_packages"],
+      "properties": {
+        "no_repo_runtime_dependency": {
+          "type": "boolean"
+        },
+        "required_clis": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "required_python_packages": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "included_files": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["path", "sha256", "size_bytes"],
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "size_bytes": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,428 @@
+
+ ▐▛███▜▌   Claude Code v2.1.39
+▝▜█████▛▘  Opus 4.6 · Claude Pro
+  ▘▘ ▝▝    /mnt/data_infra/workspace/sygaldry
+
+╭──────────────────────────────────────────────────────────────────────────────╮
+│ Plan to implement                                                            │
+│                                                                              │
+│ Plan: Comprehensive Verification Section for ZEPHYR_SYSTEM_DESIGN.md         │
+│                                                                              │
+│ Context                                                                      │
+│                                                                              │
+│ container/ZEPHYR_SYSTEM_DESIGN.md currently ends with a minimal Verification │
+│  section (lines 265-275) that only lists bash -n syntax checks, one unit     │
+│ test, and two launcher smoke commands. The actual verification               │
+│ infrastructure is far richer — 10+ verification scripts organized into       │
+│ layers, with a test-ID convention (T1-T8), multiple Docker/GPU requirement   │
+│ levels, and a CI orchestrator (validate_all.sh) with 10 flags. None of this  │
+│ is documented in the design doc.                                             │
+│                                                                              │
+│ The goal is to replace the existing ## Verification section with a           │
+│ comprehensive verification/validation plan that:                             │
+│ - Catalogs every test layer and its scripts                                  │
+│ - Documents prerequisites and test IDs                                       │
+│ - Shows the validate_all.sh flag matrix                                      │
+│ - Provides a runbook for common validation scenarios                         │
+│                                                                              │
+│ File to modify: container/ZEPHYR_SYSTEM_DESIGN.md (lines 265-275)            │
+│                                                                              │
+│ ---                                                                          │
+│ Implementation                                                               │
+│                                                                              │
+│ Replace the existing ## Verification section (from ## Verification through   │
+│ end-of-file) with the content below. This is a documentation-only change —   │
+│ no code files are modified.                                                  │
+│                                                                              │
+│ New Section Content                                                          │
+│                                                                              │
+│ ## Verification and Validation                                               │
+│                                                                              │
+│ ### Test Layers                                                              │
+│                                                                              │
+│ The verification infrastructure is organized into layers of increasing cost. │
+│  Each layer has different prerequisites and can run independently.           │
+│                                                                              │
+│ | Layer | Script(s) | Prerequisites | Speed | What it validates |            │
+│ |-------|-----------|--------------|-------|-------------------|             │
+│ | L0: Syntax | `bash -n`, `shellcheck`, `python -m py_compile` | None |      │
+│ seconds | Shell/Python parse correctness |                                   │
+│ | L1: Unit (no Docker) | `launch_container_test.sh` | None | seconds |       │
+│ Launcher arg parsing, config resolution, docker arg generation |             │
+│ | L2: Go | `go test ./...` (temporal/) | Go toolchain | ~10s | Orchestration │
+│  plan validation, activities, workflows (89 tests) |                         │
+│ | L3: Python lint | `ruff`, `black`, `pytest` | `.venv-lint` | ~5s | Style,  │
+│ formatting, host-side Python tests |                                         │
+│ | L4: Integration (Docker, no GPU) | `verify_multi_repo.sh` | Docker + base  │
+│ image | ~30s | Legacy/multi-repo mount layout, env vars, Spack store         │
+│ integrity |                                                                  │
+│ | L5: Snapshot (Docker, optional GPU) | `verify_snapshot.sh` | Docker +      │
+│ snapshot image | ~60s | Baked image self-containment (T1-T7) |               │
+│ | L6: UV layering (Docker, optional GPU) | `verify_uv_layering.sh` | Docker  │
+│ + snapshot image | ~120s | UV+Spack package provenance, NVIDIA exclusion     │
+│ (T8.1-T8.6) |                                                                │
+│ | L7: E2E (Docker + GPU) | `verify_multi_repo_e2e.sh` | Docker + GPU + base  │
+│ image + Spack store | ~120s | GPU from external repo, workspace              │
+│ isolation/persistence |                                                      │
+│ | L8: Infra full (Docker + GPU) | `verify_all.sh` | Docker + GPU + base      │
+│ image + Spack store | ~30min | Preflight, image build, Spack install, ML     │
+│ validation, uv, logs |                                                       │
+│                                                                              │
+│ ### Test ID Registry                                                         │
+│                                                                              │
+│ | ID | Layer | Script | Description |                                        │
+│ |----|-------|--------|-------------|                                        │
+│ | T1 | L5 | `verify_snapshot.sh` | Image metadata — labels, ENV vars |       │
+│ | T2 | L5 | `verify_snapshot.sh` | Filesystem structure — view symlink,      │
+│ spack.yaml, entrypoints, .spack-db |                                         │
+│ | T3 | L5 | `verify_snapshot.sh` | Python imports (no GPU) — torch, jax,     │
+│ numpy, scipy |                                                               │
+│ | T4 | L5 | `verify_snapshot.sh` | Spack env activation — `spack env         │
+│ activate`, `spack find` |                                                    │
+│ | T5 | L5 | `verify_snapshot.sh` | GPU validation —                          │
+│ `torch.cuda.is_available()`, JAX GPU devices, matmul |                       │
+│ | T6 | L5 | `verify_snapshot.sh` | Launcher integration — baked image with   │
+│ `run-job` entrypoint |                                                       │
+│ | T7 | L5 | `verify_snapshot.sh` | No spack_store shadowing — baked content  │
+│ visible without host mount |                                                 │
+│ | T8.1 | L6 | `verify_uv_layering.sh` | UV venv creation — uv-install.sh     │
+│ with transformers/accelerate/datasets |                                      │
+│ | T8.2 | L6 | `verify_uv_layering.sh` | Spack provenance — core packages     │
+│ (torch, jax, numpy, etc.) from `/opt/spack_store/view` |                     │
+│ | T8.3 | L6 | `verify_uv_layering.sh` | UV provenance — user packages        │
+│ (transformers, tokenizers, etc.) from `.venv` |                              │
+│ | T8.4 | L6 | `verify_uv_layering.sh` | No NVIDIA pip packages — no          │
+│ `nvidia-*` packages installed by UV |                                        │
+│ | T8.5 | L6 | `verify_uv_layering.sh` | GPU functional — torch CUDA matmul + │
+│  HF tokenizer load after UV layering |                                       │
+│ | T8.6 | L6 | `verify_uv_layering.sh` | vllm/sglang install — optional       │
+│ (`--with-vllm`), same provenance rules |                                     │
+│                                                                              │
+│ ### CI Orchestrator: `validate_all.sh`                                       │
+│                                                                              │
+│ The top-level CI script runs layers selectively via flags. Default           │
+│ invocation (no flags) runs L0-L3.                                            │
+│                                                                              │
+│ | Flag | Layers run | Prerequisites |                                        │
+│ |------|-----------|--------------|                                          │
+│ | *(none)* | L0 (shellcheck) + L2 (Go) + L3 (Python lint) | Go,              │
+│ `.venv-lint`, shellcheck |                                                   │
+│ | `--quick` | L2 (Go) + L3 (Python lint), skip shellcheck | Go, `.venv-lint` │
+│  |                                                                           │
+│ | `--verify-only` | Spack verify only (`verify-spack.sh` entrypoint) |       │
+│ Docker + GPU |                                                               │
+│ | `--multi-repo-unit` | L1 (launcher unit tests) | None |                    │
+│ | `--multi-repo` | L1 + L4 + L7 (unit + integration + E2E) | Docker + GPU +  │
+│ base image |                                                                 │
+│ | `--snapshot` | L5 (T1-T7) | Docker + GPU + snapshot image |                │
+│ | `--snapshot-no-gpu` | L5 (T1-T4, T7) | Docker + snapshot image |           │
+│ | `--uv-layering` | L6 (T8.1-T8.5) | Docker + GPU + snapshot image |         │
+│ | `--uv-layering-no-gpu` | L6 (T8.1-T8.4) | Docker + snapshot image |        │
+│ | `--infra` | L8 smoke (preflight + image verify) | Docker + GPU |           │
+│ | `--infra-full` | L8 full (preflight + build + Spack install + epilogue) |  │
+│ Docker + GPU + Spack store |                                                 │
+│                                                                              │
+│ ### Infra Verification Pipeline: `verify_all.sh`                             │
+│                                                                              │
+│ The full infra verification pipeline (`container/verify_all.sh`) chains four │
+│  stages:                                                                     │
+│                                                                              │
+│ | Step | Script | What it does |                                             │
+│ |------|--------|-------------|                                              │
+│ | 0: Preflight | `verify_preflight.sh` | Docker check, storage layout, host  │
+│ GPU diagnostics (`diagnose_nvidia.sh`), container GPU check (`verify-gpu.sh` │
+│  entrypoint) |                                                               │
+│ | 1: Image build | `verify_image_build.sh` | Build/verify base Docker image  │
+│ (auto/always/never policy) |                                                 │
+│ | 2: Spack install | `verify_build.sh` | Run `zephyr_autobuild.sh` or        │
+│ `zephyr_autoretry.sh` for Spack env |                                        │
+│ | 3: Epilogue | `verify_epilogue.sh` | ML validation (torch/jax), uv install │
+│  test, UV-Spack provenance (`verify_uv_spack.py`), job status/log checks |   │
+│                                                                              │
+│ Flags: `--smoke` skips steps 2-3. `--skip-spack` skips step 2 only.          │
+│ `--skip-uv` skips uv in step 3.                                              │
+│                                                                              │
+│ ### Container Entrypoint Verifiers                                           │
+│                                                                              │
+│ These run *inside* the container (invoked via `launch_container.sh           │
+│ --entrypoint`):                                                              │
+│                                                                              │
+│ | Entrypoint | What it checks |                                              │
+│ |------------|---------------|                                               │
+│ | `verify-gpu.sh` | nvidia-smi, CUDA toolkit, PyTorch CUDA availability, JAX │
+│  GPU devices |                                                               │
+│ | `verify-spack.sh` | Spack view exists, torch/jax importable, tensor matmul │
+│  on GPU, NN forward+backward on GPU |                                        │
+│                                                                              │
+│ ### Python Verification Scripts                                              │
+│                                                                              │
+│ | Script | What it checks |                                                  │
+│ |--------|---------------|                                                   │
+│ | `verify_uv_spack.py` | All Spack-owned packages resolve from               │
+│ `/opt/spack_store/view`; no `nvidia-*` pip packages outside Spack view |     │
+│                                                                              │
+│ ### Validation Runbook                                                       │
+│                                                                              │
+│ **Developer pre-commit (fast, no Docker):**                                  │
+│ ```bash                                                                      │
+│ ./validate_all.sh --quick           # Go + Python lint (~15s)                │
+│ ./validate_all.sh --multi-repo-unit # Launcher unit tests (~5s)              │
+│                                                                              │
+│ Post image change (Docker, no GPU):                                          │
+│ ./validate_all.sh --snapshot-no-gpu    # T1-T4, T7                           │
+│ ./validate_all.sh --uv-layering-no-gpu # T8.1-T8.4                           │
+│                                                                              │
+│ Full GPU validation:                                                         │
+│ ./validate_all.sh --snapshot         # T1-T7 (snapshot image, GPU)           │
+│ ./validate_all.sh --uv-layering      # T8.1-T8.5 (UV layering, GPU)          │
+│ ./validate_all.sh --multi-repo       # Multi-repo unit + integration + E2E   │
+│                                                                              │
+│ Full infrastructure validation (Spack build + ML + uv):                      │
+│ ./container/verify_all.sh            # All stages (30+ min)                  │
+│ ./container/verify_all.sh --smoke    # Preflight + image only                │
+│                                                                              │
+│ Syntax check all scripts:                                                    │
+│ bash -n container/launch_container.sh                                        │
+│ bash -n tools/zephyr_job                                                     │
+│ bash -n container/verify_uv_layering.sh                                      │
+│ bash -n container/verify_snapshot.sh                                         │
+│                                                                              │
+│ ---                                                                          │
+│                                                                              │
+│ ## Verification of this change                                               │
+│                                                                              │
+│ 1. Read the modified `container/ZEPHYR_SYSTEM_DESIGN.md` and confirm the new │
+│  section replaces lines 265-275                                              │
+│ 2. Check that all referenced scripts (`verify_*.sh`, `validate_all.sh`       │
+│ flags, entrypoints) exist via `Glob`                                         │
+│ 3. Confirm no code files are changed — this is documentation only            │
+╰──────────────────────────────────────────────────────────────────────────────╯
+
+● Let me start by reading the current file to see the existing Verification
+  section, then make the replacement.
+
+● Read 1 file (ctrl+o to expand)
+
+● Good, I can see the section to replace (lines 265-275). Now let me verify that
+   the referenced scripts exist.
+
+● Searched for 7 patterns (ctrl+o to expand)
+
+● All referenced scripts exist. Now let me replace the existing Verification
+  section with the comprehensive one.
+
+● Update(container/ZEPHYR_SYSTEM_DESIGN.md)
+  ⎿  Added 115 lines, removed 9 lines
+      262  - Gap: `configure_uv_spack()` in bashrc and `uv-install.sh` ha
+           d separate hardcoded lists of Spack-owned packages, which coul
+           d drift.  No mechanism to block NVIDIA pip packages.
+      263  - Resolution: introduced `container/spack_owned_packages.conf`
+            as canonical source of truth.  Both functions read from this 
+           file with hardcoded fallback.  Added `container/nvidia_overrid
+           es.txt` for NVIDIA pip exclusion.  See "UV-Spack Package Layer
+           ing" section.
+      264  
+      265 -## Verification                                               
+      265 +## Verification and Validation                                
+      266  
+      267 -- Syntax:                                                     
+      268 -  - `bash -n container/launch_container.sh`                   
+      269 -  - `bash -n tools/zephyr_job`                                
+      270 -- Launcher unit tests:                                        
+      271 -  - `bash container/launch_container_test.sh`                 
+      272 -- Runtime checks:                                             
+      273 -  - `./container/launch_container.sh --print-effective-config 
+          --- true`                                                      
+      274 -  - `SYGALDRY_ENTRYPOINT=verify-spack ./container/launch_conta
+          -iner.sh`                                                      
+      267 +### Test Layers                                               
+      268 +                                                              
+      269 +The verification infrastructure is organized into layers of in
+          +creasing cost. Each layer has different prerequisites and can 
+          +run independently.                                            
+      270 +                                                              
+      271 +| Layer | Script(s) | Prerequisites | Speed | What it validate
+          +s |                                                           
+      272 +|-------|-----------|--------------|-------|------------------
+          +-|                                                            
+      273 +| L0: Syntax | `bash -n`, `shellcheck`, `python -m py_compile`
+          + | None | seconds | Shell/Python parse correctness |          
+      274 +| L1: Unit (no Docker) | `launch_container_test.sh` | None | s
+          +econds | Launcher arg parsing, config resolution, docker arg g
+          +eneration |                                                   
+      275 +| L2: Go | `go test ./...` (temporal/) | Go toolchain | ~10s |
+          + Orchestration plan validation, activities, workflows (89 test
+          +s) |                                                          
+      276 +| L3: Python lint | `ruff`, `black`, `pytest` | `.venv-lint` |
+          + ~5s | Style, formatting, host-side Python tests |            
+      277 +| L4: Integration (Docker, no GPU) | `verify_multi_repo.sh` | 
+          +Docker + base image | ~30s | Legacy/multi-repo mount layout, e
+          +nv vars, Spack store integrity |                              
+      278 +| L5: Snapshot (Docker, optional GPU) | `verify_snapshot.sh` |
+          + Docker + snapshot image | ~60s | Baked image self-containment
+          + (T1-T7) |                                                    
+      279 +| L6: UV layering (Docker, optional GPU) | `verify_uv_layering
+          +.sh` | Docker + snapshot image | ~120s | UV+Spack package prov
+          +enance, NVIDIA exclusion (T8.1-T8.6) |                        
+      280 +| L7: E2E (Docker + GPU) | `verify_multi_repo_e2e.sh` | Docker
+          + + GPU + base image + Spack store | ~120s | GPU from external 
+          +repo, workspace isolation/persistence |                       
+      281 +| L8: Infra full (Docker + GPU) | `verify_all.sh` | Docker + G
+          +PU + base image + Spack store | ~30min | Preflight, image buil
+          +d, Spack install, ML validation, uv, logs |                   
+      282 +                                                              
+      283 +### Test ID Registry                                          
+      284 +                                                              
+      285 +| ID | Layer | Script | Description |                         
+      286 +|----|-------|--------|-------------|                         
+      287 +| T1 | L5 | `verify_snapshot.sh` | Image metadata — labels, EN
+          +V vars |                                                      
+      288 +| T2 | L5 | `verify_snapshot.sh` | Filesystem structure — view
+          + symlink, spack.yaml, entrypoints, .spack-db |                
+      289 +| T3 | L5 | `verify_snapshot.sh` | Python imports (no GPU) — t
+          +orch, jax, numpy, scipy |                                     
+      290 +| T4 | L5 | `verify_snapshot.sh` | Spack env activation — `spa
+          +ck env activate`, `spack find` |                              
+      291 +| T5 | L5 | `verify_snapshot.sh` | GPU validation — `torch.cud
+          +a.is_available()`, JAX GPU devices, matmul |                  
+      292 +| T6 | L5 | `verify_snapshot.sh` | Launcher integration — bake
+          +d image with `run-job` entrypoint |                           
+      293 +| T7 | L5 | `verify_snapshot.sh` | No spack_store shadowing — 
+          +baked content visible without host mount |                    
+      294 +| T8.1 | L6 | `verify_uv_layering.sh` | UV venv creation — uv-
+          +install.sh with transformers/accelerate/datasets |            
+      295 +| T8.2 | L6 | `verify_uv_layering.sh` | Spack provenance — cor
+          +e packages (torch, jax, numpy, etc.) from `/opt/spack_store/vi
+          +ew` |                                                         
+      296 +| T8.3 | L6 | `verify_uv_layering.sh` | UV provenance — user p
+          +ackages (transformers, tokenizers, etc.) from `.venv` |       
+      297 +| T8.4 | L6 | `verify_uv_layering.sh` | No NVIDIA pip packages
+          + — no `nvidia-*` packages installed by UV |                   
+      298 +| T8.5 | L6 | `verify_uv_layering.sh` | GPU functional — torch
+          + CUDA matmul + HF tokenizer load after UV layering |          
+      299 +| T8.6 | L6 | `verify_uv_layering.sh` | vllm/sglang install — 
+          +optional (`--with-vllm`), same provenance rules |             
+      300 +                                                              
+      301 +### CI Orchestrator: `validate_all.sh`                        
+      302 +                                                              
+      303 +The top-level CI script runs layers selectively via flags. Def
+          +ault invocation (no flags) runs L0-L3.                        
+      304 +                                                              
+      305 +| Flag | Layers run | Prerequisites |                         
+      306 +|------|-----------|--------------|                           
+      307 +| *(none)* | L0 (shellcheck) + L2 (Go) + L3 (Python lint) | Go
+          +, `.venv-lint`, shellcheck |                                  
+      308 +| `--quick` | L2 (Go) + L3 (Python lint), skip shellcheck | Go
+          +, `.venv-lint` |                                              
+      309 +| `--verify-only` | Spack verify only (`verify-spack.sh` entry
+          +point) | Docker + GPU |                                       
+      310 +| `--multi-repo-unit` | L1 (launcher unit tests) | None |     
+      311 +| `--multi-repo` | L1 + L4 + L7 (unit + integration + E2E) | D
+          +ocker + GPU + base image |                                    
+      312 +| `--snapshot` | L5 (T1-T7) | Docker + GPU + snapshot image | 
+      313 +| `--snapshot-no-gpu` | L5 (T1-T4, T7) | Docker + snapshot ima
+          +ge |                                                          
+      314 +| `--uv-layering` | L6 (T8.1-T8.5) | Docker + GPU + snapshot i
+          +mage |                                                        
+      315 +| `--uv-layering-no-gpu` | L6 (T8.1-T8.4) | Docker + snapshot 
+          +image |                                                       
+      316 +| `--infra` | L8 smoke (preflight + image verify) | Docker + G
+          +PU |                                                          
+      317 +| `--infra-full` | L8 full (preflight + build + Spack install 
+          ++ epilogue) | Docker + GPU + Spack store |                    
+      318 +                                                              
+      319 +### Infra Verification Pipeline: `verify_all.sh`              
+      320 +                                                              
+      321 +The full infra verification pipeline (`container/verify_all.sh
+          +`) chains four stages:                                        
+      322 +                                                              
+      323 +| Step | Script | What it does |                              
+      324 +|------|--------|-------------|                               
+      325 +| 0: Preflight | `verify_preflight.sh` | Docker check, storage
+          + layout, host GPU diagnostics (`diagnose_nvidia.sh`), containe
+          +r GPU check (`verify-gpu.sh` entrypoint) |                    
+      326 +| 1: Image build | `verify_image_build.sh` | Build/verify base
+          + Docker image (auto/always/never policy) |                    
+      327 +| 2: Spack install | `verify_build.sh` | Run `zephyr_autobuild
+          +.sh` or `zephyr_autoretry.sh` for Spack env |                 
+      328 +| 3: Epilogue | `verify_epilogue.sh` | ML validation (torch/ja
+          +x), uv install test, UV-Spack provenance (`verify_uv_spack.py`
+          +), job status/log checks |                                    
+      329 +                                                              
+      330 +Flags: `--smoke` skips steps 2-3. `--skip-spack` skips step 2 
+          +only. `--skip-uv` skips uv in step 3.                         
+      331 +                                                              
+      332 +### Container Entrypoint Verifiers                            
+      333 +                                                              
+      334 +These run *inside* the container (invoked via `launch_containe
+          +r.sh --entrypoint`):                                          
+      335 +                                                              
+      336 +| Entrypoint | What it checks |                               
+      337 +|------------|---------------|                                
+      338 +| `verify-gpu.sh` | nvidia-smi, CUDA toolkit, PyTorch CUDA ava
+          +ilability, JAX GPU devices |                                  
+      339 +| `verify-spack.sh` | Spack view exists, torch/jax importable,
+          + tensor matmul on GPU, NN forward+backward on GPU |           
+      340 +                                                              
+      341 +### Python Verification Scripts                               
+      342 +                                                              
+      343 +| Script | What it checks |                                   
+      344 +|--------|---------------|                                    
+      345 +| `verify_uv_spack.py` | All Spack-owned packages resolve from
+          + `/opt/spack_store/view`; no `nvidia-*` pip packages outside S
+          +pack view |                                                   
+      346 +                                                              
+      347 +### Validation Runbook                                        
+      348 +                                                              
+      349 +**Developer pre-commit (fast, no Docker):**                   
+      350 +```bash                                                       
+      351 +./validate_all.sh --quick           # Go + Python lint (~15s) 
+      352 +./validate_all.sh --multi-repo-unit # Launcher unit tests (~5s
+          +)                                                             
+      353 +```                                                           
+      354 +                                                              
+      355 +**Post image change (Docker, no GPU):**                       
+      356 +```bash                                                       
+      357 +./validate_all.sh --snapshot-no-gpu    # T1-T4, T7            
+      358 +./validate_all.sh --uv-layering-no-gpu # T8.1-T8.4            
+      359 +```                                                           
+      360 +                                                              
+      361 +**Full GPU validation:**                                      
+      362 +```bash                                                       
+      363 +./validate_all.sh --snapshot         # T1-T7 (snapshot image, 
+          +GPU)                                                          
+      364 +./validate_all.sh --uv-layering      # T8.1-T8.5 (UV layering,
+          + GPU)                                                         
+      365 +./validate_all.sh --multi-repo       # Multi-repo unit + integ
+          +ration + E2E                                                  
+      366 +```                                                           
+      367 +                                                              
+      368 +**Full infrastructure validation (Spack build + ML + uv):**   
+      369 +```bash                                                       
+      370 +./container/verify_all.sh            # All stages (30+ min)   
+      371 +./container/verify_all.sh --smoke    # Preflight + image only 
+      372 +```                                                           
+      373 +                                                              
+      374 +**Syntax check all scripts:**                                 
+      375 +```bash                                                       
+      376 +bash -n container/launch_container.sh                         
+      377 +bash -n tools/zephyr_job                                      
+      378 +bash -n container/verify_uv_layering.sh                       
+      379 +bash -n container/verify_snapshot.sh                          
+      380 +```                                                           
+
+● Done. The existing 11-line ## Verification section (lines 265-275) has been
+  replaced with the comprehensive ## Verification and Validation section
+  covering:
+
+  - Test Layers (L0-L8) with prerequisites and timing
+  - Test ID Registry (T1-T8.6) mapping IDs to scripts and descriptions
+  - CI Orchestrator flag matrix for validate_all.sh (11 flag combinations)
+  - Infra Verification Pipeline stages (preflight, image build, Spack install,
+  epilogue)
+  - Container Entrypoint Verifiers and Python Verification Scripts
+  - Validation Runbook with commands for pre-commit, post-image, GPU, and full
+  infra scenarios
+
+  All referenced scripts were confirmed to exist in the repo. This is a
+  documentation-only change.

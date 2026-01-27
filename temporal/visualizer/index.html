@@ -1,0 +1,366 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Temporal Pipeline Visualizer</title>
+  <style>
+    :root {
+      --bg: #f4f6f8;
+      --card: #ffffff;
+      --text: #13202b;
+      --muted: #5a6a78;
+      --border: #d7dee5;
+      --success: #0f9d58;
+      --failed: #d93025;
+      --running: #f29900;
+      --pending: #64748b;
+    }
+    body {
+      margin: 0;
+      font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
+      background: radial-gradient(circle at top right, #dce8ff 0, var(--bg) 50%);
+      color: var(--text);
+    }
+    .container {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 18px;
+      display: grid;
+      gap: 14px;
+    }
+    .layout {
+      display: grid;
+      grid-template-columns: 320px 1fr;
+      gap: 14px;
+    }
+    .card {
+      border: 1px solid var(--border);
+      background: var(--card);
+      border-radius: 10px;
+      padding: 12px;
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+    }
+    .runs {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      max-height: 72vh;
+      overflow: auto;
+    }
+    .runs li {
+      cursor: pointer;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 8px;
+      margin-bottom: 8px;
+      font-size: 13px;
+      line-height: 1.3;
+    }
+    .runs li:hover {
+      border-color: #9bb4cc;
+      background: #f7fbff;
+    }
+    .status {
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+      font-size: 12px;
+    }
+    .status.success { color: var(--success); }
+    .status.failed { color: var(--failed); }
+    .status.running { color: var(--running); }
+    .status.pending { color: var(--pending); }
+    .details-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 12px;
+    }
+    .steps {
+      display: grid;
+      gap: 7px;
+    }
+    .step-row {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 7px 9px;
+      font-size: 13px;
+    }
+    .step-meta {
+      color: var(--muted);
+      font-size: 12px;
+      margin-top: 4px;
+    }
+    .logs {
+      white-space: pre-wrap;
+      background: #f5f8fb;
+      border: 1px solid #dbe4ec;
+      border-radius: 8px;
+      max-height: 220px;
+      overflow: auto;
+      padding: 8px;
+      margin-top: 6px;
+      font-family: "JetBrains Mono", monospace;
+      font-size: 12px;
+    }
+    #dag {
+      width: 100%;
+      min-height: 260px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: #fbfdff;
+      overflow: auto;
+    }
+    .muted {
+      color: var(--muted);
+      font-size: 12px;
+    }
+    @media (max-width: 1024px) {
+      .layout {
+        grid-template-columns: 1fr;
+      }
+      .runs {
+        max-height: 260px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="layout">
+      <section class="card">
+        <h3>Runs</h3>
+        <ul class="runs" id="runs"></ul>
+      </section>
+      <section class="card">
+        <h3>Run Details</h3>
+        <div id="details" class="details-grid">
+          <div class="muted">Select a run to view status, logs, and DAG.</div>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <script>
+    const runsEl = document.getElementById('runs');
+    const detailsEl = document.getElementById('details');
+
+    let currentRunId = null;
+    let eventSource = null;
+
+    function escapeHtml(value) {
+      return (value || '')
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;');
+    }
+
+    async function loadRuns() {
+      const response = await fetch('/api/runs');
+      const runs = await response.json();
+
+      runsEl.innerHTML = '';
+      for (const run of runs) {
+        const item = document.createElement('li');
+        item.innerHTML = `
+          <div><strong>${escapeHtml(run.workflowId)}</strong></div>
+          <div class="muted">${escapeHtml(run.runId)}</div>
+          <div class="muted">Progress: ${escapeHtml(run.progress)}</div>
+          <div class="status ${run.status}">${escapeHtml(run.status)}</div>
+        `;
+        item.onclick = () => loadRun(run.runId);
+        runsEl.appendChild(item);
+      }
+    }
+
+    function layerNodes(nodes, edges) {
+      const byId = new Map(nodes.map((node) => [node.id, node]));
+      const incoming = new Map(nodes.map((node) => [node.id, 0]));
+      const outgoing = new Map(nodes.map((node) => [node.id, []]));
+
+      for (const edge of edges) {
+        if (!incoming.has(edge.to) || !outgoing.has(edge.from)) {
+          continue;
+        }
+        incoming.set(edge.to, incoming.get(edge.to) + 1);
+        outgoing.get(edge.from).push(edge.to);
+      }
+
+      const queue = [];
+      for (const [id, count] of incoming.entries()) {
+        if (count === 0) {
+          queue.push(id);
+        }
+      }
+
+      const level = new Map();
+      for (const id of queue) {
+        level.set(id, 0);
+      }
+
+      while (queue.length > 0) {
+        const id = queue.shift();
+        const nextLevel = level.get(id) + 1;
+        for (const child of outgoing.get(id) || []) {
+          incoming.set(child, incoming.get(child) - 1);
+          level.set(child, Math.max(level.get(child) || 0, nextLevel));
+          if (incoming.get(child) === 0) {
+            queue.push(child);
+          }
+        }
+      }
+
+      const grouped = new Map();
+      for (const node of nodes) {
+        const nodeLevel = level.get(node.id) || 0;
+        if (!grouped.has(nodeLevel)) {
+          grouped.set(nodeLevel, []);
+        }
+        grouped.get(nodeLevel).push(node);
+      }
+
+      const columns = Array.from(grouped.keys()).sort((a, b) => a - b);
+      const placed = [];
+      for (const column of columns) {
+        const columnNodes = grouped.get(column);
+        columnNodes.sort((a, b) => a.id.localeCompare(b.id));
+        for (let index = 0; index < columnNodes.length; index += 1) {
+          placed.push({
+            ...columnNodes[index],
+            x: column * 220 + 30,
+            y: index * 120 + 30,
+          });
+        }
+      }
+
+      const maxX = Math.max(...placed.map((node) => node.x), 0) + 220;
+      const maxY = Math.max(...placed.map((node) => node.y), 0) + 120;
+
+      return { placed, maxX, maxY, byId };
+    }
+
+    function renderDag(dag) {
+      if (!dag || !Array.isArray(dag.nodes) || dag.nodes.length === 0) {
+        return '<div class="muted">No DAG data available.</div>';
+      }
+
+      const { placed, maxX, maxY } = layerNodes(dag.nodes, dag.edges || []);
+      const byId = new Map(placed.map((node) => [node.id, node]));
+
+      const edgeSvg = [];
+      for (const edge of dag.edges || []) {
+        const from = byId.get(edge.from);
+        const to = byId.get(edge.to);
+        if (!from || !to) {
+          continue;
+        }
+        const startX = from.x + 150;
+        const startY = from.y + 30;
+        const endX = to.x;
+        const endY = to.y + 30;
+        const midX = Math.round((startX + endX) / 2);
+        edgeSvg.push(
+          `<path d="M ${startX} ${startY} C ${midX} ${startY}, ${midX} ${endY}, ${endX} ${endY}" stroke="#91a3b6" fill="none" marker-end="url(#arrow)"/>`
+        );
+      }
+
+      const nodeSvg = placed
+        .map((node) => {
+          const color = node.status === 'success'
+            ? '#0f9d58'
+            : node.status === 'failed'
+            ? '#d93025'
+            : node.status === 'running'
+            ? '#f29900'
+            : '#64748b';
+
+          return `
+            <g transform="translate(${node.x},${node.y})">
+              <rect width="150" height="60" rx="8" ry="8" fill="#fff" stroke="${color}" stroke-width="2"/>
+              <text x="10" y="22" font-size="12" font-family="IBM Plex Sans, sans-serif" fill="#102331">${escapeHtml(node.id)}</text>
+              <text x="10" y="40" font-size="11" font-family="IBM Plex Sans, sans-serif" fill="${color}">${escapeHtml(node.status || 'pending')}</text>
+            </g>
+          `;
+        })
+        .join('');
+
+      return `
+        <svg width="${maxX}" height="${maxY}" viewBox="0 0 ${maxX} ${maxY}" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <marker id="arrow" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+              <path d="M0,0 L0,6 L6,3 z" fill="#91a3b6"/>
+            </marker>
+          </defs>
+          ${edgeSvg.join('\n')}
+          ${nodeSvg}
+        </svg>
+      `;
+    }
+
+    async function loadRun(runId) {
+      currentRunId = runId;
+
+      const [runRes, dagRes] = await Promise.all([
+        fetch(`/api/runs/${encodeURIComponent(runId)}`),
+        fetch(`/api/dag?runId=${encodeURIComponent(runId)}`),
+      ]);
+
+      const run = await runRes.json();
+      const dag = dagRes.ok ? await dagRes.json() : null;
+
+      const header = `<div class="muted">Workflow: ${escapeHtml(run.workflowId || 'unknown')} | Run: ${escapeHtml(run.runId || runId)}</div>`;
+      const dagHtml = `<div><h4>DAG</h4><div id="dag">${renderDag(dag)}</div></div>`;
+
+      const rows = [];
+      for (const step of run.steps || []) {
+        const status = step.status || 'pending';
+        const depends = Array.isArray(step.dependsOn) && step.dependsOn.length > 0
+          ? `depends_on: ${step.dependsOn.join(', ')}`
+          : 'depends_on: -';
+
+        let section = `
+          <div class="step-row">
+            <div><strong>${escapeHtml(step.stepId)}</strong> <span class="status ${status}">${escapeHtml(status)}</span></div>
+            <div class="step-meta">type: ${escapeHtml(step.type || '-')} | ${escapeHtml(depends)} | duration: ${escapeHtml(String(step.durationSec ?? '-'))}s</div>
+            <div class="step-meta">stdout: ${escapeHtml(step.stdoutPath || '-')} | stderr: ${escapeHtml(step.stderrPath || '-')}</div>
+        `;
+
+        if (step.stdoutPath) {
+          section += `<div class="logs" data-path="${escapeHtml(step.stdoutPath)}">Loading stdout...</div>`;
+        }
+        if (step.stderrPath) {
+          section += `<div class="logs" data-path="${escapeHtml(step.stderrPath)}">Loading stderr...</div>`;
+        }
+        section += '</div>';
+        rows.push(section);
+      }
+
+      const stepsHtml = `<div><h4>Steps</h4><div class="steps">${rows.join('')}</div></div>`;
+      detailsEl.innerHTML = `${header}${dagHtml}${stepsHtml}`;
+
+      for (const panel of detailsEl.querySelectorAll('.logs')) {
+        const fullPath = panel.getAttribute('data-path');
+        if (!fullPath) {
+          continue;
+        }
+        const relative = fullPath.replace(/^.*logs\//, '');
+        const response = await fetch(`/logs/${encodeURIComponent(relative)}`);
+        panel.textContent = await response.text();
+      }
+
+      if (eventSource) {
+        eventSource.close();
+      }
+      eventSource = new EventSource(`/api/events?runId=${encodeURIComponent(runId)}`);
+      eventSource.onmessage = () => {
+        if (currentRunId === runId) {
+          loadRun(runId);
+        }
+      };
+    }
+
+    loadRuns();
+    setInterval(loadRuns, 5000);
+  </script>
+</body>
+</html>

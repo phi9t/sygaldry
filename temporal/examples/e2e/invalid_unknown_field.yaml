@@ -1,0 +1,6 @@
+steps:
+  - id: bad-step
+    type: command
+    command: bash
+    args: ["-lc", "echo ok"]
+    unknown_field: true

@@ -1,0 +1,145 @@
+# 06_gpu_experiment.yaml -- Full ML Experiment Pipeline (GPU Required)
+#
+# REQUIRES: Sygaldry GPU container infrastructure (NVIDIA Docker runtime)
+#
+# This is the "graduation" example: a complete ML experiment pipeline using
+# the container_job and hf_download_model step types.
+#
+# Pipeline:
+#   1. Download a model from HuggingFace
+#   2. Prepare experiment config (emit outputs for downstream steps)
+#   3. Run training inside a Sygaldry GPU container
+#   4. Run evaluation inside a Sygaldry GPU container
+#   5. Branch on success/failure for reporting
+#
+# Run (requires GPU + Sygaldry image built):
+#   go run ./cmd/orchestrate run \
+#     -plan examples/quickstart/06_gpu_experiment.yaml \
+#     -set model_id=Qwen/Qwen3-0.6B-Base \
+#     -set project_id=my-experiment
+#
+# This demonstrates the agentic experiment pattern:
+#   - An agent generates this YAML with specific params
+#   - Temporal executes the DAG with retry and failure handling
+#   - Step outputs capture metrics for the agent to analyze
+#   - Failure branches enable automated triage
+
+params:
+  model_id: Qwen/Qwen3-0.6B-Base
+  project_id: quickstart-gpu
+  max_epochs: "3"
+  batch_size: "8"
+  learning_rate: "5e-5"
+
+env:
+  HF_HOME: /opt/hf_cache
+
+steps:
+  - id: download-model
+    name: Download model from HuggingFace
+    type: hf_download_model
+    hf_download_model:
+      model_id: ${{ params.model_id }}
+    timeout_seconds: 1800
+
+  - id: prepare-config
+    name: Prepare experiment config
+    type: command
+    command: bash
+    args:
+      - -lc
+      - |
+        echo "Experiment configuration:"
+        echo "  model: ${{ params.model_id }}"
+        echo "  epochs: ${{ params.max_epochs }}"
+        echo "  batch_size: ${{ params.batch_size }}"
+        echo "  lr: ${{ params.learning_rate }}"
+        echo "::set-output name=config_summary::model=${{ params.model_id }} epochs=${{ params.max_epochs }} bs=${{ params.batch_size }} lr=${{ params.learning_rate }}"
+
+  - id: train
+    name: Train model
+    type: container_job
+    depends_on: [download-model, prepare-config]
+    allow_failure: true
+    retry:
+      max_attempts: 2
+      initial_interval_seconds: 10
+      backoff_coefficient: 2
+      maximum_interval_seconds: 60
+    container_job:
+      project_id: ${{ params.project_id }}
+      entrypoint: run-job.sh
+      gpu: true
+      command: |
+        python -c "
+        import torch
+        print(f'CUDA available: {torch.cuda.is_available()}')
+        print(f'Training with config: ${{ steps.prepare-config.outputs.config_summary }}')
+        # Placeholder: replace with actual training script
+        print('::set-output name=best_loss::0.42')
+        print('::set-output name=checkpoint_path::/workspace/outputs/checkpoint-best.pt')
+        print('Training complete')
+        "
+    timeout_seconds: 86400
+
+  - id: evaluate
+    name: Evaluate model
+    type: container_job
+    depends_on: [train]
+    when:
+      step: train
+      status: success
+    container_job:
+      project_id: ${{ params.project_id }}
+      entrypoint: run-job.sh
+      gpu: true
+      command: |
+        python -c "
+        import torch
+        print(f'Evaluating checkpoint: ${{ steps.train.outputs.checkpoint_path }}')
+        print(f'Training loss was: ${{ steps.train.outputs.best_loss }}')
+        # Placeholder: replace with actual evaluation script
+        print('::set-output name=eval_loss::0.45')
+        print('::set-output name=eval_accuracy::0.87')
+        print('Evaluation complete')
+        "
+    timeout_seconds: 3600
+
+  - id: report-success
+    name: Report successful experiment
+    type: command
+    depends_on: [evaluate]
+    when:
+      step: evaluate
+      status: success
+    command: bash
+    args:
+      - -lc
+      - |
+        echo "EXPERIMENT SUCCEEDED"
+        echo "  Model: ${{ params.model_id }}"
+        echo "  Config: ${{ steps.prepare-config.outputs.config_summary }}"
+        echo "  Train loss: ${{ steps.train.outputs.best_loss }}"
+        echo "  Eval loss: ${{ steps.evaluate.outputs.eval_loss }}"
+        echo "  Eval accuracy: ${{ steps.evaluate.outputs.eval_accuracy }}"
+        echo "  Checkpoint: ${{ steps.train.outputs.checkpoint_path }}"
+        echo "::set-output name=verdict::success"
+
+  - id: report-failure
+    name: Triage failed experiment
+    type: command
+    depends_on: [train]
+    when:
+      step: train
+      status: failure
+    command: bash
+    args:
+      - -lc
+      - |
+        echo "EXPERIMENT FAILED"
+        echo "  Model: ${{ params.model_id }}"
+        echo "  Config: ${{ steps.prepare-config.outputs.config_summary }}"
+        echo "  Failure occurred during training"
+        echo "  Suggested triage: check GPU memory, reduce batch_size, inspect stderr logs"
+        echo "::set-output name=verdict::failure"
+        echo "::set-output name=suggested_action::reduce-batch-size"

@@ -1,0 +1,74 @@
+name: Zephyr Candidate Publish
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_id:
+        description: "Release identifier (optional)"
+        required: false
+        type: string
+      candidate_suffix:
+        description: "Candidate suffix (optional, default date-sha)"
+        required: false
+        type: string
+      skip_build:
+        description: "Skip local build and only emit/verify manifest"
+        required: false
+        default: true
+        type: boolean
+
+jobs:
+  candidate_publish:
+    runs-on: self-hosted
+    permissions:
+      contents: read
+      packages: write
+    env:
+      REGISTRY_IMAGE: ghcr.io/phi9t/sygaldry/zephyr
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build candidates and emit manifest
+        run: |
+          set -eu -o pipefail
+          args=(build-candidates)
+          if [[ -n "${{ inputs.release_id }}" ]]; then
+            args+=(--release-id "${{ inputs.release_id }}")
+          fi
+          if [[ -n "${{ inputs.candidate_suffix }}" ]]; then
+            args+=(--candidate-suffix "${{ inputs.candidate_suffix }}")
+          fi
+          if [[ "${{ inputs.skip_build }}" == "true" ]]; then
+            args+=(--skip-build)
+          fi
+          ./container/publish.sh "${args[@]}"
+
+      - name: Resolve latest release manifest path
+        id: manifest
+        run: |
+          set -eu -o pipefail
+          manifest_path="$(find container/releases -type f -name image-set.json | sort | tail -1)"
+          echo "manifest_path=${manifest_path}" >> "$GITHUB_OUTPUT"
+          cat "${manifest_path}"
+
+      - name: Verify candidate manifest
+        run: |
+          set -eu -o pipefail
+          ./container/publish.sh verify-candidates --manifest "${{ steps.manifest.outputs.manifest_path }}"
+
+      - name: Upload release manifest artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: zephyr-image-set
+          path: ${{ steps.manifest.outputs.manifest_path }}

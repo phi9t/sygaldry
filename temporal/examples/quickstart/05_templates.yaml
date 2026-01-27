@@ -1,0 +1,68 @@
+# 05_templates.yaml -- Templates and Imports
+#
+# Demonstrates reusable step patterns:
+#   - imports: load template definitions from external YAML files
+#   - templates: inline template definitions in the same plan
+#   - template: reference on a step to inherit from a template
+#   - Step-level overrides: override specific fields from the template
+#
+# Run:
+#   ./scripts/run.sh examples/quickstart/05_templates.yaml
+#
+# Override params:
+#   go run ./cmd/orchestrate run \
+#     -plan examples/quickstart/05_templates.yaml \
+#     -set environment=production \
+#     -set script_name=deploy.sh
+#
+# Templates are essential for building a library of reusable pipeline
+# components. An agent can compose new pipelines by referencing
+# existing templates and overriding only the parameters that change.
+#
+# Template resolution order:
+#   1. Imported templates (from files listed in imports:)
+#   2. Inline templates (from templates: block in this file)
+#   3. Step-level fields override template fields
+
+imports:
+  - templates/reusable.yaml
+
+params:
+  script_name: train.py
+  environment: staging
+
+templates:
+  notify:
+    type: command
+    command: bash
+    args:
+      - -lc
+      - "echo notification: ${{ params.script_name }} finished in ${{ params.environment }}"
+
+steps:
+  - id: run-training
+    name: Run training script
+    template: run-script
+
+  - id: validate-training
+    name: Validate training output
+    template: validate-result
+    depends_on: [run-training]
+
+  - id: run-evaluation
+    name: Run evaluation script
+    template: run-script
+    depends_on: [validate-training]
+    command: bash
+    args:
+      - -lc
+      - |
+        echo "Running EVALUATION (overridden from template)"
+        echo "Script: ${{ params.script_name }}"
+        echo "Validation was: ${{ steps.validate-training.outputs.valid }}"
+        echo "::set-output name=status::evaluated"
+
+  - id: notify-done
+    name: Send notification
+    template: notify
+    depends_on: [run-evaluation]

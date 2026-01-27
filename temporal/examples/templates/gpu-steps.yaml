@@ -1,0 +1,15 @@
+templates:
+  gpu-train:
+    type: container_job
+    container_job:
+      project_id: ${{ params.project_id }}
+      entrypoint: run-job.sh
+      gpu: true
+      command: "python train.py --model ${{ params.model_id }}"
+
+  eval-job:
+    type: command
+    command: bash
+    args:
+      - -lc
+      - "echo evaluating ${{ params.model_id }}"

@@ -1,0 +1,11 @@
+templates:
+  merged-command:
+    type: command
+    command: bash
+    args:
+      - -lc
+      - 'echo "${BASE}:${SHARED}:${OVR}"'
+    env:
+      BASE: base
+      SHARED: template
+      OVR: template

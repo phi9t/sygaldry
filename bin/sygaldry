@@ -1,0 +1,144 @@
+#!/bin/bash
+#
+# Sygaldry CLI
+# =============
+#
+# Unified entry point for the Sygaldry container infrastructure.
+#
+# INSTALL
+# -------
+#   ln -s /mnt/data_infra/workspace/sygaldry/bin/sygaldry /usr/local/bin/sygaldry
+#
+# USAGE
+# -----
+#   sygaldry                            # Interactive shell (default)
+#   sygaldry shell [--repo .]           # Explicit interactive shell
+#   sygaldry run -- <command>           # Run a command in container
+#   sygaldry job run <name> -- <cmd>    # Start a background job
+#   sygaldry job status <name>          # Check job status
+#   sygaldry job tail <name>            # Stream job logs
+#   sygaldry config show                # Show effective configuration
+#   sygaldry validate [--flags]         # Run validation
+#   sygaldry version                    # Show versions
+#   sygaldry --help                     # Show this help
+
+set -eu -o pipefail
+
+# Resolve SYGALDRY_HOME from this script's location (follows symlinks)
+SYGALDRY_HOME="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
+export SYGALDRY_HOME
+
+# Prefer the Rust binary when available (graceful fallback to bash dispatcher)
+ZEPHYR_BIN="${SYGALDRY_HOME}/crates/zephyr/target/release/zephyr"
+if [[ -x "${ZEPHYR_BIN}" ]]; then
+    exec "${ZEPHYR_BIN}" "$@"
+fi
+
+readonly LAUNCHER="${SYGALDRY_HOME}/container/launch_container.sh"
+readonly JOB_RUNNER="${SYGALDRY_HOME}/tools/zephyr_job"
+
+show_help() {
+    cat <<'EOF'
+Usage: sygaldry [subcommand] [options]
+
+Subcommands:
+  shell             Interactive shell (default if no subcommand)
+  run               Run a command in the container
+  job               Manage background jobs (run/status/tail/stop/health)
+  k3s               K3s dev pods and batch jobs (enter/job/setup)
+  config show       Show effective configuration
+  validate          Run validation suite
+  version           Show component versions
+
+Options (passed to launcher):
+  --repo <path>     Enable multi-repo mode
+  --entrypoint <n>  Select entrypoint (default: default.sh)
+  --help            Show this help
+
+Examples:
+  sygaldry                              # Interactive shell
+  sygaldry --repo . -- python train.py  # Run command in current repo
+  sygaldry job run train -- "python train.py"
+  sygaldry job status train
+  sygaldry config show
+  sygaldry validate --quick
+EOF
+}
+
+show_version() {
+    echo "Sygaldry CLI"
+    echo "  Home: ${SYGALDRY_HOME}"
+    if [[ -f "${SYGALDRY_HOME}/.git/HEAD" ]]; then
+        local ref
+        ref="$(git -C "${SYGALDRY_HOME}" rev-parse --short HEAD 2>/dev/null || echo "unknown")"
+        echo "  Git:  ${ref}"
+    fi
+}
+
+case "${1:-}" in
+    --help|-h|help)
+        show_help
+        exit 0
+        ;;
+    version|--version)
+        show_version
+        exit 0
+        ;;
+    shell)
+        shift
+        exec "${LAUNCHER}" "$@"
+        ;;
+    run)
+        shift
+        exec "${LAUNCHER}" --entrypoint run-job "$@"
+        ;;
+    job)
+        shift
+        exec "${JOB_RUNNER}" "$@"
+        ;;
+    config)
+        shift
+        case "${1:-}" in
+            show)
+                shift
+                exec "${LAUNCHER}" --print-effective-config "$@"
+                ;;
+            *)
+                echo "Usage: sygaldry config show" >&2
+                exit 2
+                ;;
+        esac
+        ;;
+    validate)
+        shift
+        exec "${SYGALDRY_HOME}/validate_all.sh" "$@"
+        ;;
+    k3s)
+        shift
+        case "${1:-}" in
+            enter|"")
+                shift 2>/dev/null || true
+                exec "${SYGALDRY_HOME}/k3s/bin/kentai" "$@"
+                ;;
+            job)
+                shift
+                exec "${SYGALDRY_HOME}/k3s/bin/kjob" "$@"
+                ;;
+            setup)
+                echo "Run these as root:" >&2
+                echo "  sudo ${SYGALDRY_HOME}/k3s/bootstrap/install-k3s.sh" >&2
+                echo "  sudo ${SYGALDRY_HOME}/k3s/bootstrap/setup-nvidia.sh" >&2
+                exit 0
+                ;;
+            *)
+                echo "Usage: sygaldry k3s [enter|job|setup]" >&2
+                exit 2
+                ;;
+        esac
+        ;;
+    # No subcommand or unrecognized flags — pass everything to the launcher
+    # This preserves backward compatibility with existing usage
+    *)
+        exec "${LAUNCHER}" "$@"
+        ;;
+esac

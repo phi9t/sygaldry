@@ -1,0 +1,4 @@
+interface:
+  display_name: "Zephyr"
+  short_description: "Run GPU containers, build MLSys envs, and vendor hermetic kits"
+  default_prompt: "Use zephyr to run GPU container jobs with Spack (PyTorch/JAX), build and validate MLSys UV overlay environments, and vendor hermetic Zephyr runtime kits into target repos."

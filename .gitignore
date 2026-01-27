@@ -1,0 +1,33 @@
+.DS_Store
+.idea
+*.log
+tmp/
+
+*.autogen
+*.autogen.sh
+
+# spack environment dir
+.spack-env
+
+spack.yaml
+# Note: spack.lock is NOT ignored - commit it for reproducible builds
+
+# Python artifacts
+__pycache__/
+*.pyc
+.venv/
+.venv-*/
+.ruff_cache/
+.pytest_cache/
+.coverage
+coverage.xml
+
+temporal/internal/activities/logs/
+temporal/orchestrate
+temporal/worker
+temporal/logs/
+
+crates/zephyr/target
+outputs/
+.quality/
+

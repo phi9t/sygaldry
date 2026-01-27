@@ -1,0 +1,20 @@
+steps:
+  - id: step-one
+    name: Step One
+    type: command
+    command: bash
+    args: ["-lc", "echo 'hello from step one'"]
+
+  - id: step-two
+    name: Step Two
+    type: command
+    depends_on: [step-one]
+    command: bash
+    args: ["-lc", "echo 'step two output'; echo 'err two' 1>&2"]
+
+  - id: step-three
+    name: Step Three
+    type: command
+    depends_on: [step-two]
+    command: bash
+    args: ["-lc", "echo 'final step'"]
