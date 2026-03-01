@@ -72,7 +72,10 @@ def main() -> int:
     )
 
     if not jnp.isfinite(final) or final >= initial:
-        print(f"loss did not improve: initial={initial:.6f} final={final:.6f}", file=sys.stderr)
+        print(
+            f"loss did not improve: initial={initial:.6f} final={final:.6f}",
+            file=sys.stderr,
+        )
         return 1
     return 0
 

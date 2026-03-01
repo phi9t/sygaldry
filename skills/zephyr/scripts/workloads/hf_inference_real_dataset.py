@@ -21,14 +21,16 @@ def _prefer_active_venv_site_packages() -> None:
 
 _prefer_active_venv_site_packages()
 
-import torch
-from datasets import load_dataset
-from transformers import AutoModelForSequenceClassification, AutoTokenizer
+import torch  # noqa: E402
+from datasets import load_dataset  # noqa: E402
+from transformers import AutoModelForSequenceClassification, AutoTokenizer  # noqa: E402
 
 
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Run real HF inference workload on CUDA")
-    p.add_argument("--model-id", default="distilbert-base-uncased-finetuned-sst-2-english")
+    p.add_argument(
+        "--model-id", default="distilbert-base-uncased-finetuned-sst-2-english"
+    )
     p.add_argument("--dataset-id", default="ag_news")
     p.add_argument("--dataset-config", default="")
     p.add_argument("--split", default="test[:5000]")
@@ -36,7 +38,10 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--batch-size", type=int, default=64)
     p.add_argument("--max-length", type=int, default=256)
     p.add_argument("--seed", type=int, default=2026)
-    p.add_argument("--report-path", default="/workspace/zephyr_validation/reports/hf_inference_report.json")
+    p.add_argument(
+        "--report-path",
+        default="/workspace/zephyr_validation/reports/hf_inference_report.json",
+    )
     return p.parse_args()
 
 
@@ -164,7 +169,9 @@ def main() -> int:
 
     report_path = Path(args.report_path)
     report_path.parent.mkdir(parents=True, exist_ok=True)
-    report_path.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    report_path.write_text(
+        json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
 
     print(json.dumps(result))
 

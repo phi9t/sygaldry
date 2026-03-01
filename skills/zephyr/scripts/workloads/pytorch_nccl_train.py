@@ -58,12 +58,16 @@ def main() -> int:
     mean_final = float((final / world_size).item())
 
     if rank == 0:
-        print(json.dumps({
-            "workload": "pytorch_nccl_train",
-            "world_size": world_size,
-            "mean_initial_loss": mean_initial,
-            "mean_final_loss": mean_final,
-        }))
+        print(
+            json.dumps(
+                {
+                    "workload": "pytorch_nccl_train",
+                    "world_size": world_size,
+                    "mean_initial_loss": mean_initial,
+                    "mean_final_loss": mean_final,
+                }
+            )
+        )
 
     ok = torch.isfinite(torch.tensor(mean_final)) and mean_final < mean_initial
 

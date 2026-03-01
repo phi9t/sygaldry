@@ -243,6 +243,7 @@ if [[ -d "${VENV_DIR}" ]]; then
     if [[ -x "${PYTEST}" ]] && [[ ${#py_files[@]} -gt 0 ]]; then
         PYTEST_ARGS=(
             --ignore=pkg
+            --ignore=outputs
             --ignore=llm_speculative_decoding_gpt2_test.py
             --ignore=tools/qwen3_scale_test.py
             -q

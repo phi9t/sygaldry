@@ -4,7 +4,6 @@ import sys
 
 from llvmlite import binding as llvm
 
-
 IR = r"""
 define i32 @foo(i32 %a, i32 %b) {
 entry:
