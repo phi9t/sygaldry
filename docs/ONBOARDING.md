@@ -35,7 +35,7 @@ docker info | grep -i nvidia
 Optional CLI symlink:
 
 ```bash
-ln -s /mnt/data_infra/workspace/sygaldry/bin/sygaldry /usr/local/bin/sygaldry
+ln -s /path/to/sygaldry/bin/sygaldry /usr/local/bin/sygaldry  # replace with your actual clone path
 ```
 
 ## 3) First 30 Minutes
@@ -196,7 +196,7 @@ Release references:
 
 - `docs/RELEASE_CHECKLIST.md`
 - `docs/RELEASE_NOTES_2026-02.md`
-- `docs/RELEASE_READINESS_REVIEW_2026-02.md`
+- `docs/internal/RELEASE_READINESS_REVIEW_2026-02.md` (maintainer-internal)
 
 ## 8) Canonical Docs
 

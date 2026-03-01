@@ -69,6 +69,11 @@ Derived-image flow (optional but recommended):
 
 ## 5) Release Artifacts
 
+- [ ] `LICENSE` present at repo root.
+- [ ] `CONTRIBUTING.md`, `SECURITY.md`, `CODE_OF_CONDUCT.md` present (or explicitly deferred).
+- [ ] No internal-only docs at public surface (`docs/internal/` is the triage destination).
+- [ ] `temporal/docker-compose.yml` has dev-only credential comment.
+- [ ] `container/logs/` in `.gitignore`; no log files tracked (`git ls-files container/logs/` is empty).
 - [ ] Tag or version metadata updated if required by release process.
 - [ ] Internal announcement prepared with:
   - core feature highlights

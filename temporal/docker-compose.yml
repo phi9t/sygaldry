@@ -1,3 +1,9 @@
+# DEVELOPMENT ONLY — DO NOT USE IN PRODUCTION
+#
+# Uses hardcoded temporal/temporal credentials for local development.
+# For local dev, prefer ./scripts/start-temporal.sh (no Postgres required).
+# For production, use a proper Postgres instance with strong credentials.
+
 services:
   postgres:
     image: postgres:16

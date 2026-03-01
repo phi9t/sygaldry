@@ -7,6 +7,8 @@ Sygaldry is an AI/ML research infrastructure repo with two production subsystems
 
 GPU-only infrastructure: NVIDIA Docker runtime is required.
 
+> **New here?** See [GETTING_STARTED.md](GETTING_STARTED.md) for first-time setup.
+
 ## Most Important Features
 
 ### Zephyr Container Infrastructure
@@ -80,6 +82,11 @@ Canonical manual: `docs/ZEPHYR_VENDORING_GUIDE.md`.
 
 ## Documentation Map (Canonical Sources)
 
+- `GETTING_STARTED.md` — first-time user guide.
+- `DEPLOYMENT.md` — fresh machine setup (NVIDIA, Docker, Go).
+- `TROUBLESHOOTING.md` — common issues and diagnostics.
+- `docs/ARCHITECTURE.md` — architecture overview (Zephyr + Temporal).
+- `docs/TEMPORAL_PLAN_SCHEMA.md` — YAML plan field reference.
 - `container/ZEPHYR_SYSTEM_DESIGN.md` - authoritative Zephyr infra contract.
 - `docs/ZEPHYR_VENDORING_GUIDE.md` - canonical vendoring and operation manual.
 - `temporal/TEMPORAL_DESIGN.md` - canonical Temporal design and roadmap state.
@@ -90,8 +97,6 @@ Canonical manual: `docs/ZEPHYR_VENDORING_GUIDE.md`.
 - `docs/quality/COVERAGE_BASELINE.yaml` - coverage ratchet baseline and waiver map.
 - `docs/RELEASE_CHECKLIST.md` - release gate checklist.
 - `docs/RELEASE_NOTES_2026-02.md` - current release notes.
-- `docs/RELEASE_READINESS_REVIEW_2026-02.md` - review findings and closure status.
-- `docs/ZEPHYR_CONTAINER_ADAPT_RELEASE_LAUNCH.md` - Zephyr adapt skill launch package.
 
 ## Validation
 
@@ -109,9 +114,20 @@ cd temporal && go vet ./... && go test ./... && ./scripts/test-e2e.sh
 tools/zephyr_vendor_infra.sh check --target-repo /path/to/target-repo
 ```
 
+## Community
+
+- GitHub Issues for bug reports and feature requests.
+- See [CONTRIBUTING.md](CONTRIBUTING.md) to contribute.
+- [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)
+
 ## Troubleshooting
 
 - NVIDIA/container runtime: `container/NVIDIA_FIXES.md`, `container/diagnose_nvidia.sh`
 - Zephyr infra contract and policy: `container/ZEPHYR_SYSTEM_DESIGN.md`
 - Temporal behavior and limits: `temporal/TEMPORAL_DESIGN.md`
 - Visualizer: `cd temporal/visualizer && node server.js` then open `http://localhost:8787`
+- See [TROUBLESHOOTING.md](TROUBLESHOOTING.md) for the full guide.
+
+## License
+
+MIT License. See [LICENSE](LICENSE).
