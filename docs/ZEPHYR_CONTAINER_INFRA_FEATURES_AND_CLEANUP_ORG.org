@@ -1,0 +1,287 @@
+#+TITLE: Zephyr Container Infra — Features by Implementation and Cleanup Proposal
+#+AUTHOR: Sygaldry
+#+DATE: 2026-02-21
+#+AGENT: Auto
+#+MODEL: Cursor Agent
+#+OPTIONS: toc:3 num:t
+#+STARTUP: overview
+
+* Scope
+
+This document focuses only on the *Zephyr container infrastructure*: the host-side launcher, CLI, job runner, staging, and the in-container entrypoints/init. For each major feature we describe the Bash and Rust implementations, assess usefulness and duplication, and propose a path to a clean, concise, useful surface.
+
+* Intended workflow: Bash first, Rust as formalization
+
+** Policy
+
+- *Bash* is the *rapid-prototype* layer: coding agents and developers start with the bash implementation to build features quickly and maintain high iteration velocity. New behavior and options are added in bash first.
+- *Rust* is the *formalization* of the bash version: once the feature set is more or less stable, the implementation is moved (ported) to Rust to ensure high code quality—structured errors, tests, single binary, maintainable contracts.
+- So Rust is not a parallel fork; it is the stabilized, formalized version of what bash proved out. Duplication is intentional during the “bash has it, Rust doesn’t yet” or “Rust has been ported and now mirrors bash” phases.
+
+** Implications for the doc
+
+- “Duplication” below is read as: *two stages of the same feature* (bash = prototype, Rust = formalization), not as “two competing impls to reconcile.”
+- “Proposal” for each feature is framed as: how to keep bash useful for iteration, when to port to Rust, and how to keep the contract clear so the port is accurate.
+
+* Feature 1 — Container launch (host)
+
+** Bash
+- =container/launch_container.sh= (single script, ~650 lines).
+- Sequence: check docker/nvidia → setup_host_directories → build_container_image (optional) → resolve paths → acquire_lease → build_docker_args (associative array) → =docker run= → release_lease (manual in main).
+- Entrypoint chosen by =--entrypoint=; legacy vs multi-repo branch inside =build_docker_args= and =main=.
+- No subprocess for docker: script builds argv and runs =docker run ...=.
+
+** Rust
+- =host/launcher.rs= orchestrates; =requirements.rs=, =host/cuda.rs=, =host/dirs.rs=, =host/image.rs=, =host/lease.rs=, =host/docker_args.rs= each do one step.
+- Same sequence. Lease held via =LeaseGuard= (RAII); =docker run= via =std::process::Command=.
+- Entrypoint dir resolved from image labels (=sygaldry.entrypoints.baked=) or host entrypoint dir.
+
+** Usefulness
+- Core feature. Both implementations are useful and match the same contract (layout, env, mounts).
+
+** Duplication / overlap
+- Launch pipeline exists in both: bash was the prototype; Rust formalized it. Drift risk when new options or mounts are added in bash and not yet ported to Rust.
+
+** Proposal
+- Bash remains the place to *add* new launch behavior (e.g. new flag, mount, or env) for fast iteration. Once the behavior is stable, port to Rust and add a CI check that both produce the same =docker run= args for a fixed config. Rust is the formalized contract; bash is the iteration surface until port is done.
+
+* Feature 2 — Configuration and host layout
+
+** Bash
+- All layout and config in =launch_container.sh=: =ZEPHYR_*= and =SYGALDRY_*= read at top; =ZEPHYR_PROJECT_ROOT=, =HOST_*=, =CONTAINER_*= constants; =setup_host_directories= creates a fixed list of dirs; =layout_version.json= written under =ZEPHYR_META_ROOT=.
+- Effective config: =--print-effective-config= logs a fixed set of variables to stderr.
+
+** Rust
+- =config.rs=: =ZephyrConfig::from_env()=, =CliOverrides=, =HostLayout=, =LaunchMode=, =LeaseMode=, =CacheProfile=, =BuildPolicy=.
+- =paths.rs=: =HostLayout::required_dirs()=, container path constants; =paths::resolve_mount_path=.
+- =config.print_effective()= prints structured config.
+
+** Usefulness
+- Essential for debugging and for any tool (Temporal, scripts) that must know paths and modes.
+
+** Duplication / overlap
+- Layout and defaults exist in both. When adding a new dir or cache, bash gets it first; Rust is updated during formalization. Legacy aliases live in bash; Rust =warn_legacy= documents renames.
+
+** Proposal
+- Document the layout contract in one place (=container/ZEPHYR_SYSTEM_DESIGN.md= or =CONTRACT.md=): dir list, env var names, defaults. When formalizing in Rust, =HostLayout= and =config.rs= implement that contract. For new layout changes: add in bash, document in the contract, then port to Rust so =config show= and dir creation match.
+
+* Feature 3 — Multi-repo mode
+
+** Bash
+- =--repo <path>=: sets =mode=multi-repo=; mounts =sygaldry_home= at =/opt/sygaldry= (ro), =workspace= at =/workspace=, repo at =/workspace/<repo_name>=; workdir =/workspace/<repo_name>=. Entrypoint can be from baked dir or =CONTAINER_SYGALDRY/container/entrypoints/=.
+
+** Rust
+- =config.rs= =resolve_launch_mode()=; =docker_args.rs= =build_mode_mounts()=: same mounts and workdir. Same contract.
+
+** Usefulness
+- High: allows using the same GPU env from any repo without copying Spack/store.
+
+** Duplication / overlap
+- Same logic in both; Rust formalized bash. Historical drift (SYGALDRY_ROOT / workdir) is a contract bug to fix in bash and keep correct in Rust.
+
+** Proposal
+- Document the multi-repo contract once (workdir =/workspace/<repo_name>=; =SYGALDRY_ROOT= for app use). Fix verify scripts to assert that contract. New multi-repo behavior: implement in bash first, then port to Rust when stable.
+
+* Feature 4 — GPU lease
+
+** Bash
+- =acquire_lease= / =release_lease= in =launch_container.sh=; =lease_file_for=, =read_lease_expiry=; TTL 21600s; =--lease-mode= off|warn|enforce=. Lease released explicitly at end of =main= (and on error paths must be kept in mind).
+
+** Rust
+- =host/lease.rs=: =acquire()= returns =LeaseGuard=; =Drop= releases. Same TTL and modes. Structured error =LeaseConflict=.
+
+** Usefulness
+- Useful on shared hosts to avoid multiple heavy GPU processes stepping on each other; =warn= is a good default.
+
+** Duplication / overlap
+- Lease logic and file format are shared contract; Rust formalized bash (RAII =LeaseGuard= improves correctness).
+
+** Proposal
+- Document lease file format and path in the infra contract so future changes are done in bash first, then ported to Rust. No need to “merge” two impls—Rust is the formalization of the same protocol.
+
+* Feature 5 — Cache profile
+
+** Bash
+- =--cache-profile= shared|isolated|hybrid=; passed into =build_docker_args= and stored in =CFG[cache_profile]=; affects which caches are used (implementation may vary by profile in how =CFG= is built).
+
+** Rust
+- =CacheProfile= enum; =config.rs=; =docker_args::build= uses it for volume mounts. Same three modes.
+
+** Usefulness
+- Useful for isolation (e.g. CI vs dev). Many users may stay on =shared=.
+
+** Duplication / overlap
+- Same three modes; Rust formalized bash. Mount differences per profile are part of the contract.
+
+** Proposal
+- Document one table: per profile, which host paths map to which caches. New profile or path: add in bash, document, then port to Rust. Rust =docker_args= implements the documented table.
+
+* Feature 6 — Image build policy
+
+** Bash
+- =BUILD_IMAGE_POLICY= / =SYGALDRY_BUILD_IMAGE=: auto|always|never=; =build_container_image=: if never and no image → error; if always → build; if auto → build if no image or Dockerfile newer than image Created (timestamp comparison).
+
+** Rust
+- =host/image.rs=: =BuildPolicy::Auto|Always|Never=; =should_build_decision()= (pure); same semantics. Label read =sygaldry.spack.baked=, =sygaldry.entrypoints.baked= for downstream.
+
+** Usefulness
+- Necessary to avoid unnecessary rebuilds (auto) or to force clean build (always).
+
+** Duplication / overlap
+- Same policy; Rust formalized bash. Edge cases (timestamp vs epoch) should match after port.
+
+** Proposal
+- Document the build decision matrix once. When changing build policy behavior, do it in bash first; when formalizing in Rust, add a test that bash and Rust yield the same build/skip for the same image and Dockerfile state.
+
+* Feature 7 — Docker argument construction
+
+** Bash
+- =build_docker_args= in =launch_container.sh=: large function building =docker_args= array (--rm, --init, -it if tty, net, ipc, user, mounts, env, runtime=nvidia, etc.). Volume list and env list are inline.
+
+** Rust
+- =host/docker_args.rs=: =build()=; =build_volume_mounts()=, =build_mode_mounts()=; env passthrough via constant list; atty check for -it.
+
+** Usefulness
+- Critical: wrong args → broken or insecure container.
+
+** Duplication / overlap
+- Docker argv is the same logical contract in both; Rust formalized bash. New mounts or env: add in bash first, then port to Rust.
+
+** Proposal
+- Keep a *contract* list (in =ZEPHYR_SYSTEM_DESIGN.md= or =CONTRACT.md=) of every volume and passthrough env. When adding a new one: implement in bash, add to the contract, then port to Rust. Add CI that compares =docker run= args (or normalized =-v= / =-e=) for a fixed config so the Rust formalization stays aligned with bash after each port.
+
+* Feature 8 — Job runner (host)
+
+** Bash
+- =tools/zephyr_job=: subcommands =run=, =status=, =tail=, =stop=, =health=. =run=: builds inline wrapper script (JSONL + status file + heartbeat), base64-encodes it, runs =launch_container.sh ... bash -lc "echo $WRAP_B64 | base64 -d | bash"= in background via nohup; writes PID and symlink =latest-<job>=. Paths: =projects/<id>/outputs/.run-metadata/<run_id>/*.status|*.jsonl=, =runs/<run_id>/raw/*.log=.
+
+** Rust
+- =host/job.rs=: same subcommands. =run_job= builds docker invocation via Rust launcher (same config, docker args); container entrypoint is =zephyr job-wrapper= (Rust in-container). JSONL and status file paths match. Heartbeat in Rust (background thread). No bash wrapper script.
+
+** Usefulness
+- Very useful for long-running training or batch jobs; status/tail/stop are necessary for ops.
+
+** Duplication / overlap
+- Two ways to run a job: bash (=zephyr_job= + inline wrapper script) vs Rust (launcher + =job-wrapper=). Rust is the formalization; both must write the same paths and format so status/tail/stop work for any job.
+
+** Proposal
+- Document the *job contract* once (paths, status keywords, JSONL shape). New job behavior: prototype in bash (=tools/zephyr_job=), then port to Rust when stable. Keep =sygaldry job= as the single UX (bash dispatcher calls =zephyr_job=; Rust binary implements job in Rust). No need for Rust to call the bash script—Rust is the formalized implementation of the same contract.
+
+* Feature 9 — Spack staging (host)
+
+** Bash
+- =tools/zephyr_stage_spack.sh=: options =--source-yaml=, =--run-root=, =--spec=, =--python-import=, =--forbidden-names=, etc. Runs concretize analyzer, guard, spack install, view regenerate, verify (pkg/zephyr, GPU, imports). Exit codes 2–15. Not invoked from =bin/sygaldry= in bash mode (user runs script directly).
+
+** Rust
+- =host/staging.rs=: =run_stage(&StageConfig)=; same pipeline (concretize → guard → install → view → verify). Same exit code scheme. Invoked by =sygaldry stage= when using Rust binary.
+
+** Usefulness
+- Staging is the right way to add Spack deps safely (guard against rebuilding torch/jax). High value for maintainability.
+
+** Duplication / overlap
+- Staging pipeline was prototyped in bash (=zephyr_stage_spack.sh=); Rust formalized it (=host/staging.rs=). Same pipeline and exit codes.
+
+** Proposal
+- New staging behavior (e.g. new step or option): add in =zephyr_stage_spack.sh= first for velocity. When stable, port to Rust =stage= and document. =sygaldry stage= (Rust) is the formalized path when the binary is present; =zephyr_stage_spack.sh= remains the iteration and fallback path. Align exit codes and CLI options so both satisfy the same contract; CI can assert same exit code for the same command.
+
+* Feature 10 — CLI entry point and dispatch
+
+** Bash
+- =bin/sygaldry=: if =crates/zephyr/target/release/zephyr= is executable, =exec= it with all args. Else: case on =$1= (shell, run, job, config, validate, version) and delegate to =launch_container.sh=, =tools/zephyr_job=, or =validate_all.sh=.
+
+** Rust
+- =main.rs=: parse CLI with clap; =RuntimeContext::detect()= (host vs container); =host::dispatch= or =container::dispatch=. Subcommands: shell, run, job, build, config, stage, validate, version (host); init, gpu-check, verify-spack, uv-install, hf-download, entrypoint, job-wrapper (container).
+
+** Usefulness
+- Single command =sygaldry= is the right UX. Fallback to bash when Rust not built keeps usability.
+
+** Duplication / overlap
+- Two dispatchers: bash is minimal (shell, run, job, config, validate, version); Rust has the full formalized surface (plus build, stage). Subcommand surface can lag in bash until features are ported.
+
+** Proposal
+- =bin/sygaldry= stays the single entry point. Rust handles all subcommands when the binary is present. Bash dispatcher: add =sygaldry stage= that invokes =zephyr_stage_spack.sh= so the UX is one command even before/during formalization. Optional: =sygaldry build= in bash that runs launcher in a build-only way. New subcommands are added in Rust only after the behavior is proven in bash (or in bash script invoked by the dispatcher).
+
+* Feature 11 — Container entrypoints (default, run-job, verify-*, uv-install, hf-download, spack-*)
+
+** Bash
+- Nine scripts in =container/entrypoints/*.sh=: each sources =lib/spack_init.sh= (or equivalent), then does one thing (interactive shell, exec command, verify GPU, verify Spack, uv install, HF download, hf-lora-setup, spack-build, spack-install). Docker =--entrypoint= points at one of these scripts.
+
+** Rust
+- When container starts, real entrypoint is the Rust binary; it sees =SYGALDRY_ENTRYPOINT= (or similar) and runs the corresponding logic in =container/entrypoint.rs= (default → init + gpu_check + shell; run-job → init + exec; verify-gpu → gpu_check::run(); etc.). No bash scripts invoked for those flows when the image uses Rust as entrypoint. (If image still uses bash entrypoints, then bash scripts run.)
+
+** Usefulness
+- Entrypoints are the contract for “what the container can do.” Both forms are useful; Rust avoids per-entrypoint script parsing and can give better errors.
+
+** Duplication / overlap
+- Same entrypoint names and behaviors: bash scripts are the prototype; Rust =entrypoint.rs= is the formalization. New entrypoint: add a bash script first, then port to Rust when stable.
+
+** Proposal
+- Document the *entrypoint contract* once (name, purpose, args, behavior). New entrypoints: implement as a bash script in =container/entrypoints/= for fast iteration; when stable, add the corresponding branch in Rust =entrypoint.rs= and ensure the image can use either (bash script when Rust not in image, Rust dispatch when binary is entrypoint). One contract, two implementations—Rust is the quality implementation of the same behavior.
+
+* Feature 12 — In-container init (Spack, CUDA, MLSys venv)
+
+** Bash
+- =container/lib/spack_init.sh= (and similar): =sygaldry_full_init=: source Spack, activate env, set CUDA env, optional MLSys venv. Used by all entrypoint scripts.
+
+** Rust
+- =container/spack.rs=: =full_init()= (init_spack, activate_env, ensure_view_fallback, cuda::setup_cuda_env, mlsys_venv::activate); =container/cuda.rs=, =container/mlsys_venv.rs=.
+
+** Usefulness
+- Required for any serious use (Python, torch/jax, CUDA). Same behavior is essential.
+
+** Duplication / overlap
+- Init sequence was defined in bash (=lib/spack_init.sh=); Rust formalized it (=spack.rs=, =cuda.rs=, =mlsys_venv.rs=). Order and env vars are the same contract.
+
+** Proposal
+- Document the *init sequence* once (Spack → activate env → view fallback → CUDA → MLSys venv). Changes: try in bash first, then port to Rust. Add a test that the same env (e.g. =python -c "import torch"=) works after init by either path so formalization stays accurate.
+
+* Feature 13 — In-container actions (gpu-check, verify-spack, uv-install, hf-download, job-wrapper)
+
+** Bash
+- Implemented inside entrypoint scripts or (for job) inline wrapper script: verify-gpu.sh runs Python checks; verify-spack.sh runs Python checks; uv-install.sh runs uv with constraints; hf-download.sh runs Python; job wrapper is the base64-decoded script in =zephyr_job=.
+
+** Rust
+- =container/gpu_check.rs=, =verify.rs=, =uv_install.rs=, =hf_download.rs=, =entrypoint.rs= (job_wrapper with heartbeat thread). Same outcomes; some scripts embedded via =include_str!= in Rust.
+
+** Usefulness
+- All are used in real workflows. GPU/Spack verification and uv-install/hf-download are especially important for ML.
+
+** Duplication / overlap
+- Each action: bash scripts are the prototype; Rust modules are the formalization. Shared scripts (e.g. gpu_check.py) can be invoked by both; some logic is embedded in Rust (=include_str!=) after port.
+
+** Proposal
+- New in-container action: implement in bash (script or entrypoint) first. When stable, port to Rust (invoke same script from Rust, or reimplement and embed if preferred for a single binary). For verification: prefer one set of scripts on disk invoked by both so fixes apply everywhere. For uv-install / hf-download / job-wrapper: Rust is the formalized implementation; bash remains the iteration surface until ported. No requirement that bash “calls Rust”—Rust is the port of the stabilized bash behavior.
+
+* Summary — Making it clean and useful
+
+** Duplication summary (Bash = prototype, Rust = formalization)
+| Feature           | Relationship        | Recommendation |
+|-------------------+---------------------+----------------|
+| Container launch  | Bash first, Rust port | New behavior in bash; port to Rust when stable; CI compare argv |
+| Config/layout     | Same contract       | Document once; bash first for new dirs/vars, then port |
+| Multi-repo        | Same contract       | Fix contract (SYGALDRY_ROOT); new behavior in bash, then Rust |
+| GPU lease         | Rust formalized bash| Document protocol; new behavior in bash, then port |
+| Cache profile     | Rust formalized bash| Document table; new profile/path in bash, then port |
+| Image build       | Rust formalized bash| Document matrix; test both match after port |
+| Docker args       | Rust formalized bash| Contract list + CI diff; new mount/env in bash, then port |
+| Job runner        | Rust formalized bash| Document job contract; both write same paths/format |
+| Spack staging     | Bash script first, Rust port | New options in bash; port to Rust when stable; =sygaldry stage= in bash dispatcher |
+| CLI dispatch      | Single =bin/sygaldry= | Rust full surface; bash minimal + =stage= (call script) |
+| Entrypoints       | Bash scripts first, Rust port | New entrypoint: bash script, then Rust branch when stable |
+| In-container init| Rust formalized bash| Document sequence; changes in bash, then port |
+| In-container actions | Bash first, Rust port | New action in bash; port to Rust when stable; shared verify scripts where possible |
+
+** Suggested order of work
+1. *Document contract*: One place (=ZEPHYR_SYSTEM_DESIGN.md= or =CONTRACT.md=) for layout, entrypoints, job paths/format, lease format, build matrix, docker volumes/env. This is the spec that both bash (prototype) and Rust (formalization) implement.
+2. *Workflow in CLAUDE.md/AGENTS.md*: State explicitly: “New features: implement in bash first for velocity; when stable, port to Rust for code quality. Rust is the formalization of the bash version.”
+3. *CI after port*: When a feature is ported to Rust, add a check that both match (config output, =docker run= args, staging exit codes, or job output format) so the formalization stays accurate.
+4. *Bash dispatcher*: Add =sygaldry stage= that calls =zephyr_stage_spack.sh= so one UX for staging regardless of binary.
+5. *Contract fixes*: Fix known drift (e.g. multi-repo SYGALDRY_ROOT, verify scripts) so bash and Rust both implement the same contract.
+6. *Ongoing*: New behavior always starts in bash; port to Rust when the feature set for that area is stable; update contract doc when adding to the surface.
+
+* Document history
+
+| Date       | Change |
+|------------|--------|
+| 2026-02-21 | Initial: features one-by-one (bash vs Rust), usefulness, duplication, cleanup proposals. |
+| 2026-02-21 | Clarified workflow: Bash = rapid prototype for velocity; Rust = formalization of stabilized bash for code quality. Updated proposals and summary to match. |

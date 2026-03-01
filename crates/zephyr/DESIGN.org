@@ -1,0 +1,470 @@
+#+TITLE: Zephyr-RS: Next-Generation Container Infrastructure in Rust
+#+AUTHOR: Sygaldry Team
+#+DATE: 2026-02-16
+#+OPTIONS: toc:3 num:t
+#+STARTUP: overview
+
+* Meta
+- Version :: 0.1 (design draft)
+- Date :: 2026-02-16
+- Status :: Proposed
+
+* Motivation
+:PROPERTIES:
+:CUSTOM_ID: motivation
+:END:
+
+The current Zephyr container infrastructure is ~1,500 lines of bash across 15+ scripts.
+It works, but has accumulated real pain points:
+
+| Pain Point        | Bash Reality                                       | Rust Solution                                       |
+|-------------------+----------------------------------------------------+-----------------------------------------------------|
+| Silent failures   | =set -euo pipefail= catches some, misses many     | =Result<T, E>= — every failure is typed and handled |
+| Config sprawl     | 40+ env vars, =readonly= chains, =${X:-${Y:-def}}= | Struct with =#[derive(Default)]=, layered loading    |
+| Argument building | Associative arrays + =printf '%s\n'=               | Builder pattern with typed fields                   |
+| Lease management  | Hand-rolled file locking with awk                  | =flock(2)= + serde, atomic writes                   |
+| Testing           | =launch_container_test.sh= (fragile)               | =cargo test= with unit + integration tests           |
+| Cross-platform    | bash-only, GNU coreutils assumed                   | Single static binary, musl target                   |
+| In-container init | Sourcing chains (=spack_init.sh → errors.sh=)      | Same binary, different subcommand                   |
+
+The goal is *one binary* — =zephyr= — that replaces:
+
+- =bin/sygaldry= (host CLI dispatcher)
+- =container/launch_container.sh= (launcher core, 630 lines)
+- =tools/zephyr_job= (host-side job runner, 265 lines)
+- =container/entrypoints/*.sh= (8 entrypoint scripts)
+- =container/lib/*.sh= (shared libraries)
+
+* Architecture
+:PROPERTIES:
+:CUSTOM_ID: architecture
+:END:
+
+** Single Binary, Two Modes
+
+#+begin_example
+zephyr (single binary)
+├── Host mode (auto-detected: SYGALDRY_IN_CONTAINER != 1)
+│   ├── zephyr shell [--repo .] [-- args...]     # Interactive container
+│   ├── zephyr run [--repo .] -- <cmd>            # Run command in container
+│   ├── zephyr job run|status|tail|stop|health    # Background job management
+│   ├── zephyr build [--force]                    # Build Docker image
+│   ├── zephyr config show                        # Print effective config
+│   ├── zephyr validate [--quick]                 # Run validation suite
+│   └── zephyr version                            # Version info
+│
+└── Container mode (auto-detected: SYGALDRY_IN_CONTAINER == 1)
+    ├── zephyr init                               # Full Spack+CUDA init
+    ├── zephyr init --spack-only                  # Spack init only
+    ├── zephyr init --cuda-only                   # CUDA env setup only
+    ├── zephyr gpu-check                          # GPU validation (Torch + JAX)
+    ├── zephyr verify-spack                       # Spack package verification
+    ├── zephyr uv-install <pkg...>                # UV install with Spack constraints
+    ├── zephyr hf-download model|dataset <id>     # HuggingFace download
+    └── zephyr entrypoint <name> [-- args...]     # Run a named entrypoint sequence
+#+end_example
+
+Mode detection: check =SYGALDRY_IN_CONTAINER= env var. If =1=, container mode.
+Same binary is baked into the Docker image AND installed on the host.
+
+** Module Layout
+
+#+begin_example
+crates/zephyr/
+├── Cargo.toml
+├── DESIGN.org
+├── src/
+│   ├── main.rs                  # Entry point
+│   ├── cli.rs                   # clap CLI definitions (all subcommands)
+│   ├── config.rs                # Layered configuration (env → flags → defaults)
+│   ├── context.rs               # Runtime context (host vs container detection)
+│   ├── error.rs                 # Error types with remediation hints
+│   ├── paths.rs                 # Host layout + container path constants
+│   │
+│   ├── host/                    # ── Host-side operations ──
+│   │   ├── mod.rs
+│   │   ├── launcher.rs          # Docker run orchestration
+│   │   ├── image.rs             # Image build policy (auto/always/never)
+│   │   ├── dirs.rs              # Host directory creation + layout_version.json
+│   │   ├── lease.rs             # File-based lease acquire/release
+│   │   ├── cuda.rs              # nvidia-smi CUDA version detection
+│   │   ├── docker_args.rs       # Docker CLI argument builder
+│   │   ├── requirements.rs      # Pre-flight checks (docker, nvidia runtime)
+│   │   └── job.rs               # Background job management
+│   │
+│   └── container/               # ── Container-side operations ──
+│       ├── mod.rs
+│       ├── spack.rs             # Spack init + env activation cascade
+│       ├── cuda.rs              # CUDA_HOME + PATH + LD_LIBRARY_PATH setup
+│       ├── gpu_check.rs         # Torch + JAX GPU validation
+│       ├── mlsys_venv.rs        # MLSys venv auto-activation
+│       ├── uv_install.rs        # UV install with Spack constraints
+│       ├── hf_download.rs       # HuggingFace download
+│       ├── verify.rs            # Spack verification (import + tensor + NN)
+│       └── entrypoint.rs        # Named entrypoint sequences
+│
+└── tests/
+    ├── config_test.rs
+    ├── paths_test.rs
+    ├── docker_args_test.rs
+    └── lease_test.rs
+#+end_example
+
+** Dependencies
+
+#+begin_src toml
+[dependencies]
+clap = { version = "4", features = ["derive", "env"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+chrono = { version = "0.4", features = ["serde"] }
+thiserror = "2"
+which = "7"
+libc = "0.2"
+#+end_src
+
+*Notably absent:* No async runtime. All Docker interaction is via =std::process::Command=
+calling the =docker= CLI. Keeps the binary small and debuggable.
+
+* Core Types
+:PROPERTIES:
+:CUSTOM_ID: core-types
+:END:
+
+** Configuration
+
+#+begin_src rust
+/// Layered configuration: env vars → CLI flags → defaults.
+pub struct ZephyrConfig {
+    // ── Identity ──
+    pub project_id: String,         // SYGALDRY_PROJECT_ID || basename($PWD)
+    pub run_id: String,             // SYGALDRY_RUN_ID || auto-generated
+
+    // ── Roots ──
+    pub cache_root: PathBuf,        // ZEPHYR_CACHE_ROOT
+    pub shared_root: PathBuf,       // ZEPHYR_SHARED_ROOT
+    pub build_root: PathBuf,        // ZEPHYR_BUILD_ROOT
+    pub projects_root: PathBuf,     // ZEPHYR_PROJECTS_ROOT
+    pub project_root: PathBuf,      // ZEPHYR_PROJECT_ROOT
+
+    // ── Shared caches (with legacy fallbacks) ──
+    pub spack_store: PathBuf,       // ZEPHYR_SHARED_SPACK_STORE / SYGALDRY_SPACK_STORE
+    pub hf_cache: PathBuf,          // ZEPHYR_SHARED_HF_CACHE / SYGALDRY_HF_CACHE
+    pub uv_cache: PathBuf,          // ZEPHYR_SHARED_UV_CACHE / SYGALDRY_UV_CACHE
+    pub bazel_cache: PathBuf,       // ZEPHYR_SHARED_BAZEL_CACHE
+    pub torch_cache: PathBuf,
+    pub triton_cache: PathBuf,
+    pub nv_compute_cache: PathBuf,
+    pub jax_cache: PathBuf,
+
+    // ── Per-project dirs (derived from project_root) ──
+    pub home_dir: PathBuf,
+    pub config_dir: PathBuf,
+    pub output_root: PathBuf,
+    pub workspace_dir: PathBuf,
+    pub runs_dir: PathBuf,
+    pub lease_dir: PathBuf,
+    pub logs_dir: PathBuf,
+
+    // ── Container settings ──
+    pub image: String,              // SYGALDRY_IMAGE
+    pub build_image_policy: BuildPolicy,
+    pub extra_docker_args: Vec<String>,
+    pub required_cuda: String,
+
+    // ── Modes ──
+    pub lease_mode: LeaseMode,      // off | warn | enforce
+    pub cache_profile: CacheProfile, // shared | isolated | hybrid
+    pub launch_mode: LaunchMode,    // legacy | multi-repo
+
+    // ── Sygaldry home ──
+    pub sygaldry_home: PathBuf,
+}
+#+end_src
+
+** Container Paths (Constants)
+
+#+begin_src rust
+pub mod container_paths {
+    pub const HOME: &str = "/home/kvothe";
+    pub const SPACK_STORE: &str = "/opt/spack_store";
+    pub const SPACK_VIEW: &str = "/opt/spack_store/view";
+    pub const HF_CACHE: &str = "/opt/hf_cache";
+    pub const UV_CACHE: &str = "/opt/uv_cache";
+    pub const WORKSPACE: &str = "/workspace";
+    pub const SYGALDRY: &str = "/opt/sygaldry";
+    pub const ENTRYPOINT_DIR: &str = "/opt/container_entrypoints";
+    pub const USER: &str = "kvothe";
+    // ... (full list in paths.rs)
+}
+#+end_src
+
+** Error Types
+
+#+begin_src rust
+#[derive(thiserror::Error, Debug)]
+pub enum ZephyrError {
+    #[error("Docker not found or not running")]
+    DockerUnavailable,
+    #[error("NVIDIA Docker runtime not detected (GPU-only infrastructure)")]
+    NoNvidiaRuntime,
+    #[error("Host CUDA {host} < required {required}")]
+    CudaVersionTooOld { host: String, required: String },
+    #[error("Docker image '{image}' not found and build policy is 'never'")]
+    ImageNotFound { image: String },
+    #[error("Lease conflict on resource '{resource}' at {lease_file}")]
+    LeaseConflict { resource: String, lease_file: PathBuf },
+    #[error("{message}\nHINT: {hint}")]
+    WithHint { message: String, hint: String },
+    #[error(transparent)]
+    Io(#[from] std::io::Error),
+}
+#+end_src
+
+* Host-Side Operations
+:PROPERTIES:
+:CUSTOM_ID: host-side
+:END:
+
+** Launcher Flow (=host/launcher.rs=)
+
+Replaces =main()= of =launch_container.sh=:
+
+1. Load config (env + CLI flags + defaults)
+2. Detect launch mode (legacy vs multi-repo)
+3. Log deprecation warnings for legacy env vars
+4. Pre-flight checks (docker, nvidia runtime)
+5. Setup host directories (=mkdir -p= for all paths)
+6. Write =layout_version.json=
+7. Build/check Docker image (per build policy)
+8. Detect =spack_baked= label from image
+9. Resolve mount paths (=realpath= + =mkdir -p=)
+10. Resolve entrypoint container path
+11. Acquire lease (if lease mode != off)
+12. Build docker args (typed builder)
+13. Execute: =docker run <args> <image> <passthrough_args>=
+14. Release lease (RAII drop)
+15. Exit with docker's exit code
+
+** Docker Argument Builder (=host/docker_args.rs=)
+
+Replaces the associative array + =build_docker_args()= function.
+Uses a typed struct with volume mounts, env vars, and GPU config.
+
+Key mounts:
+| Host Path                      | Container Path          | Notes                       |
+|--------------------------------+-------------------------+-----------------------------|
+| =<project>/home=                | =/home/kvothe=           | Per-project                 |
+| =<shared>/spack_store=          | =/opt/spack_store=       | 42GB, shared (skip if baked) |
+| =<shared>/hf_cache=             | =/opt/hf_cache=          | Shared                      |
+| =<shared>/uv_cache=             | =/opt/uv_cache=          | Shared                      |
+| =<project>/outputs=             | =/workspace/outputs=     | Per-project                 |
+| =<shared>/torch_cache=          | =/opt/torch_cache=       | Shared                      |
+| External repo (multi-repo)     | =/workspace/<repo_name>= | Workdir                     |
+
+** Lease Management (=host/lease.rs=)
+
+RAII guard pattern: lease file is removed when =LeaseGuard= drops.
+
+#+begin_src rust
+pub struct LeaseGuard { path: PathBuf }
+impl Drop for LeaseGuard {
+    fn drop(&mut self) { let _ = std::fs::remove_file(&self.path); }
+}
+#+end_src
+
+Modes: =off= (no lease), =warn= (log conflict), =enforce= (error on conflict).
+
+** Job Runner (=host/job.rs=)
+
+Replaces =tools/zephyr_job=. Five subcommands:
+
+- =run= — spawns detached container, writes PID + JSONL + status files
+- =status= — reads latest status file
+- =tail= — reads last N lines of JSONL log
+- =stop= — sends SIGTERM to PID
+- =health= — checks PID liveness + last status
+
+The in-container job wrapper (was base64-encoded bash) becomes
+=zephyr job-wrapper --name <name> -- <cmd>=.
+
+* Container-Side Operations
+:PROPERTIES:
+:CUSTOM_ID: container-side
+:END:
+
+** Spack Init Cascade (=container/spack.rs=)
+
+Replaces =spack_init.sh=. Cascade order preserved:
+
+1. Verify =/opt/spack_src/share/spack/setup-env.sh= exists
+2. Add Spack bin to PATH
+3. Activate Spack env from candidate list:
+   a. =$SYGALDRY_SPACK_ENV=
+   b. Current directory (if =spack.yaml= / =spack.lock= present)
+   c. =/opt/spack_env/default=
+   d. =/opt/spack_env/zephyr=
+   e. =$SYGALDRY_ROOT/pkg/zephyr=
+4. If no env activated, fall back to view injection (=/opt/spack_store/view=)
+5. Setup CUDA (=CUDA_HOME=, =PATH=, =LD_LIBRARY_PATH=)
+6. Auto-activate MLSys venv (if =SYGALDRY_MLSYS_ENV= set)
+
+*Key insight:* Spack init modifies the current shell's env. In Rust, we set
+=PATH= / =PYTHONPATH= / =LD_LIBRARY_PATH= directly for the view fallback case,
+and invoke =python3= as a subprocess.
+
+** GPU Check (=container/gpu_check.rs=)
+
+Embedded Python script validates both Torch CUDA and JAX GPU.
+Includes tensor matmul ops to catch ABI/driver mismatches.
+
+** UV Install (=container/uv_install.rs=)
+
+1. Locate Spack Python (=/opt/spack_store/view/bin/python3=)
+2. Create venv with =--system-site-packages=
+3. Write =.pth= file for Spack view
+4. Generate constraints from =spack_owned_packages.conf=
+5. Run =uv pip install --constraint <constraints> [--override <nvidia>] <pkgs>=
+
+** Entrypoint Dispatch (=container/entrypoint.rs=)
+
+| Old Script         | New Invocation                           |
+|--------------------+------------------------------------------|
+| =default.sh=        | =zephyr entrypoint default=               |
+| =run-job.sh=        | =zephyr entrypoint run-job -- <cmd>=      |
+| =verify-gpu.sh=     | =zephyr gpu-check=                        |
+| =verify-spack.sh=   | =zephyr verify-spack=                     |
+| =spack-build.sh=    | =zephyr entrypoint spack-build=           |
+| =spack-install.sh=  | =zephyr entrypoint spack-install=         |
+| =uv-install.sh=     | =zephyr uv-install <pkgs>=                |
+| =hf-download.sh=    | =zephyr hf-download model\vert{}dataset <id>= |
+
+* Dockerfile Changes
+:PROPERTIES:
+:CUSTOM_ID: dockerfile
+:END:
+
+Multi-stage build: Rust builder → runtime image.
+
+#+begin_src dockerfile
+# Build stage
+FROM rust:1.85 AS builder
+WORKDIR /build
+COPY crates/ crates/
+RUN cargo build --release --manifest-path crates/zephyr/Cargo.toml
+
+# Runtime image
+FROM nvidia/cuda:12.9.1-cudnn-devel-ubuntu24.04
+# ... system deps ...
+COPY --from=builder /build/target/release/zephyr /usr/local/bin/zephyr
+ENTRYPOINT ["zephyr", "entrypoint", "default"]
+CMD ["--", "bash", "--login"]
+#+end_src
+
+* Migration Strategy
+:PROPERTIES:
+:CUSTOM_ID: migration
+:END:
+
+** DONE Phase 0: Design + skeleton
+CLOSED: [2026-02-16]
+- [X] Audit current bash scripts
+- [X] Write design document
+- [X] Create Cargo workspace + module stubs
+
+** TODO Phase 1: Host-side parity [0/5]
+No container changes. Rust binary calls =docker run= with *existing* bash entrypoints.
+
+- [ ] Implement =zephyr shell=, =zephyr run=, =zephyr config show=
+- [ ] Docker arg builder with parity tests against bash version
+- [ ] Implement =zephyr job= subcommands
+- [ ] =bin/sygaldry= becomes symlink to =zephyr=
+- [ ] Validate: =zephyr shell= and =zephyr run -- gpu-test= against existing image
+
+** TODO Phase 2: Container-side parity [0/5]
+Bake =zephyr= binary into the Docker image.
+
+- [ ] Implement =zephyr init=, =zephyr gpu-check=, =zephyr verify-spack=
+- [ ] Implement =zephyr entrypoint <name>= for all named entrypoints
+- [ ] Switch Dockerfile ENTRYPOINT to =zephyr entrypoint default=
+- [ ] Implement =zephyr uv-install= and =zephyr hf-download=
+- [ ] Remove =container/entrypoints/*.sh= and =container/lib/*.sh=
+
+** TODO Phase 3: Enhanced capabilities [0/5]
+- [ ] Structured JSON logging for all operations
+- [ ] Config file support (=zephyr.toml=) in addition to env vars
+- [ ] Image registry management (pull/push/tag)
+- [ ] Health check daemon mode (periodic GPU/Spack validation)
+- [ ] Integration with Temporal: =zephyr= as activity executor
+
+** What stays as bash
+
+These are infrequent, admin-level scripts where bash is fine:
+
+- =container/setup_docker_on_host_machine.sh= — one-time host setup
+- =container/diagnose_nvidia.sh= — diagnostic tool
+- =pkg/zephyr/build.sh= — Spack build, tightly coupled to Spack CLI
+- =tools/zephyr_autobuild.sh=, =tools/zephyr_autoretry.sh= — build retry loops
+- =validate_all.sh= — CI script orchestrating other tools
+
+* Binary Distribution
+:PROPERTIES:
+:CUSTOM_ID: distribution
+:END:
+
+Two paths:
+
+1. *Host install:* =cargo install= from workspace, or pre-built release binary.
+   Symlinked to =/usr/local/bin/zephyr=.
+
+2. *Baked into image:* Multi-stage Docker build copies binary into image.
+   Available at =/usr/local/bin/zephyr= inside the container.
+
+Cross-compilation:
+#+begin_src bash
+cargo build --release --target x86_64-unknown-linux-musl
+#+end_src
+
+* Testing Strategy
+:PROPERTIES:
+:CUSTOM_ID: testing
+:END:
+
+| Layer       | What                                              | How                                              |
+|-------------+---------------------------------------------------+--------------------------------------------------|
+| Unit        | Config loading, path resolution, docker args, lease | =cargo test= (no Docker needed)                   |
+| Integration | Full launcher flow with real Docker               | =cargo test --features integration= (Docker + GPU) |
+| Snapshot    | Verify baked image works                          | =zephyr verify-spack= inside container             |
+| E2E         | Multi-repo mode, job runner                       | Shell script exercising full workflow            |
+
+Critical unit test: snapshot docker arg output and compare against bash version.
+
+* Future: Config File Support
+:PROPERTIES:
+:CUSTOM_ID: config-file
+:END:
+
+#+begin_src toml
+[project]
+id = "my-ml-project"
+
+[paths]
+cache_root = "/mnt/data_infra/zephyr_container_infra"
+
+[container]
+image = "sygaldry/zephyr:spack"
+net = "host"
+ipc = "host"
+
+[cuda]
+required_version = "12.9"
+
+[lease]
+mode = "warn"
+ttl_seconds = 21600
+
+[cache]
+profile = "shared"
+#+end_src
+
+Precedence: CLI flags > env vars > config file > defaults.

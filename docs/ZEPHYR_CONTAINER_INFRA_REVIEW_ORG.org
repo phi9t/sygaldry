@@ -1,0 +1,167 @@
+#+TITLE: Zephyr Container Infrastructure — Review and ML Research Roadmap
+#+AUTHOR: Sygaldry
+#+DATE: 2026-02-21
+#+AGENT: Auto
+#+MODEL: Cursor Agent
+#+OPTIONS: toc:3 num:t
+#+STARTUP: overview
+
+* Executive Summary
+
+The Zephyr container infrastructure provides a GPU-only, reproducible environment for scientific computing and ML research. It exists in two implementations:
+
+1. *Bash (default)* — =container/launch_container.sh= + =bin/sygaldry= dispatcher + =tools/zephyr_job=; battle-tested, script-heavy.
+2. *Rust (opt-in)* — Single binary =crates/zephyr/target/release/zephyr=; used when built; same contract, structured errors, tests, staging pipeline.
+
+Both share the same contract: host layout (ZEPHYR v2), entrypoints, env vars, and container paths. The bash launcher remains the fallback when the Rust binary is not built.
+
+This document highlights important features of each implementation, high-level areas to improve, and how to make the product more useful for ML research.
+
+* Important Features
+
+** Bash implementation (default)
+
+*** Host-side
+| Feature | Location | Description |
+|---------|----------|-------------|
+| Container launch | =launch_container.sh= | Pre-flight (docker, nvidia), dirs, image build (auto/always/never), GPU lease, =docker run= with full volume/env setup |
+| Multi-repo mode | =--repo <path>= | Mount external repo at =/workspace/<repo_name>=; sygaldry read-only at =/opt/sygaldry=; shared Spack/HF/UV caches |
+| GPU lease | =acquire_lease= / =release_lease= | File-based lease with TTL (e.g. 6h), =--lease-mode= off|warn|enforce |
+| Cache profile | =--cache-profile= | shared | isolated | hybrid for cache isolation |
+| Directory layout | =setup_host_directories= | ZEPHYR v2: =shared/=, =sygaldry/=, =projects/<id>/=, =meta/= |
+| Image build | =build_container_image= | Dockerfile mtime vs image Created; build-args (HOST_UID/GID, PYTHON_VERSION, etc.) |
+| Docker args | =build_docker_args= | All volume mounts (home, config, outputs, workspace, caches), =--runtime=nvidia --gpus=all=, env passthrough |
+| Config dump | =--print-effective-config= | Logs mode, project id, run id, lease, cache roots, Spack store |
+
+*** CLI dispatcher (=bin/sygaldry=)
+| Subcommand | Behavior |
+|------------|----------|
+| (none) / =shell= | =launch_container.sh= |
+| =run= | =launch_container.sh --entrypoint run-job= |
+| =job= | =tools/zephyr_job= (run, status, tail, stop, health) |
+| =config show= | =launch_container.sh --print-effective-config= |
+| =validate= | =validate_all.sh= |
+| =version= | Git ref + home |
+
+*** Container entrypoints (bash scripts)
+| Entrypoint | Purpose |
+|------------|---------|
+| =default.sh= | Spack init, GPU check, interactive bash with aliases (gpu-test, jax-test, spack-build) |
+| =run-job.sh= | Spack init, exec user command |
+| =verify-gpu.sh= | PyTorch + JAX GPU validation |
+| =verify-spack.sh= | Spack view + torch/jax import checks |
+| =uv-install.sh= | uv venv + Spack constraints + nvidia overrides |
+| =hf-download.sh= | HuggingFace model or dataset download |
+| =hf-lora-setup.sh= | Venv for LoRA/transformers/peft |
+| =spack-build.sh= | Build Zephyr Spack env (builder role) |
+| =spack-install.sh= | Spack install in env |
+
+*** Job runner (=tools/zephyr_job=)
+- =run=: launch container with =run-job= entrypoint, background; JSONL logs + status file under =projects/<id>/outputs/.run-metadata/<run_id>/=.
+- =status=, =tail=, =stop=, =health=: operate on same run metadata.
+
+** Rust implementation (when binary present)
+
+*** Host-side
+| Feature | Module | Description |
+|---------|--------|-------------|
+| Container launch | =host/launcher.rs= | Same pipeline: requirements, CUDA check, dirs, image build, lease (RAII =LeaseGuard=), docker args, =Command::new("docker")= |
+| Build policy | =host/image.rs= | =BuildPolicy::Auto|Always|Never=; =should_build_decision()= pure; label read =sygaldry.spack.baked=, =sygaldry.entrypoints.baked= |
+| Docker args | =host/docker_args.rs= | Structured volume mounts, env passthrough list, same GPU/net/IPC defaults |
+| GPU lease | =host/lease.rs= | File + TTL, =LeaseMode::Off|Warn|Enforce=, release on =Drop= |
+| Job runner | =host/job.rs= | Same contract as =zephyr_job=: run, status, tail, stop, health; JSONL + status file |
+| Spack staging | =host/staging.rs= | Full pipeline: concretize → guard → install → view → verify (pkg/zephyr, GPU, imports); exit codes 2–15 |
+| Config | =config.rs= | =ZephyrConfig::from_env()=, =CliOverrides=, legacy var warnings |
+
+*** Container-side (in-container when =SYGALDRY_IN_CONTAINER=1=)
+| Feature | Module | Description |
+|---------|--------|-------------|
+| Dispatch | =container/mod.rs= | Detects context; dispatches to init, gpu-check, verify-spack, uv-install, hf-download, entrypoint, job-wrapper |
+| Spack init | =container/spack.rs= | Init spack, activate env (candidate list), view fallback, CUDA env, MLSys venv |
+| GPU check | =container/gpu_check.rs= | Embedded Python script (include_str!), 4-layer check |
+| Verify Spack | =container/verify.rs= | Embedded verify script, import checks |
+| uv install | =container/uv_install.rs= | Venv, constraints script, nvidia overrides, .pth for Spack view |
+| HF download | =container/hf_download.rs= | model / dataset subcommands, ensure deps venv |
+| Job wrapper | =container/entrypoint.rs= | JSONL logging, heartbeat thread, status START→DONE/FAILED |
+
+*** CLI (=clap=)
+- Host: =shell=, =run=, =job=, =build=, =config show=, =stage=, =validate=, =version=.
+- Container: =init=, =gpu-check=, =verify-spack=, =uv-install=, =hf-download=, =entrypoint=, =job-wrapper= (hidden).
+- Global: =--repo=, =--entrypoint=, =--run-id=, =--lease-mode=, =--cache-profile=, =--print-effective-config=.
+
+*** Quality and maintainability
+| Aspect | Rust |
+|--------|------|
+| Errors | =error.rs::ZephyrError= (13 variants), =WithHint= for remediation, path context |
+| Paths | =paths.rs=: container constants + =HostLayout= (single source of truth) |
+| Tests | Unit tests in launcher, image, cuda, lease, job, staging, cli, config, paths, error; integration for docker args |
+
+* High-Level Feedback — Areas to Improve
+
+** Contract and consistency
+- *Path contract*: Job metadata lives under =projects/<id>/outputs/.run-metadata/<run_id>/=; ensure all consumers (Temporal activities, scripts, docs) use this and that legacy paths under =logs/= or =bazel_cache/zephyr_jobs= are fully deprecated and removed from reads.
+- *SYGALDRY_ROOT in multi-repo*: Clarify and align: launcher sets =SYGALDRY_ROOT=/workspace/<repo_name>= (workdir); some verification scripts expected =/opt/sygaldry=. Fix tests and docs so one contract is canonical (see =docs/archive/ZEPHYR_INFRA_REVIEW_AND_IMPROVEMENT_PLAN.md= F1).
+- *Bash vs Rust parity*: Keep feature parity (e.g. =--cache-profile=, =--run-id=) and document any intentional divergence. CI should run critical paths with both when possible.
+
+** Operational and UX
+- *Staging as the only safe way to change Spack*: The Rust =stage= pipeline (concretize → guard → install → verify) is the right gate. Document it as the default path for adding packages (e.g. in =pkg/zephyr=) and ensure =zephyr_autobuild.sh= / =zephyr_autoretry.sh= integrate with it.
+- *Lease UX*: In =warn= mode, log lease file and expiry clearly so users know why a second run might conflict. Consider a small =sygaldry lease status= (or Rust equivalent) to show current lease state.
+- *Config visibility*: =config show= is essential for debugging. Ensure it prints all effective paths (including =output_root=, =runs=, =leases=) and, in Rust, that =--print-effective-config= is wired and tested.
+
+** Testing and validation
+- *Integration tests*: Add or extend tests that run a minimal =docker run= (e.g. =--entrypoint run-job -- echo ok=) for both bash and Rust launchers to catch arg/layout regressions.
+- *Multi-repo E2E*: =verify_multi_repo.sh= / =verify_multi_repo_e2e.sh= should assert the chosen =SYGALDRY_ROOT= and workdir and be the single source of truth for multi-repo behavior.
+- *Temporal + container_job*: Ensure the activity that invokes =zephyr_job= or =sygaldry job run= uses the same project id, paths, and entrypoint contract; add a small pipeline test that runs a container_job and checks status/log location.
+
+** Rust-specific
+- *Build and distribution*: Document how to build the release binary (=cargo build --release= in =crates/zephyr=) and optionally ship it in CI or as a release artifact so users get the Rust path without building from source.
+- *Staging UX*: =stage= has many flags (source-yaml, specs, python-import, forbidden, gpu-verify, etc.). Consider a small wrapper or preset (e.g. “add one spec and verify”) for common ML workflow.
+- *Error messages*: Keep using =WithHint= and path context so that CUDA, Docker, Spack, and job errors give clear next steps.
+
+** Security and robustness
+- *No GPU/CPU-only mode*: Policy is GPU-only; keep it. Avoid adding code paths that assume no GPU.
+- *Identity and mounts*: =SYGALDRY_MOUNT_HOST_IDENTITY= is optional; document when it is needed and any security implications.
+
+* Making This Useful for ML Research
+
+** Out of the box today
+- *Reproducible GPU env*: Same CUDA, PyTorch, JAX, Spack view across dev and CI.
+- *Multi-repo*: Use from any repo with =sygaldry --repo . -- python train.py=; shared Spack/HF/UV caches reduce duplication.
+- *Background jobs*: =sygaldry job run train -- "python train.py"= with =status= / =tail= / =stop= for long runs.
+- *Temporal pipelines*: =container_job= + =hf_download_model= / =hf_download_dataset= for DAGs (download → train → eval).
+- *HF integration*: =hf-download= (model/dataset) and =hf-lora-setup= entrypoints for quick access to models and LoRA tooling.
+
+** Short-term improvements (high impact)
+1. *ML run metadata*: Standardize run metadata (run_id, job name, project_id, start/end, exit code) under =projects/<id>/outputs/.run-metadata/= and optionally expose a minimal “list runs” / “show run” (e.g. =sygaldry job list= or a small script) so researchers can see recent runs and paths to logs/checkpoints.
+2. *Checkpoint and artifact paths*: Document and, if needed, standardize where training outputs (checkpoints, logs, metrics) should go (e.g. =/workspace/outputs= or =projects/<id>/outputs=) so that Temporal or other tooling can attach artifacts to steps.
+3. *One-command staging for ML deps*: Preset or script that adds a single spec (e.g. =py-soundfile=) and runs the staging pipeline with sensible defaults and GPU verify, so researchers can extend the env without reading all stage flags.
+4. *Example ML pipeline*: A single, well-documented YAML (e.g. in =temporal/examples/=) that does: =hf_download_model= → =container_job= train → optional =container_job= eval, with parameters for model id and data path, and document how to run it locally and where outputs appear.
+
+** Medium-term (product shape)
+1. *Notebook / IDE support*: Document or add entrypoints for running Jupyter/Lab or a remote IDE against the same container and Spack view so that interactive exploration uses the same stack as batch jobs.
+2. *Resource visibility*: Optional “dashboard” or CLI that shows GPU lease status, recent runs, and cache usage (e.g. Spack store, HF cache size) to help with resource planning.
+3. *Reproducibility manifest*: For a given run, record image digest, Spack env hash (or lock file), and key env vars so the run can be reproduced later (e.g. in a file next to run metadata).
+4. *Allocation and quotas*: If multiple researchers share a host, consider integrating with the existing lease (or a simple quota) so that “who is using the GPU” and “max concurrent jobs per project” are visible and enforceable.
+
+** Long-term (research platform)
+1. *Experiment tracking*: Optional integration with experiment trackers (e.g. MLflow, W&B) where the container injects run_id, project_id, and artifact paths so that metrics and artifacts are automatically associated.
+2. *Scheduling*: Use Temporal (or another scheduler) to run many jobs (hyperparameter sweeps, eval jobs) with dependencies and shared caches, all via =container_job= and the same image/env.
+3. *Baked env variants*: Pre-bake a few Spack env variants (e.g. “minimal”, “full”, “nightly”) and tag images so researchers can choose env size vs. build time.
+
+* References
+
+- =container/launch_container.sh= — Bash launcher.
+- =bin/sygaldry= — CLI dispatcher (Rust or bash).
+- =tools/zephyr_job= — Host job runner (bash).
+- =crates/zephyr/= — Rust implementation (=foundation.org=, =src/=).
+- =container/ZEPHYR_SYSTEM_DESIGN.md= — Authoritative infra contract.
+- =SYSTEM_DESIGN.md= — High-level architecture.
+- =docs/archive/ZEPHYR_INFRA_REVIEW_AND_IMPROVEMENT_PLAN.md= — Prior review (path contract, multi-repo).
+- =temporal/examples/= — Pipeline examples (=container_job=, =hf_download_*=).
+- =CLAUDE.md=, =AGENTS.md= — Repo and agent guidance.
+
+* Document history
+
+| Date       | Change |
+|------------|--------|
+| 2026-02-21 | Initial review: bash vs Rust features, improvement areas, ML research roadmap. |

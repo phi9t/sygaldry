@@ -1,0 +1,418 @@
+#+TITLE: Sygaldry Skills Guide
+#+AUTHOR: Sygaldry Team
+#+DATE: 2026-02-25
+#+STARTUP: overview
+#+OPTIONS: toc:2 num:nil
+
+* Overview
+
+Sygaldry ships *repo-scoped skills* under =skills/=.  Each skill is a
+self-contained directory with documentation (=SKILL.md=), agent metadata
+(=agents/openai.yaml=), and supporting scripts/assets.
+
+Skills are validated locally before promotion to a global =$CODEX_HOME/skills=
+install.  Until promoted, run everything from the repo checkout.
+
+| Skill                            | Purpose                                             | Status   |
+|----------------------------------+-----------------------------------------------------+----------|
+| =zephyr=                           | GPU containers, MLSys envs, LLM experiments, vendor | Deferred |
+| =codex-headless=                   | Headless Codex CLI runs                             | Wave 1   |
+| =codex-dev-loop=                   | Two-agent implement-review-test loop                | Wave 1   |
+| =nvidia-container-troubleshooting= | Diagnose GPU/Docker issues                          | Local    |
+| =local-skills-sync=                | Keep =LOCAL_SKILLS.md= in sync with filesystem        | Local    |
+
+* Prerequisites
+
+All skills assume:
+
+- Linux host with Docker installed
+- NVIDIA GPU driver + =nvidia-container-runtime= (for GPU skills)
+- =bash=, =python3=, =git= on =$PATH=
+- This repo checked out at =/mnt/data_infra/workspace/sygaldry=
+
+Set your working directory:
+
+#+begin_src bash
+cd /mnt/data_infra/workspace/sygaldry
+#+end_src
+
+* Zephyr (Unified GPU Skill)
+:PROPERTIES:
+:SKILL_DIR: skills/zephyr
+:END:
+
+The =zephyr= skill consolidates four capabilities into one directory:
+container exec, MLSys environment management, LLM experiments, and
+cross-repo adaptation/vendoring.
+
+** Quick Start
+
+#+begin_src bash
+# 1. Verify the Spack environment + GPU
+./container/launch_container.sh --entrypoint=verify-spack.sh
+
+# 2. Run a one-off Python command
+./container/launch_container.sh bash -lc \
+  "python -c 'import torch; print(torch.cuda.is_available())'"
+
+# 3. Launch a tracked job
+tools/zephyr_job run --project-id myproj --job train -- "python train.py"
+
+# 4. Check status (low-token, safe for agents)
+tools/zephyr_job status --project-id myproj --job train
+#+end_src
+
+** Container Exec
+
+Run commands inside the Zephyr container with the Spack environment
+(PyTorch, JAX, CUDA) automatically activated.
+
+*** Running jobs
+
+#+begin_src bash
+# Start a job
+tools/zephyr_job run --project-id <id> --job <name> -- <command>
+
+# Monitor
+tools/zephyr_job status --project-id <id> --job <name>
+tools/zephyr_job health --project-id <id> --job <name>
+tools/zephyr_job tail   --project-id <id> --job <name> --lines 40
+
+# Stop
+tools/zephyr_job stop   --project-id <id> --job <name>
+#+end_src
+
+*** Multi-container isolation
+
+Use distinct =SYGALDRY_PROJECT_ID= values to isolate home dirs, caches,
+and job artifacts:
+
+#+begin_src bash
+SYGALDRY_PROJECT_ID=experiment-a ./container/launch_container.sh
+SYGALDRY_PROJECT_ID=experiment-b ./container/launch_container.sh
+#+end_src
+
+Each project ID maps to its own host root at:
+=/mnt/data_infra/zephyr_container_infra/projects/<project_id>/=
+
+*** Job artifact locations
+
+| Artifact  | Path                                                          |
+|-----------+---------------------------------------------------------------|
+| JSONL log | =projects/<id>/outputs/.run-metadata/<run_id>/<job>-<ts>.jsonl= |
+| Status    | =projects/<id>/outputs/.run-metadata/<run_id>/<job>.status=     |
+| Raw log   | =projects/<id>/runs/<run_id>/raw/<job>-<ts>.log=                |
+
+All paths are under =/mnt/data_infra/zephyr_container_infra/=.
+
+*** Installing Python packages
+
+#+begin_src bash
+# Prefer Spack for heavy scientific deps (torch, jax, numpy).
+# Use uv only for pure-Python packages:
+./container/launch_container.sh bash -lc \
+  "uv venv && source .venv/bin/activate && uv add transformers datasets"
+#+end_src
+
+*** LoRA bootstrap
+
+#+begin_src bash
+# Create the pinned HF venv (uses Spack torch, no override)
+./container/launch_container.sh --entrypoint=hf-lora-setup.sh
+
+# Run LoRA training
+tools/zephyr_job run --project-id myproj --job hf-lora -- \
+  "cd /workspace/<repo> && .venv-hf-lora/bin/hf-lora-python train.py"
+#+end_src
+
+*** Triage checklist (when a job looks stuck)
+
+1. Check PID: ~tools/zephyr_job health --project-id <id> --job <name>~
+2. Check heartbeat timestamp in status output
+3. Tail last 40 lines: ~tools/zephyr_job tail --project-id <id> --job <name> --lines 40~
+4. Look for =FAILED rc=...= in the final log lines
+
+** MLSys Environments
+
+Build UV overlay environments (vLLM, SGLang, HF Transformers, etc.)
+on top of the Spack base image.
+
+*** Available environments
+
+| Environment     | Key Packages             |
+|-----------------+--------------------------|
+| =hf-transformers= | transformers, datasets   |
+| =hf-datasets=     | datasets                 |
+| =vllm=            | vLLM                     |
+| =sglang=          | SGLang                   |
+| =llm-serving-all= | vLLM + SGLang (combined) |
+| =megatronlm=      | Megatron-LM              |
+| =torchtitan=      | TorchTitan               |
+
+Environment definitions live in =skills/zephyr/envs/*.yaml=.
+
+*** Vendor into a target repo
+
+#+begin_src bash
+SKILL_DIR=skills/zephyr
+
+# Install the MLSys runtime kit
+"$SKILL_DIR/scripts/zephyr_mlsys_vendor.sh" install \
+  --target-repo /path/to/my-repo \
+  --snapshot-ref ghcr.io/my-org/zephyr:spack@sha256:<digest>
+
+# Verify integrity
+"$SKILL_DIR/scripts/zephyr_mlsys_vendor.sh" check \
+  --target-repo /path/to/my-repo
+#+end_src
+
+*** Build an env from a vendored kit
+
+#+begin_src bash
+/path/to/my-repo/.codex-zephyr-mlsys/bin/launch-mlsys.sh hf-transformers
+/path/to/my-repo/.codex-zephyr-mlsys/bin/launch-mlsys.sh vllm --no-validate
+#+end_src
+
+*** Direct script use (local dev)
+
+#+begin_src bash
+# Build
+skills/zephyr/scripts/uv-env-build.sh hf-transformers
+
+# Validate (no GPU needed)
+skills/zephyr/scripts/uv-env-validate.sh hf-transformers --no-gpu
+
+# Activate
+source skills/zephyr/scripts/uv-env-activate.sh hf-transformers
+#+end_src
+
+** LLM Experiments
+
+*** GPU sanity check
+
+#+begin_src bash
+SYGALDRY_PROJECT_ID=llm-exp \
+  ./container/launch_container.sh bash -lc \
+  "cd /workspace/pkg/zephyr && spack env activate . && \
+   /opt/spack_store/view/bin/python3 \
+   /workspace/skills/zephyr/scripts/gpu_sanity.py"
+#+end_src
+
+Reports per-GPU: device name, compute capability, memory, matmul speed.
+
+*** Speculative decoding demo
+
+#+begin_src bash
+skills/zephyr/scripts/run_specdec.sh \
+  --project-id llm-exp --gpu true --max-tokens 64 --speculation-length 4
+#+end_src
+
+** Repo Adaptation (Vendoring)
+
+Package the Zephyr container runtime as a hermetic kit for other repos.
+
+*** Core policy
+
+- Consumer repos pin images by digest (=@sha256:...=).
+- Consumer repos never rebuild Spack.
+- Spack owns heavy packages; uv layers app deps.
+- Runtime must not depend on the sygaldry checkout.
+
+*** Vendor infra into a target repo
+
+#+begin_src bash
+SKILL_DIR=skills/zephyr
+
+"$SKILL_DIR/scripts/zephyr_vendor_infra.sh" install \
+  --target-repo /path/to/target-repo \
+  --snapshot-ref ghcr.io/phi9t/sygaldry/zephyr:spack-YYYYMMDD@sha256:<digest> \
+  --image-mode auto \
+  --runtime-image myrepo/zephyr:dev
+
+# Later: update or check
+"$SKILL_DIR/scripts/zephyr_vendor_infra.sh" update --target-repo /path/to/target-repo
+"$SKILL_DIR/scripts/zephyr_vendor_infra.sh" check  --target-repo /path/to/target-repo
+#+end_src
+
+*** Package for distribution
+
+#+begin_src bash
+# Infra package (container runtime)
+skills/zephyr/scripts/package_infra.sh \
+  --out-dir /tmp/skill-dist \
+  --version 2026.02.25 \
+  --snapshot-ref ghcr.io/phi9t/sygaldry/zephyr:spack-YYYYMMDD@sha256:<digest>
+
+# MLSys package (UV overlay environments)
+skills/zephyr/scripts/package_mlsys.sh \
+  --out-dir /tmp/zephyr-mlsys-dist \
+  --version 2026.02.25 \
+  --smoke-mode skip
+#+end_src
+
+*** Hermetic validation
+
+#+begin_src bash
+skills/zephyr/scripts/validate_hermetic_infra.sh
+skills/zephyr/scripts/validate_hermetic_mlsys.sh
+#+end_src
+
+** Available Entrypoints
+
+| Entrypoint       | Purpose                                  |
+|------------------+------------------------------------------|
+| =default.sh=       | Interactive shell with GPU validation    |
+| =run-job.sh=       | Run commands with Spack/CUDA setup       |
+| =verify-gpu.sh=    | Verify GPU availability (PyTorch, JAX)   |
+| =verify-spack.sh=  | Fast Spack verification (no rebuild)     |
+| =hf-download.sh=   | Download HF datasets/models              |
+| =hf-lora-setup.sh= | Create pinned HF LoRA venv               |
+| =spack-build.sh=   | Build Zephyr Spack environment           |
+| =spack-install.sh= | Run =spack install= then drop to shell     |
+| =uv-install.sh=    | Create venv and install packages with uv |
+
+* Codex Headless
+:PROPERTIES:
+:SKILL_DIR: skills/codex-headless
+:END:
+
+Run OpenAI Codex CLI in headless (=exec=) mode for non-interactive
+code generation, review, and editing.
+
+Use when you need scripted Codex runs, reproducible CLI workflows, or
+JSON output without interactive chat.
+
+#+begin_src bash
+# See full docs
+cat skills/codex-headless/SKILL.md
+#+end_src
+
+* Codex Dev Loop
+:PROPERTIES:
+:SKILL_DIR: skills/codex-dev-loop
+:END:
+
+Run a structured two-agent development loop: Codex implements changes,
+an outer reviewer critiques and requests revisions, then tests run.
+
+Use when you want repeatable implement-review-test cycles with JSONL
+logs and bounded revision/test-fix attempts.
+
+#+begin_src bash
+# See full docs
+cat skills/codex-dev-loop/SKILL.md
+#+end_src
+
+* NVIDIA Container Troubleshooting
+:PROPERTIES:
+:SKILL_DIR: skills/nvidia-container-troubleshooting
+:END:
+
+Diagnose and fix NVIDIA GPU access issues in Docker/OCI containers:
+NVML init failures, missing =/dev/nvidia*= nodes, runtime
+misconfiguration, cgroup v2 issues, CDI injection, driver mismatches.
+
+#+begin_src bash
+# Quick GPU diagnostics
+container/diagnose_nvidia.sh
+
+# See full docs
+cat skills/nvidia-container-troubleshooting/SKILL.md
+#+end_src
+
+* Local Skills Sync
+:PROPERTIES:
+:SKILL_DIR: skills/local-skills-sync
+:END:
+
+Keeps =skills/LOCAL_SKILLS.md= synchronized with the filesystem.
+
+#+begin_src bash
+# Regenerate the index
+python3 skills/local-skills-sync/scripts/sync_local_skills.py
+
+# Check without writing
+python3 skills/local-skills-sync/scripts/sync_local_skills.py --check
+#+end_src
+
+* Skill Lifecycle
+
+** Directory structure
+
+Every skill follows this layout:
+
+#+begin_example
+skills/<name>/
+  SKILL.md              # Docs + frontmatter (name, description)
+  VALIDATION.md         # Optional: validation scenarios
+  agents/openai.yaml    # Agent metadata
+  scripts/              # Executable scripts
+  assets/               # Vendored runtime files
+  references/           # Schemas, configs
+  envs/                 # Environment definitions (zephyr only)
+  portable/             # Portable launchers (zephyr only)
+#+end_example
+
+** Validation commands
+
+#+begin_src bash
+# Hermetic audit (checks for repo-coupled paths)
+python3 skills/hermetic-skill-audit.py skills/<name>
+
+# Sync check (LOCAL_SKILLS.md matches filesystem)
+python3 skills/local-skills-sync/scripts/sync_local_skills.py --check
+
+# Shell lint
+shellcheck -s bash -S warning skills/<name>/scripts/*.sh
+
+# Python compile check
+python3 -m py_compile skills/<name>/scripts/*.py
+#+end_src
+
+** Promotion workflow
+
+1. Vendor all materials into the skill directory
+2. Replace repo-relative paths with =$CODEX_HOME/skills/<name>= paths
+3. Pass all hard gates (packaging, hermeticity, interface, validation, smoke)
+4. Install into =$CODEX_HOME/skills=
+5. Smoke test from outside this repo
+6. Restart Codex to load changes
+
+Current promotion status:
+- *Wave 1* (ready): =codex-headless=, =codex-dev-loop=
+- *Deferred* (repo-coupled): =zephyr=
+
+* Quick Reference
+
+** Verify everything works
+
+#+begin_src bash
+# Full validation suite (go, ruff, black, shellcheck, pytest)
+./validate_all.sh
+
+# Quick: just Spack + GPU
+./validate_all.sh --verify-only
+
+# Just the Spack env
+./container/launch_container.sh --entrypoint=verify-spack.sh
+#+end_src
+
+** Common environment variables
+
+| Variable             | Purpose                           | Example            |
+|----------------------+-----------------------------------+--------------------|
+| =SYGALDRY_PROJECT_ID=  | Per-project isolation namespace   | =myproj=             |
+| =SYGALDRY_IMAGE=       | Custom Docker image               | =sygaldry/zephyr:v2= |
+| =SYGALDRY_SPACK_STORE= | Override shared Spack store path  | =/data/spack_store=  |
+| =SYGALDRY_UV_CACHE=    | Override shared UV cache path     | =/data/uv_cache=     |
+| =SYGALDRY_HF_CACHE=    | Override shared HF cache path     | =/data/hf_cache=     |
+| =HF_TOKEN=             | HuggingFace token for gated repos |                    |
+| =MLSYS_DISABLE_GPU=    | Skip GPU docker flags             | =1=                  |
+
+** Key host paths
+
+| Path                                                 | Content               |
+|------------------------------------------------------+-----------------------|
+| =/mnt/data_infra/zephyr_container_infra/projects/<id>= | Per-project artifacts |
+| =/mnt/data_infra/zephyr_container_infra/spack_store=   | Shared Spack store    |
+| =/mnt/data_infra/zephyr_container_infra/hf_cache=      | Shared HF model cache |

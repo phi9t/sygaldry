@@ -34,9 +34,6 @@ outputs/
 # Container runtime logs (environment-specific)
 container/logs/
 
-# Internal Org-mode planning files
-*.org
-
 # Internal scratch/planning files
 refactor_plan_by_claude_code.txt
 temporal_next_phase_planning.txt
