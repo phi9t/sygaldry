@@ -70,16 +70,12 @@ steps:
       project_id: ${{ params.project_id }}
       entrypoint: run-job.sh
       gpu: true
-      command: |
-        python -c "
-        import torch
-        print(f'CUDA available: {torch.cuda.is_available()}')
-        print(f'Training with config: ${{ steps.prepare-config.outputs.config_summary }}')
-        # Placeholder: replace with actual training script
-        print('::set-output name=best_loss::0.42')
-        print('::set-output name=checkpoint_path::/workspace/outputs/checkpoint-best.pt')
-        print('Training complete')
-        "
+      command: >-
+        python -c "import torch; print(f'CUDA available: {torch.cuda.is_available()}');
+        print(f'Training with config: ${{ steps.prepare-config.outputs.config_summary }}');
+        print('::set-output name=best_loss::0.42');
+        print('::set-output name=checkpoint_path::/workspace/outputs/checkpoint-best.pt');
+        print('Training complete')"
     timeout_seconds: 86400
 
   - id: evaluate
@@ -93,16 +89,12 @@ steps:
       project_id: ${{ params.project_id }}
       entrypoint: run-job.sh
       gpu: true
-      command: |
-        python -c "
-        import torch
-        print(f'Evaluating checkpoint: ${{ steps.train.outputs.checkpoint_path }}')
-        print(f'Training loss was: ${{ steps.train.outputs.best_loss }}')
-        # Placeholder: replace with actual evaluation script
-        print('::set-output name=eval_loss::0.45')
-        print('::set-output name=eval_accuracy::0.87')
-        print('Evaluation complete')
-        "
+      command: >-
+        python -c "import torch; print(f'Evaluating checkpoint: ${{ steps.train.outputs.checkpoint_path }}');
+        print(f'Training loss was: ${{ steps.train.outputs.best_loss }}');
+        print('::set-output name=eval_loss::0.45');
+        print('::set-output name=eval_accuracy::0.87');
+        print('Evaluation complete')"
     timeout_seconds: 3600
 
   - id: report-success

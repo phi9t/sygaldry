@@ -366,9 +366,6 @@ build_docker_args() {
     local host_gid
     host_gid=$(id -g)
     local user_spec="${host_uid}:${host_gid}"
-    if docker info 2>/dev/null | grep -q rootless; then
-        user_spec="0:0"
-    fi
     docker_args+=("--user=${user_spec}")
 
     if [[ "${SYGALDRY_MOUNT_HOST_IDENTITY:-0}" == "1" ]]; then

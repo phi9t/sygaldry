@@ -540,9 +540,9 @@ func ContainerJob(ctx context.Context, input ContainerJobInput) (RunCommandResul
 		return RunCommandResult{ExitCode: -1}, errors.New("command is required")
 	}
 
-	launcherPath := input.LauncherPath
-	if launcherPath == "" {
-		launcherPath = "./container/launch_container.sh"
+	launcherPath, err := resolveContainerLauncherPath(input.LauncherPath)
+	if err != nil {
+		return RunCommandResult{ExitCode: -1}, err
 	}
 
 	entrypoint := input.Entrypoint
@@ -550,7 +550,7 @@ func ContainerJob(ctx context.Context, input ContainerJobInput) (RunCommandResul
 		entrypoint = "run-job.sh"
 	}
 
-	args := []string{"--entrypoint", entrypoint, "--", input.Command}
+	args := []string{"--entrypoint", entrypoint, "--", "bash", "-lc", input.Command}
 
 	env := make(map[string]string)
 	for key, value := range input.Env {
@@ -574,6 +574,32 @@ func ContainerJob(ctx context.Context, input ContainerJobInput) (RunCommandResul
 		Env:         env,
 		TimeoutSecs: input.TimeoutSecs,
 	})
+}
+
+func resolveContainerLauncherPath(configuredPath string) (string, error) {
+	if strings.TrimSpace(configuredPath) != "" {
+		return configuredPath, nil
+	}
+
+	candidates := []string{}
+	if home := strings.TrimSpace(os.Getenv("SYGALDRY_HOME")); home != "" {
+		candidates = append(candidates, filepath.Join(home, "container", "launch_container.sh"))
+	}
+	candidates = append(candidates,
+		"../container/launch_container.sh",
+		"./container/launch_container.sh",
+		"/opt/sygaldry/container/launch_container.sh",
+	)
+	for _, candidate := range candidates {
+		if _, err := os.Stat(candidate); err == nil {
+			return candidate, nil
+		}
+	}
+
+	return "", fmt.Errorf(
+		"container launcher not found; set container_job.launcher_path or SYGALDRY_HOME (checked: %s)",
+		strings.Join(candidates, ", "),
+	)
 }
 
 func K8sJob(ctx context.Context, input K8sJobInput) (RunCommandResult, error) {
@@ -674,10 +700,7 @@ func HFDownloadDataset(ctx context.Context, input HFDownloadDatasetInput) (RunCo
 	if split == "" {
 		split = "train[:100]"
 	}
-	cacheDir := input.CacheDir
-	if cacheDir == "" {
-		cacheDir = "/opt/hf_cache"
-	}
+	cacheDir := "/opt/hf_cache"
 
 	script := `
 import importlib.util, sys
@@ -702,14 +725,17 @@ print(f'Downloaded {len(ds)} rows from {dataset_id}')
 		"_HF_SPLIT":      split,
 	}
 
+	command, baseArgs := resolvePythonStepCommand([]string{"datasets"}, []string{"datasets"})
+	args := append(baseArgs, "-c", script)
+
 	return runCommand(ctx, RunCommandInput{
 		Name:        input.Name,
 		WorkflowID:  input.WorkflowID,
 		RunID:       input.RunID,
 		StepID:      input.StepID,
 		LogDir:      input.LogDir,
-		Command:     "python3",
-		Args:        []string{"-c", script},
+		Command:     command,
+		Args:        args,
 		Env:         env,
 		TimeoutSecs: input.TimeoutSecs,
 	})
@@ -720,10 +746,7 @@ func HFDownloadModel(ctx context.Context, input HFDownloadModelInput) (RunComman
 		return RunCommandResult{ExitCode: -1}, errors.New("modelId is required")
 	}
 
-	cacheDir := input.CacheDir
-	if cacheDir == "" {
-		cacheDir = "/opt/hf_cache"
-	}
+	cacheDir := "/opt/hf_cache"
 
 	script := `
 import importlib.util, sys
@@ -744,17 +767,52 @@ print(f'Downloaded {model_id} to {path}')
 		"_HF_MODEL_ID":  input.ModelID,
 	}
 
+	command, baseArgs := resolvePythonStepCommand([]string{"huggingface_hub"}, []string{"huggingface_hub"})
+	args := append(baseArgs, "-c", script)
+
 	return runCommand(ctx, RunCommandInput{
 		Name:        input.Name,
 		WorkflowID:  input.WorkflowID,
 		RunID:       input.RunID,
 		StepID:      input.StepID,
 		LogDir:      input.LogDir,
-		Command:     "python3",
-		Args:        []string{"-c", script},
+		Command:     command,
+		Args:        args,
 		Env:         env,
 		TimeoutSecs: input.TimeoutSecs,
 	})
+}
+
+func resolvePythonStepCommand(requiredModules, uvDependencies []string) (string, []string) {
+	allModulesAvailable := true
+	for _, module := range requiredModules {
+		if !pythonModuleAvailable(module) {
+			allModulesAvailable = false
+			break
+		}
+	}
+	if allModulesAvailable {
+		return "python3", nil
+	}
+
+	if _, err := exec.LookPath("uv"); err == nil {
+		args := []string{"run"}
+		for _, dep := range uvDependencies {
+			args = append(args, "--with", dep)
+		}
+		args = append(args, "python3")
+		return "uv", args
+	}
+
+	return "python3", nil
+}
+
+func pythonModuleAvailable(module string) bool {
+	checkScript := "import importlib.util, sys; sys.exit(0 if importlib.util.find_spec(sys.argv[1]) else 1)"
+	cmd := exec.Command("python3", "-c", checkScript, module)
+	cmd.Stdout = io.Discard
+	cmd.Stderr = io.Discard
+	return cmd.Run() == nil
 }
 
 func runCommand(ctx context.Context, input RunCommandInput) (RunCommandResult, error) {

@@ -1,6 +1,6 @@
 # Temporal Orchestration Design (Canonical)
 
-**Last Updated:** 2026-02-12  
+**Last Updated:** 2026-03-02  
 **Status:** Active source of truth
 
 This document is the single canonical design/planning reference for the Temporal subsystem in this repository.
@@ -18,7 +18,7 @@ It consolidated prior split design content from:
 2. Keep execution/monitoring reproducible and automatable via CLI.
 3. Maintain a clear, current snapshot of implemented behavior and next work.
 
-## Current State (Accurate as of 2026-02-12)
+## Current State (Accurate as of 2026-03-02)
 
 ### Architecture
 
@@ -61,6 +61,10 @@ Primary runtime components:
 - Streaming DAG scheduling (schedule-on-complete) via Temporal selector.
 - Per-step retry overrides (`retry` block) applied to activity options.
 - Env precedence fixed so explicit step env overrides inherited process env.
+- `hf_download_dataset` / `hf_download_model` now auto-bootstrap missing Python deps via `uv run --with ...` when needed.
+- HF download steps now use `/opt/hf_cache` as the enforced cache directory.
+- `container_job` now resolves a valid launcher script path from common repository/container locations when not explicitly configured.
+- `container_job.command` string execution is shell-based (`bash -lc`) so whitespace/newline commands work reliably with `run-job.sh`.
 
 #### Monitoring and Artifacts
 - `logs_cli.py` supports:
