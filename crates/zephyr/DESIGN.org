@@ -17,15 +17,15 @@
 The current Zephyr container infrastructure is ~1,500 lines of bash across 15+ scripts.
 It works, but has accumulated real pain points:
 
-| Pain Point        | Bash Reality                                       | Rust Solution                                       |
-|-------------------+----------------------------------------------------+-----------------------------------------------------|
-| Silent failures   | =set -euo pipefail= catches some, misses many     | =Result<T, E>= — every failure is typed and handled |
-| Config sprawl     | 40+ env vars, =readonly= chains, =${X:-${Y:-def}}= | Struct with =#[derive(Default)]=, layered loading    |
-| Argument building | Associative arrays + =printf '%s\n'=               | Builder pattern with typed fields                   |
-| Lease management  | Hand-rolled file locking with awk                  | =flock(2)= + serde, atomic writes                   |
-| Testing           | =launch_container_test.sh= (fragile)               | =cargo test= with unit + integration tests           |
-| Cross-platform    | bash-only, GNU coreutils assumed                   | Single static binary, musl target                   |
-| In-container init | Sourcing chains (=spack_init.sh → errors.sh=)      | Same binary, different subcommand                   |
+| Pain Point        | Bash Reality                                   | Rust Solution                                     |
+|-------------------+------------------------------------------------+---------------------------------------------------|
+| Silent failures   | =set -euo pipefail= catches some, misses many    | =Result<T, E>= — every failure is typed and handled |
+| Config sprawl     | 40+ env vars, =readonly= chains, =${X:-${Y:-def}}= | Struct with =#[derive(Default)]=, layered loading   |
+| Argument building | Associative arrays + =printf '%s\n'=             | Builder pattern with typed fields                 |
+| Lease management  | Hand-rolled file locking with awk              | =flock(2)= + serde, atomic writes                   |
+| Testing           | =launch_container_test.sh= (fragile)             | =cargo test= with unit + integration tests          |
+| Cross-platform    | bash-only, GNU coreutils assumed               | Single static binary, musl target                 |
+| In-container init | Sourcing chains (=spack_init.sh → errors.sh=)    | Same binary, different subcommand                 |
 
 The goal is *one binary* — =zephyr= — that replaces:
 
@@ -125,7 +125,7 @@ libc = "0.2"
 
 *Notably absent:* No async runtime. All Docker interaction is via =std::process::Command=
 calling the =docker= CLI. Keeps the binary small and debuggable.
-
+        
 * Core Types
 :PROPERTIES:
 :CUSTOM_ID: core-types
@@ -252,15 +252,15 @@ Replaces the associative array + =build_docker_args()= function.
 Uses a typed struct with volume mounts, env vars, and GPU config.
 
 Key mounts:
-| Host Path                      | Container Path          | Notes                       |
-|--------------------------------+-------------------------+-----------------------------|
-| =<project>/home=                | =/home/kvothe=           | Per-project                 |
-| =<shared>/spack_store=          | =/opt/spack_store=       | 42GB, shared (skip if baked) |
-| =<shared>/hf_cache=             | =/opt/hf_cache=          | Shared                      |
-| =<shared>/uv_cache=             | =/opt/uv_cache=          | Shared                      |
-| =<project>/outputs=             | =/workspace/outputs=     | Per-project                 |
-| =<shared>/torch_cache=          | =/opt/torch_cache=       | Shared                      |
-| External repo (multi-repo)     | =/workspace/<repo_name>= | Workdir                     |
+| Host Path                  | Container Path         | Notes                        |
+|----------------------------+------------------------+------------------------------|
+| =<project>/home=             | =/home/kvothe=           | Per-project                  |
+| =<shared>/spack_store=       | =/opt/spack_store=       | 42GB, shared (skip if baked) |
+| =<shared>/hf_cache=          | =/opt/hf_cache=          | Shared                       |
+| =<shared>/uv_cache=          | =/opt/uv_cache=          | Shared                       |
+| =<project>/outputs=          | =/workspace/outputs=     | Per-project                  |
+| =<shared>/torch_cache=       | =/opt/torch_cache=       | Shared                       |
+| External repo (multi-repo) | =/workspace/<repo_name>= | Workdir                      |
 
 ** Lease Management (=host/lease.rs=)
 
@@ -328,16 +328,16 @@ Includes tensor matmul ops to catch ABI/driver mismatches.
 
 ** Entrypoint Dispatch (=container/entrypoint.rs=)
 
-| Old Script         | New Invocation                           |
-|--------------------+------------------------------------------|
-| =default.sh=        | =zephyr entrypoint default=               |
-| =run-job.sh=        | =zephyr entrypoint run-job -- <cmd>=      |
-| =verify-gpu.sh=     | =zephyr gpu-check=                        |
-| =verify-spack.sh=   | =zephyr verify-spack=                     |
-| =spack-build.sh=    | =zephyr entrypoint spack-build=           |
-| =spack-install.sh=  | =zephyr entrypoint spack-install=         |
-| =uv-install.sh=     | =zephyr uv-install <pkgs>=                |
-| =hf-download.sh=    | =zephyr hf-download model\vert{}dataset <id>= |
+| Old Script       | New Invocation                        |
+|------------------+---------------------------------------|
+| =default.sh=       | =zephyr entrypoint default=             |
+| =run-job.sh=       | =zephyr entrypoint run-job -- <cmd>=    |
+| =verify-gpu.sh=    | =zephyr gpu-check=                      |
+| =verify-spack.sh=  | =zephyr verify-spack=                   |
+| =spack-build.sh=   | =zephyr entrypoint spack-build=         |
+| =spack-install.sh= | =zephyr entrypoint spack-install=       |
+| =uv-install.sh=    | =zephyr uv-install <pkgs>=              |
+| =hf-download.sh=   | =zephyr hf-download model\vert{}dataset <id>= |
 
 * Dockerfile Changes
 :PROPERTIES:
@@ -430,12 +430,12 @@ cargo build --release --target x86_64-unknown-linux-musl
 :CUSTOM_ID: testing
 :END:
 
-| Layer       | What                                              | How                                              |
-|-------------+---------------------------------------------------+--------------------------------------------------|
-| Unit        | Config loading, path resolution, docker args, lease | =cargo test= (no Docker needed)                   |
-| Integration | Full launcher flow with real Docker               | =cargo test --features integration= (Docker + GPU) |
-| Snapshot    | Verify baked image works                          | =zephyr verify-spack= inside container             |
-| E2E         | Multi-repo mode, job runner                       | Shell script exercising full workflow            |
+| Layer       | What                                                | How                                              |
+|-------------+-----------------------------------------------------+--------------------------------------------------|
+| Unit        | Config loading, path resolution, docker args, lease | =cargo test= (no Docker needed)                    |
+| Integration | Full launcher flow with real Docker                 | =cargo test --features integration= (Docker + GPU) |
+| Snapshot    | Verify baked image works                            | =zephyr verify-spack= inside container             |
+| E2E         | Multi-repo mode, job runner                         | Shell script exercising full workflow            |
 
 Critical unit test: snapshot docker arg output and compare against bash version.
 

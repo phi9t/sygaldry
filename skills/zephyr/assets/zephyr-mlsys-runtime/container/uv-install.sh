@@ -1,8 +1,22 @@
 #!/bin/bash
 set -euo pipefail
 
-_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../lib" 2>/dev/null && pwd)" \
-    || _LIB_DIR="/opt/container_entrypoints/../lib"
+_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+_LIB_DIR=""
+for _candidate in \
+    "${_SCRIPT_DIR}/../lib" \
+    "/opt/lib" \
+    "/opt/container_entrypoints/../lib"; do
+    if [[ -f "${_candidate}/spack_init.sh" ]]; then
+        _LIB_DIR="${_candidate}"
+        break
+    fi
+done
+if [[ -z "${_LIB_DIR}" ]]; then
+    echo "ERROR: runtime kit incomplete: missing lib/spack_init.sh" >&2
+    echo "HINT: Re-vendor MLSys runtime (zephyr_mlsys_vendor.sh update)." >&2
+    exit 1
+fi
 # shellcheck disable=SC1091
 source "${_LIB_DIR}/spack_init.sh"
 

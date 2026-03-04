@@ -110,19 +110,22 @@ echo ""
 # 1. Set up the Spack environment
 # 2. Create a UV venv and install test packages
 # The venv is created in /tmp/test-venv to avoid permission issues.
+# Uses set -eo pipefail (no -u) and optional Spack source for baked image compatibility.
 SETUP_SCRIPT='
-set -euo pipefail
+set -eo pipefail
+echo "T8.1_START"
 export PATH="/usr/local:/usr/local/bin:${PATH}"
 
-# Source Spack
-source /opt/spack_src/share/spack/setup-env.sh
-spack env activate /opt/spack_env/default 2>/dev/null || true
+# Source Spack if present (baked MLSys images may have different layout)
+if [[ -f /opt/spack_src/share/spack/setup-env.sh ]]; then
+    source /opt/spack_src/share/spack/setup-env.sh
+    spack env activate /opt/spack_env/default 2>/dev/null || true
+fi
 
-PYTHON_BIN="/opt/spack_store/view/bin/python3"
 VENV_DIR="/tmp/test-venv"
 
-# Fresh UV cache per verification run (avoid stale sdist artifacts)
-export UV_CACHE_DIR="/tmp/uv-cache-$$"
+# Fresh UV cache per verification run
+export UV_CACHE_DIR="/tmp/uv-cache-verify"
 mkdir -p "${UV_CACHE_DIR}"
 
 # Use uv-install.sh entrypoint (datasets split out — see T8.7)
@@ -140,7 +143,14 @@ result="$(run_no_gpu "${SETUP_SCRIPT}"$'\n'"echo UV_VENV_OK")" || true
 if echo "${result}" | grep -q "UV_VENV_OK"; then
     pass "UV venv created and packages installed"
 else
-    fail "UV venv creation" "output: $(echo "${result}" | tail -5)"
+    tail_out="$(echo "${result}" | tail -25)"
+    if echo "${result}" | grep -q "T8.1_START"; then
+        fail "UV venv creation" "script started but did not finish (timeout or uv failed). Last lines: ${tail_out}"
+    elif [[ -z "${tail_out}" ]]; then
+        fail "UV venv creation" "no output (timeout or early exit). Try VERIFY_RUN_NO_GPU_TIMEOUT=1200."
+    else
+        fail "UV venv creation" "output: ${tail_out}"
+    fi
     echo ""
     echo "FATAL: Cannot proceed without UV venv. Stopping."
     exit 1
@@ -158,7 +168,7 @@ SPACK_PKGS="torch torchvision torchaudio jax numpy scipy triton"
 for pkg in ${SPACK_PKGS}; do
     mod_name="${pkg//-/_}"
     result="$(run_no_gpu "
-        ${SETUP_SCRIPT} >/dev/null 2>&1
+        ( ${SETUP_SCRIPT} ) >/dev/null 2>&1
         source /tmp/test-venv/bin/activate
         python3 -c \"
 import ${mod_name}
@@ -188,7 +198,7 @@ UV_PKGS="transformers tokenizers accelerate"
 for pkg in ${UV_PKGS}; do
     mod_name="${pkg//-/_}"
     result="$(run_no_gpu "
-        ${SETUP_SCRIPT} >/dev/null 2>&1
+        ( ${SETUP_SCRIPT} ) >/dev/null 2>&1
         source /tmp/test-venv/bin/activate
         python3 -c \"
 import ${mod_name}
@@ -217,7 +227,7 @@ echo ""
 echo "=== T8.4: No NVIDIA pip packages ==="
 
 result="$(run_no_gpu "
-    ${SETUP_SCRIPT} >/dev/null 2>&1
+    ( ${SETUP_SCRIPT} ) >/dev/null 2>&1
     source /tmp/test-venv/bin/activate
     python3 -c \"
 import importlib.metadata as md
@@ -259,7 +269,7 @@ else
 
         # torch.cuda.is_available() in the UV venv
         result="$(run_with_gpu "
-            ${SETUP_SCRIPT} >/dev/null 2>&1
+            ( ${SETUP_SCRIPT} ) >/dev/null 2>&1
             source /tmp/test-venv/bin/activate
             python3 -c \"
 import torch
@@ -280,7 +290,7 @@ print('GPU_OK')
 
         # transformers model load (quick, verifies HF + torch integration)
         result="$(run_with_gpu "
-            ${SETUP_SCRIPT} >/dev/null 2>&1
+            ( ${SETUP_SCRIPT} ) >/dev/null 2>&1
             source /tmp/test-venv/bin/activate
             python3 -c \"
 from transformers import AutoTokenizer

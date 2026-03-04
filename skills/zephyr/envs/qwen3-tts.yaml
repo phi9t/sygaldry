@@ -1,0 +1,55 @@
+apiVersion: zephyr-mlsys/v1
+kind: Environment
+metadata:
+  name: qwen3-tts
+  description: "Qwen3-TTS inference on Zephyr Spack base (torchaudio baked-in)"
+spec:
+  image: "${SYGALDRY_SNAPSHOT_IMAGE:-sygaldry/zephyr:spack}"
+  venvs:
+    - name: default
+      packages:
+        - "git+https://github.com/huggingface/transformers.git@main"
+        - "accelerate"
+        - "librosa"
+        - "soxr"
+        - "sounddevice"
+        - "qwen-tts==0.1.1 --no-deps"
+      overrides: []
+  validation:
+    provenance:
+      spack:
+        - torch
+        - torchaudio
+        - numpy
+        - scipy
+      uv:
+        - transformers
+        - accelerate
+        - librosa
+        - soxr
+        - sounddevice
+    no_nvidia_pip: true
+    gpu_functional:
+      - name: torchaudio_check
+        script: |
+          import torch, torchaudio
+          assert torch.cuda.is_available(), 'CUDA not available'
+          print(f'torch {torch.__version__}, torchaudio {torchaudio.__version__} OK')
+        hard_fail_patterns:
+          - "undefined symbol"
+          - "libnvJitLink"
+      - name: transformers_check
+        script: |
+          import transformers, accelerate, librosa
+          print('qwen3-tts stack imports OK')
+        hard_fail_patterns: []
+      - name: sounddevice_check
+        script: |
+          import sounddevice
+          print(f'sounddevice {sounddevice.__version__} imports OK')
+        hard_fail_patterns: []
+    hard_fail_on:
+      - abi_mismatch
+      - core_conflict
+    soft_fail_on:
+      - nvidia_dsl_leak

@@ -1,0 +1,29 @@
+apiVersion: zephyr-mlsys/v1
+
+# Base image. Can be a Spack snapshot OR an existing mlsys image (for chaining).
+# Tip: pin with @sha256:DIGEST for reproducible builds.
+base_image: sygaldry/zephyr:spack@sha256:REPLACE_WITH_DIGEST
+
+# Output image name
+image: REPLACE_WITH_YOUR_PROJECT/mlsys:latest
+
+# Optional: extra apt packages
+# apt_packages:
+#   - libsndfile1-dev
+
+# Python dependencies -- choose ONE of the three options below:
+python_deps:
+  # Option A: inline list
+  packages:
+    - "transformers>=4.50"
+    - accelerate
+
+  # Option B: requirements file
+  # requirements: requirements-mlsys.txt
+
+  # Option C: read from pyproject.toml [project.dependencies]
+  # pyproject: pyproject.toml
+  # extras: [mlsys]        # optional: [project.optional-dependencies.mlsys]
+
+# Venv path inside container (default: /opt/repo-venv)
+# venv_path: /opt/repo-venv

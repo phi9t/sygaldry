@@ -5,7 +5,7 @@
 * Overview
 
 Zephyr is the Rust CLI that replaces the bash-based container infrastructure.
-It provides a single binary (~6,400 lines) for both host-side container
+It provides a single binary (~7,277 lines) for both host-side container
 orchestration and in-container environment initialization.
 
 ** Two-Tier Architecture
@@ -21,11 +21,11 @@ Host (no container)  ──docker run──▶  Container (SYGALDRY_IN_CONTAINER
   host/mod.rs::dispatch()             container/mod.rs::dispatch()
 #+end_example
 
-| Mechanism | Bash | Rust |
-|-----------|------|------|
-| Detection | =SYGALDRY_IN_CONTAINER= check | =context.rs::RuntimeContext::detect()= |
-| Host dispatch | =container/launch_container.sh= | =host/mod.rs::dispatch()= |
-| Container dispatch | entrypoint scripts | =container/mod.rs::dispatch()= |
+| Mechanism          | Bash                          | Rust                                 |
+|--------------------+-------------------------------+--------------------------------------|
+| Detection          | =SYGALDRY_IN_CONTAINER= check   | =context.rs::RuntimeContext::detect()= |
+| Host dispatch      | =container/launch_container.sh= | =host/mod.rs::dispatch()=              |
+| Container dispatch | entrypoint scripts            | =container/mod.rs::dispatch()=         |
 
 * Core Features — Host Mode
 
@@ -214,6 +214,11 @@ The full init sequence replaces =container/lib/spack_init.sh::sygaldry_full_init
 | Target | =$SYGALDRY_MLSYS_TARGET= | same (target-specific venv) |
 | Resolution | first matching venv | =find_first_venv()= (alphabetically first) |
 
+Note: =MLSYS_VENV_ROOT=/opt/mlsys-envs= is for snapshot-level multi-tenant venvs shared
+across projects. Repo-specific venvs use the Build-Time Image System (see =* MLSys
+Build-Time Image System=): baked at =/opt/repo-venv= during =docker buildx build=,
+activated via Docker =ENV= at runtime — no =mlsys_venv.rs= involvement.
+
 ** Entrypoints
 
 *** default (Interactive Shell)
@@ -305,6 +310,83 @@ The full init sequence replaces =container/lib/spack_init.sh::sygaldry_full_init
 | Deps check | import test | =ensure_hf_deps()= |
 | Auto-install | =uv pip install datasets huggingface-hub= | same |
 
+* MLSys Build-Time Image System
+
+** Overview
+
+The MLSys Build-Time Image system lets external repos bake a Python venv into a
+repo-scoped Docker image on top of the Zephyr Spack snapshot. This replaces the
+runtime-venv design (uv-env-build.sh → /tmp/ venv on every launch).
+
+The system is implemented as two vendored bash scripts + a config file:
+
+| File               | Location in target repo                     |
+|--------------------+---------------------------------------------|
+| =build-mlsys.sh=   | =.codex-zephyr-mlsys/bin/=                  |
+| =launch-mlsys.sh=  | =.codex-zephyr-mlsys/bin/=                  |
+| =config.yaml=      | =.codex-zephyr-mlsys/config.yaml=           |
+| =image.lock=       | =.codex-zephyr-mlsys/image.lock= (generated)|
+
+Source lives in: =skills/zephyr/assets/zephyr-mlsys-runtime/=
+Vendor script:   =skills/zephyr/scripts/zephyr_mlsys_vendor.sh=
+
+** Two-Phase Workflow
+
+Phase 1 — build (one-time or on dep changes):
+#+begin_example
+  build-mlsys.sh reads config.yaml
+    → parses python_deps (inline / requirements.txt / pyproject.toml)
+    → generates temp Dockerfile
+    → docker buildx build --load → image@sha256:...
+    → writes image.lock
+#+end_example
+
+Phase 2 — run (each job):
+#+begin_example
+  launch-mlsys.sh -- python train.py
+    → reads image.lock
+    → docker run --runtime=nvidia --gpus=all <image> <cmd>
+#+end_example
+
+** Generated Dockerfile Pattern
+
+#+begin_example
+FROM <base_image@sha256:digest>
+# optional: RUN apt-get install ...
+RUN VENV_DIR=/opt/repo-venv UV_CACHE_DIR=/opt/uv_cache \
+    /opt/container_entrypoints/uv-install.sh <packages>
+ENV VIRTUAL_ENV=/opt/repo-venv
+ENV PATH=/opt/repo-venv/bin:${PATH}
+#+end_example
+
+Key: =uv-install.sh=, =spack_owned_packages.conf=, =nvidia_overrides.txt= and
+=/opt/lib/spack_init.sh= are baked into the Zephyr snapshot image via
+=spack_snapshot.dockerfile= — no host mounts needed at build or run time.
+
+** config.yaml Fields
+
+| Field          | Required | Description                                        |
+|----------------+----------+----------------------------------------------------|
+| =base_image=   | yes      | Digest-pinned Spack snapshot ref                   |
+| =image=        | yes      | Output image name:tag                              |
+| =apt_packages= | no       | List of extra apt packages                         |
+| =python_deps=  | no       | Deps source: packages / requirements / pyproject   |
+| =venv_path=    | no       | Venv path in container (default =/opt/repo-venv=)  |
+
+** image.lock Fields
+
+| Field        | Description                          |
+|--------------+--------------------------------------|
+| =image_ref=  | Built image digest ref               |
+| =built_at=   | ISO-8601 build timestamp             |
+| =base_image= | Digest of base Spack snapshot used   |
+
+** Container Path
+
+Baked-image repos activate the venv via Docker =ENV= (=VIRTUAL_ENV=, =PATH=);
+no explicit activation needed at runtime. The venv path =/opt/repo-venv= is
+the default; configurable via =config.yaml= =venv_path=.
+
 * Configuration
 
 | Aspect | Bash | Rust |
@@ -327,6 +409,11 @@ The full init sequence replaces =container/lib/spack_init.sh::sygaldry_full_init
 | =SYGALDRY_IN_CONTAINER= | — | Container detection flag |
 | =SYGALDRY_MLSYS_ENV= | — | MLSys venv name |
 | =SYGALDRY_BUILD_ROLE= | =consumer= | Builder role gate |
+| =SYGALDRY_RUN_ID= | auto-uuid | Per-run tracking ID (auto-generated if empty) |
+| =SYGALDRY_NET= | =host= | Docker network mode |
+| =SYGALDRY_IPC= | =host= | Docker IPC mode |
+| =GO_VERSION= | =1.21.5= | Go toolchain version |
+| =BAZEL_VERSION= | =6.4.0= | Bazel toolchain version |
 
 * Path Constants
 
@@ -358,105 +445,105 @@ The full init sequence replaces =container/lib/spack_init.sh::sygaldry_full_init
 
 * Error Handling
 
-| Aspect | Bash | Rust |
-|--------|------|------|
-| Source | =set -eu=, exit codes, inline messages | =error.rs::ZephyrError= (thiserror) |
-| Variants | — | 13 structured error variants |
-| Remediation | inline text | =WithHint= variant with =HINT:= prefix |
-| IO context | lost | =IoResultExt::with_path()= adds path |
+| Aspect      | Bash                                 | Rust                               |
+|-------------+--------------------------------------+------------------------------------|
+| Source      | =set -eu=, exit codes, inline messages | =error.rs::ZephyrError= (thiserror)  |
+| Variants    | —                                    | 13 structured error variants       |
+| Remediation | inline text                          | =WithHint= variant with =HINT:= prefix |
+| IO context  | lost                                 | =IoResultExt::with_path()= adds path |
 
 *** Error Variants
 
-| Variant | Meaning |
-|---------|---------|
-| =DockerUnavailable= | =docker= not in PATH |
-| =DockerDaemonDown= | =docker info= fails |
-| =NoNvidiaRuntime= | no =nvidia= in =docker info= |
-| =CudaVersionTooOld= | host CUDA < required |
-| =ImageNotFound= | image missing + policy=never |
-| =ImageBuildFailed= | =docker build= IO error |
-| =LeaseConflict= | GPU lease held by another run |
-| =EntrypointNotFound= | entrypoint script missing |
-| =SpackNotFound= | Spack setup-env.sh missing |
-| =SpackActivationFailed= | no candidate env activated |
-| =GpuValidationFailed= | GPU check script failed |
-| =CommandFailed= | subprocess non-zero exit |
-| =JobNotFound= | job status/log files missing |
-| =WithHint= | any error + remediation guidance |
+| Variant               | Meaning                          |
+|-----------------------+----------------------------------|
+| =DockerUnavailable=     | =docker= not in PATH               |
+| =DockerDaemonDown=      | =docker info= fails                |
+| =NoNvidiaRuntime=       | no =nvidia= in =docker info=         |
+| =CudaVersionTooOld=     | host CUDA < required             |
+| =ImageNotFound=         | image missing + policy=never     |
+| =ImageBuildFailed=      | =docker build= IO error            |
+| =LeaseConflict=         | GPU lease held by another run    |
+| =EntrypointNotFound=    | entrypoint script missing        |
+| =SpackNotFound=         | Spack setup-env.sh missing       |
+| =SpackActivationFailed= | no candidate env activated       |
+| =GpuValidationFailed=   | GPU check script failed          |
+| =CommandFailed=         | subprocess non-zero exit         |
+| =JobNotFound=           | job status/log files missing     |
+| =WithHint=              | any error + remediation guidance |
 
 * CLI Dispatch
 
-| Aspect | Bash | Rust |
-|--------|------|------|
+| Aspect | Bash                         | Rust                           |
+|--------+------------------------------+--------------------------------|
 | Source | =bin/sygaldry= (case dispatch) | =cli.rs= (clap derive) + =main.rs= |
-| Parser | positional args | clap with subcommands |
+| Parser | positional args              | clap with subcommands          |
 
 *** Subcommands
 
-| Subcommand | Mode | Description |
-|------------|------|-------------|
-| =shell= | host | Launch interactive container |
-| =run= | host | Run command in container |
-| =job run/status/tail/stop/health= | host | Manage background jobs |
-| =build= | host | Build Docker image |
-| =config show= | host | Print effective config |
-| =stage= | host | Spack staging pipeline |
-| =validate= | host | Run validation suite |
-| =version= | both | Show version info |
-| =init= | container | Spack/CUDA init |
-| =gpu-check= | container | GPU validation |
-| =verify-spack= | container | Spack verification |
-| =uv-install= | container | Install packages with uv |
-| =hf-download model/dataset= | container | HuggingFace downloads |
-| =entrypoint= | container | Run named entrypoint |
-| =job-wrapper= | container | Internal job wrapper (hidden) |
+| Subcommand                      | Mode      | Description                   |
+|---------------------------------+-----------+-------------------------------|
+| =shell=                           | host      | Launch interactive container  |
+| =run=                             | host      | Run command in container      |
+| =job run/status/tail/stop/health= | host      | Manage background jobs        |
+| =build=                           | host      | Build Docker image            |
+| =config show=                     | host      | Print effective config        |
+| =stage=                           | host      | Spack staging pipeline        |
+| =validate=                        | host      | Run validation suite          |
+| =version=                         | both      | Show version info             |
+| =init=                            | container | Spack/CUDA init               |
+| =gpu-check=                       | container | GPU validation                |
+| =verify-spack=                    | container | Spack verification            |
+| =uv-install=                      | container | Install packages with uv      |
+| =hf-download model/dataset=       | container | HuggingFace downloads         |
+| =entrypoint=                      | container | Run named entrypoint          |
+| =job-wrapper=                     | container | Internal job wrapper (hidden) |
 
 * Source File Index
 
 ** Host-side (=src/host/=)
 
-| File | Lines | Tests | Purpose |
-|------|-------|-------|---------|
-| =launcher.rs= | 106 | 3 | Container launch orchestration |
-| =image.rs= | 139 | 10 | Docker image build + label queries |
-| =docker_args.rs= | ~200 | ~15 | Docker argument construction |
-| =requirements.rs= | 56 | 4 | Pre-flight Docker/NVIDIA checks |
-| =cuda.rs= | 65 | 17 | Host CUDA version detection |
-| =dirs.rs= | ~50 | ~5 | Host directory creation |
-| =lease.rs= | ~130 | 12 | File-based GPU lease system |
-| =job.rs= | ~250 | ~15 | Background job management |
-| =staging.rs= | 601 | 15 | Spack staging pipeline |
-| =mod.rs= | 155 | 0 | Host dispatch |
+| File             | Lines | Tests | Purpose                            |
+|------------------+-------+-------+------------------------------------|
+| =launcher.rs=    |   175 |     3 | Container launch orchestration     |
+| =image.rs=       |   237 |    10 | Docker image build + label queries |
+| =docker_args.rs= |   600 |   ~15 | Docker argument construction       |
+| =requirements.rs=|    94 |     4 | Pre-flight Docker/NVIDIA checks    |
+| =cuda.rs=        |   165 |    17 | Host CUDA version detection        |
+| =dirs.rs=        |   141 |    ~5 | Host directory creation            |
+| =lease.rs=       |   352 |    12 | File-based GPU lease system        |
+| =job.rs=         |   477 |   ~15 | Background job management          |
+| =staging.rs=     |   724 |    15 | Spack staging pipeline             |
+| =mod.rs=         |   155 |     0 | Host dispatch                      |
 
 ** Container-side (=src/container/=)
 
-| File | Lines | Tests | Purpose |
-|------|-------|-------|---------|
-| =entrypoint.rs= | 815 | 28 | Entrypoint dispatch + job wrapper |
-| =spack.rs= | 261 | 10 | Spack init cascade |
-| =uv_install.rs= | 173 | 11 | UV package installation |
-| =hf_download.rs= | 127 | 10 | HuggingFace downloads |
-| =gpu_check.rs= | 50 | 6 | GPU validation script runner |
-| =verify.rs= | 97 | 10 | Spack verification |
-| =cuda.rs= | 119 | 3 | Container CUDA env setup |
-| =mlsys_venv.rs= | 183 | 10 | MLSys venv activation |
-| =mod.rs= | 89 | 0 | Container dispatch |
+| File            | Lines | Tests | Purpose                           |
+|-----------------+-------+-------+-----------------------------------|
+| =entrypoint.rs= |   850 |    28 | Entrypoint dispatch + job wrapper |
+| =spack.rs=      |   312 |    10 | Spack init cascade                |
+| =uv_install.rs= |   223 |    11 | UV package installation           |
+| =hf_download.rs=|   199 |    10 | HuggingFace downloads             |
+| =gpu_check.rs=  |    66 |     6 | GPU validation script runner      |
+| =verify.rs=     |   146 |    10 | Spack verification                |
+| =cuda.rs=       |   118 |     3 | Container CUDA env setup          |
+| =mlsys_venv.rs= |   182 |    10 | MLSys venv activation             |
+| =mod.rs=        |    89 |     0 | Container dispatch                |
 
 ** Core (=src/=)
 
-| File | Lines | Tests | Purpose |
-|------|-------|-------|---------|
-| =cli.rs= | 611 | 34 | Clap CLI definition |
-| =config.rs= | 723 | 22 | Configuration from env + CLI |
-| =paths.rs= | 305 | 12 | Path constants + HostLayout |
-| =error.rs= | 232 | 12 | ZephyrError + IoResultExt |
-| =context.rs= | 73 | 5 | Runtime context detection |
-| =main.rs= | ~20 | 0 | Entry point |
+| File        | Lines | Tests | Purpose                      |
+|-------------+-------+-------+------------------------------|
+| =cli.rs=    |   611 |    34 | Clap CLI definition          |
+| =config.rs= |   722 |    22 | Configuration from env + CLI |
+| =paths.rs=  |   304 |    12 | Path constants + HostLayout  |
+| =error.rs=  |   231 |    12 | ZephyrError + IoResultExt    |
+| =context.rs=|    72 |     5 | Runtime context detection    |
+| =main.rs=   |    32 |     0 | Entry point                  |
 
 * Embedded Python Scripts
 
-| Script | Included via | Purpose |
-|--------|-------------|---------|
-| =scripts/gpu_check.py= | =gpu_check.rs::GPU_CHECK_SCRIPT= | 4-layer GPU validation |
-| =scripts/verify_spack.py= | =verify.rs::VERIFY_SCRIPT= | Spack package verification |
+| Script                     | Included via                      | Purpose                     |
+|----------------------------+-----------------------------------+-----------------------------|
+| =scripts/gpu_check.py=       | =gpu_check.rs::GPU_CHECK_SCRIPT=    | 4-layer GPU validation      |
+| =scripts/verify_spack.py=    | =verify.rs::VERIFY_SCRIPT=          | Spack package verification  |
 | =scripts/gen_constraints.py= | =uv_install.rs::CONSTRAINTS_SCRIPT= | Spack constraint generation |

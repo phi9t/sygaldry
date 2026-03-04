@@ -67,10 +67,13 @@ verify_has_nvidia_runtime() {
     docker info 2>/dev/null | grep -q nvidia
 }
 
+# Timeout for no-GPU runs (UV venv + pip install can take 10+ minutes)
+VERIFY_RUN_NO_GPU_TIMEOUT="${VERIFY_RUN_NO_GPU_TIMEOUT:-900}"
+
 verify_run_no_gpu() {
     local image="$1"
     local cmd="$2"
-    timeout 300 docker run --rm --entrypoint /bin/bash "${image}" -c "${cmd}"
+    timeout "${VERIFY_RUN_NO_GPU_TIMEOUT}" docker run --rm --entrypoint /bin/bash "${image}" -c "${cmd}"
 }
 
 verify_run_with_gpu() {
