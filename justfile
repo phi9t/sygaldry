@@ -25,6 +25,19 @@ sail-discover:
 sail-worker:
     sygaldry sail worker
 
+# Run the unattended cron wrapper once
+sail-cron:
+    sygaldry sail cron
+
+# Smoke-test the loop, then launch the unattended cron wrapper once
+sail-initial:
+    just sail-echo
+    just sail-cron
+
+# Analyze a persisted SAIL run directory
+sail-analyze RUN_DIR:
+    sygaldry sail analyze-run --run-dir {{RUN_DIR}}
+
 # Validate the improvement_loop.yaml plan schema
 sail-validate:
     sygaldry sail validate-plan

@@ -46,7 +46,7 @@ Subcommands:
   run               Run a command in the container
   job               Manage background jobs (run/status/tail/stop/health)
   k3s               K3s dev pods and batch jobs (enter/job/setup)
-  sail              SAIL agentic improvement loop (discover/worker/run)
+  sail              SAIL agentic improvement loop (discover/worker/run/cron)
   config show       Show effective configuration
   snapshot          Build snapshot images (spack, mlsys, or all)
   validate          Run validation suite
@@ -67,6 +67,8 @@ Examples:
   sygaldry sail --dry-run               # Dry-run SAIL (no LLM calls)
   sygaldry sail                         # Run SAIL improvement loop
   sygaldry sail worker                  # Start Temporal worker
+  sygaldry sail cron                    # Run unattended SAIL cron wrapper once
+  sygaldry sail analyze-run --run-dir /path/to/run
   sygaldry config show
   sygaldry snapshot spack               # Build spack snapshot
   sygaldry snapshot vllm sglang --push  # Build + push MLSys images
@@ -138,6 +140,14 @@ case "${1:-}" in
                 shift
                 cd "${SYGALDRY_HOME}/temporal"
                 exec go run ./cmd/worker "$@"
+                ;;
+            cron)
+                shift
+                exec "${SYGALDRY_HOME}/tools/agentic/sail_cron.sh" "$@"
+                ;;
+            analyze-run)
+                shift
+                exec python3 "${SYGALDRY_HOME}/tools/agentic/analyze_sail_run.py" "$@"
                 ;;
             validate-plan)
                 shift
@@ -212,7 +222,7 @@ _sygaldry_completions() {
             mapfile -t COMPREPLY < <(compgen -W "enter job setup" -- "${cur}")
             return ;;
         sail)
-            mapfile -t COMPREPLY < <(compgen -W "discover worker validate-plan --dry-run --repo-dir" -- "${cur}")
+            mapfile -t COMPREPLY < <(compgen -W "discover worker cron analyze-run validate-plan --dry-run --repo-dir --run-id --artifacts-dir --issues-file --run-dir --output-dir" -- "${cur}")
             return ;;
         validate)
             mapfile -t COMPREPLY < <(compgen -W "--quick --verify-only --infra --infra-full --snapshot --snapshot-no-gpu --uv-layering --multi-repo" -- "${cur}")

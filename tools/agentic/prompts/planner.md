@@ -16,10 +16,11 @@ Then produce a **structured task plan** as a YAML document.
 ## Output Instructions
 
 1. Write the task plan YAML to `/tmp/sail-${{ params.workflow_id }}-plan.yaml`.
-2. Print the following line to stdout (so the pipeline can pass the path to the implementer):
+2. Print the following lines to stdout (so the pipeline can pass the path and normalized title downstream):
 
 ```
 ::set-output name=plan_file::/tmp/sail-${{ params.workflow_id }}-plan.yaml::
+::set-output name=task_title::<task.title>::
 ```
 
 The plan must follow this exact schema:
@@ -27,7 +28,7 @@ The plan must follow this exact schema:
 ```yaml
 task:
   issue_id: "<id from issue_json>"
-  title: "<concise imperative title, e.g. 'Fix SC2155 in container/lib/spack_init.sh'>"
+  title: "<commit-ready imperative title, e.g. 'fix sc2155 in container/lib/spack_init.sh'>"
   approach: |
     <2–4 sentences describing the fix strategy>
   files_to_change:
@@ -43,6 +44,8 @@ task:
 ## Constraints
 
 - Keep changes **minimal and focused** — fix only the reported issue, nothing more.
+- `task.title` must be a one-line, lowercase, imperative subject suitable for a commit message suffix.
+- Do not include a trailing period in `task.title`.
 - Do **not** redesign APIs, refactor unrelated code, or add features.
 - Prefer editing existing files over creating new ones.
 - The fix must pass `./validate_all.sh --quick` when applied.

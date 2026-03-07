@@ -30,25 +30,57 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import datetime as dt
 import hashlib
 import json
-import os
 import re
 import subprocess
 import sys
+import time
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 # ---------------------------------------------------------------------------
 # Types
 # ---------------------------------------------------------------------------
 
 Issue = dict[str, Any]
+SourceFunc = Callable[[Path, int], list[Issue]]
 
 
 def _issue_id(issue_type: str, data: str) -> str:
     h = hashlib.sha1(data.encode()).hexdigest()[:8]
     return f"{issue_type}-{h}"
+
+
+def _utc_now() -> str:
+    return dt.datetime.utcnow().isoformat() + "Z"
+
+
+def _run_source(
+    name: str,
+    func: SourceFunc,
+    repo_dir: Path,
+    max_per_type: int,
+) -> tuple[list[Issue], dict[str, Any]]:
+    started_at = _utc_now()
+    start = time.perf_counter()
+    error = ""
+    try:
+        issues = func(repo_dir, max_per_type)
+    except Exception as exc:  # pragma: no cover - defensive telemetry path
+        issues = []
+        error = str(exc)
+    duration = round(time.perf_counter() - start, 3)
+    stats = {
+        "name": name,
+        "startedAt": started_at,
+        "finishedAt": _utc_now(),
+        "durationSec": duration,
+        "count": len(issues),
+        "error": error,
+    }
+    return issues, stats
 
 
 # ---------------------------------------------------------------------------
@@ -346,7 +378,7 @@ def discover_uncovered_functions(repo_dir: Path, max_per_type: int) -> list[Issu
 
     cover_file = "/tmp/sail-coverage.out"
     try:
-        result = subprocess.run(
+        subprocess.run(
             ["go", "test", "./...", f"-coverprofile={cover_file}", "-covermode=set"],
             cwd=temporal_dir,
             capture_output=True,
@@ -409,22 +441,47 @@ def main() -> None:
                         help="Max issues per source type (default: 10)")
     parser.add_argument("--min-priority", type=int, default=3,
                         help="Only emit issues with priority <= this (default: 3 = all)")
+    parser.add_argument("--stats-file", help="Write discovery timing/count metadata to this JSON file")
     args = parser.parse_args()
 
     repo_dir = Path(args.repo_dir).resolve()
     max_per = args.max_per_type
 
+    overall_started_at = _utc_now()
+    overall_start = time.perf_counter()
     all_issues: list[Issue] = []
-    all_issues.extend(discover_go_test_failures(repo_dir, max_per))
-    all_issues.extend(discover_go_vet(repo_dir, max_per))
-    all_issues.extend(discover_shellcheck(repo_dir, max_per))
-    all_issues.extend(discover_todos(repo_dir, max_per))
-    all_issues.extend(discover_ruff(repo_dir, max_per))
-    all_issues.extend(discover_foundation_drift(repo_dir, max_per))
-    all_issues.extend(discover_uncovered_functions(repo_dir, max_per))
+    source_stats: list[dict[str, Any]] = []
+    for name, func in (
+        ("go_test", discover_go_test_failures),
+        ("go_vet", discover_go_vet),
+        ("shellcheck", discover_shellcheck),
+        ("todo", discover_todos),
+        ("ruff", discover_ruff),
+        ("foundation_drift", discover_foundation_drift),
+        ("go_coverage", discover_uncovered_functions),
+    ):
+        issues, stats = _run_source(name, func, repo_dir, max_per)
+        all_issues.extend(issues)
+        source_stats.append(stats)
 
     filtered = [i for i in all_issues if i["priority"] <= args.min_priority]
     filtered.sort(key=lambda i: (i["priority"], i["id"]))
+
+    if args.stats_file:
+        stats_payload = {
+            "repoDir": str(repo_dir),
+            "mode": "discover",
+            "startedAt": overall_started_at,
+            "finishedAt": _utc_now(),
+            "durationSec": round(time.perf_counter() - overall_start, 3),
+            "discoveredCount": len(all_issues),
+            "selectedCount": len(filtered),
+            "sources": source_stats,
+        }
+        Path(args.stats_file).write_text(
+            json.dumps(stats_payload, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
 
     json.dump(filtered, sys.stdout, indent=2)
     print()  # trailing newline
