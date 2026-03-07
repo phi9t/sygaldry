@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 )
 
@@ -43,9 +44,13 @@ func AgentTask(ctx context.Context, input AgentTaskInput) (RunCommandResult, err
 	// Resolve prompt text.
 	prompt := input.Prompt
 	if input.PromptFile != "" {
-		data, err := os.ReadFile(input.PromptFile)
+		promptPath := input.PromptFile
+		if !filepath.IsAbs(promptPath) && input.WorkingDir != "" {
+			promptPath = filepath.Join(input.WorkingDir, promptPath)
+		}
+		data, err := os.ReadFile(promptPath)
 		if err != nil {
-			return RunCommandResult{ExitCode: -1}, fmt.Errorf("agent_task: reading prompt_file %q: %w", input.PromptFile, err)
+			return RunCommandResult{ExitCode: -1}, fmt.Errorf("agent_task: reading prompt_file %q: %w", promptPath, err)
 		}
 		prompt = string(data)
 	}

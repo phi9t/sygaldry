@@ -12,10 +12,14 @@ readonly CONFIG_FILE
 
 DEFAULT_ENV_FILE="/mnt/data_infra/zephyr_container_infra/sygaldry/config/sail-cron.env"
 readonly DEFAULT_ENV_FILE
+ENV_FILE="${SAIL_CRON_ENV_FILE:-${DEFAULT_ENV_FILE}}"
+readonly ENV_FILE
 
-if [[ -f "${SAIL_CRON_ENV_FILE:-${DEFAULT_ENV_FILE}}" ]]; then
+if [[ -f "${ENV_FILE}" ]]; then
+    set -a
     # shellcheck disable=SC1090
-    source "${SAIL_CRON_ENV_FILE:-${DEFAULT_ENV_FILE}}"
+    source "${ENV_FILE}"
+    set +a
 fi
 
 RUNTIME_ROOT="${SAIL_RUNTIME_ROOT:-/mnt/data_infra/zephyr_container_infra/sygaldry/logs/sail}"

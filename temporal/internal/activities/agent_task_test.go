@@ -8,6 +8,27 @@ import (
 	"testing"
 )
 
+func prependFakeCommand(t *testing.T, name string) {
+	t.Helper()
+
+	dir := t.TempDir()
+	commandPath := filepath.Join(dir, name)
+	if err := os.WriteFile(commandPath, []byte("#!/usr/bin/env sh\nexit 0\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	oldPath := os.Getenv("PATH")
+	newPath := dir
+	if oldPath != "" {
+		newPath += string(os.PathListSeparator) + oldPath
+	}
+	if err := os.Setenv("PATH", newPath); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		_ = os.Setenv("PATH", oldPath)
+	})
+}
+
 func TestAgentTaskMissingPrompt(t *testing.T) {
 	input := AgentTaskInput{
 		Name:   "test",
@@ -40,6 +61,8 @@ func TestAgentTaskUnsupportedEngine(t *testing.T) {
 }
 
 func TestAgentTaskPromptFile(t *testing.T) {
+	prependFakeCommand(t, "claude")
+
 	dir := t.TempDir()
 	promptPath := filepath.Join(dir, "prompt.md")
 	if err := os.WriteFile(promptPath, []byte("test prompt content"), 0o644); err != nil {
@@ -61,6 +84,31 @@ func TestAgentTaskPromptFile(t *testing.T) {
 	}
 }
 
+func TestAgentTaskPromptFileRelativeToWorkingDir(t *testing.T) {
+	prependFakeCommand(t, "claude")
+
+	dir := t.TempDir()
+	promptDir := filepath.Join(dir, "tools", "agentic", "prompts")
+	if err := os.MkdirAll(promptDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	promptPath := filepath.Join(promptDir, "implementer.md")
+	if err := os.WriteFile(promptPath, []byte("relative prompt"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	input := AgentTaskInput{
+		Name:       "test-relative-prompt",
+		Engine:     AgentEngineClaude,
+		PromptFile: filepath.Join("tools", "agentic", "prompts", "implementer.md"),
+		WorkingDir: dir,
+	}
+	_, err := AgentTask(context.Background(), input)
+	if err != nil && strings.Contains(err.Error(), "reading prompt_file") {
+		t.Fatalf("relative prompt_file should resolve from working_dir: %v", err)
+	}
+}
+
 func TestAgentTaskPromptFileMissing(t *testing.T) {
 	input := AgentTaskInput{
 		Name:       "test",
@@ -77,6 +125,8 @@ func TestAgentTaskPromptFileMissing(t *testing.T) {
 }
 
 func TestAgentTaskDefaultEngine(t *testing.T) {
+	prependFakeCommand(t, "claude")
+
 	// Engine defaults to claude when empty; command won't exist in test env,
 	// but we verify the error is not about the engine.
 	input := AgentTaskInput{
@@ -92,6 +142,8 @@ func TestAgentTaskDefaultEngine(t *testing.T) {
 }
 
 func TestAgentTaskCodexEngineArgs(t *testing.T) {
+	prependFakeCommand(t, "codex")
+
 	// We can't easily test the full invocation without the codex binary,
 	// but we can verify the input struct fields map correctly by checking
 	// the path taken through the switch does not error on engine dispatch.
@@ -109,6 +161,8 @@ func TestAgentTaskCodexEngineArgs(t *testing.T) {
 }
 
 func TestAgentTaskCursorEngineArgs(t *testing.T) {
+	prependFakeCommand(t, "cursor")
+
 	input := AgentTaskInput{
 		Name:   "test",
 		Engine: AgentEngineCursor,
