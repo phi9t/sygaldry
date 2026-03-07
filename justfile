@@ -7,27 +7,29 @@
 default:
     @just --list
 
+sygaldry_bin := "./bin/sygaldry"
+
 # ── SAIL: Sygaldry Agentic Improvement Loop ──────────────────────────────────
 
 # Run the full SAIL improvement loop (requires Temporal worker + gh CLI + claude CLI)
 sail:
-    sygaldry sail
+    {{sygaldry_bin}} sail
 
 # Dry run: discover issues and log what would happen (no LLM calls, no Temporal)
 sail-dry:
-    sygaldry sail --dry-run
+    {{sygaldry_bin}} sail --dry-run
 
 # Preview discovered issues without running any pipeline
 sail-discover:
-    sygaldry sail discover | python3 -c "import json,sys; [print(f\"[p{i['priority']}] {i['type']}: {i['title']}\") for i in json.load(sys.stdin)]"
+    {{sygaldry_bin}} sail discover | python3 -c "import json,sys; [print(f\"[p{i['priority']}] {i['type']}: {i['title']}\") for i in json.load(sys.stdin)]"
 
 # Start the Temporal worker (leave running in a separate terminal)
 sail-worker:
-    sygaldry sail worker
+    {{sygaldry_bin}} sail worker
 
 # Run the unattended cron wrapper once
 sail-cron:
-    sygaldry sail cron
+    {{sygaldry_bin}} sail cron
 
 # Smoke-test the loop, then launch the unattended cron wrapper once
 sail-initial:
@@ -36,15 +38,15 @@ sail-initial:
 
 # Analyze a persisted SAIL run directory
 sail-analyze RUN_DIR:
-    sygaldry sail analyze-run --run-dir {{RUN_DIR}}
+    {{sygaldry_bin}} sail analyze-run --run-dir {{RUN_DIR}}
 
 # Validate the improvement_loop.yaml plan schema
 sail-validate:
-    sygaldry sail validate-plan
+    {{sygaldry_bin}} sail validate-plan
 
 # Echo engine end-to-end test: exercises full pipeline without LLM tokens
 sail-echo:
-    SAIL_PLANNER_ENGINE=echo SAIL_IMPLEMENTER_ENGINE=echo sygaldry sail
+    SAIL_PLANNER_ENGINE=echo SAIL_IMPLEMENTER_ENGINE=echo {{sygaldry_bin}} sail
 
 # ── Validation ───────────────────────────────────────────────────────────────
 
@@ -78,15 +80,15 @@ vet:
 
 # Build spack snapshot image
 snapshot-spack:
-    sygaldry snapshot spack
+    {{sygaldry_bin}} snapshot spack
 
 # Build all MLSys images (vllm, sglang, torchtitan, megatronlm)
 snapshot-mlsys:
-    sygaldry snapshot llm-serving-all
+    {{sygaldry_bin}} snapshot llm-serving-all
 
 # Build and push spack snapshot
 snapshot-spack-push:
-    sygaldry snapshot spack --push
+    {{sygaldry_bin}} snapshot spack --push
 
 # ── Python ───────────────────────────────────────────────────────────────────
 
@@ -106,8 +108,8 @@ lint-fix:
 
 # Launch interactive container shell
 shell:
-    sygaldry shell
+    {{sygaldry_bin}} shell
 
 # Show effective container configuration
 config:
-    sygaldry config show
+    {{sygaldry_bin}} config show

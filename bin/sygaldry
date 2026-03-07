@@ -31,7 +31,11 @@ export SYGALDRY_HOME
 # Prefer the Rust binary when available (graceful fallback to bash dispatcher)
 ZEPHYR_BIN="${SYGALDRY_HOME}/crates/zephyr/target/release/zephyr"
 if [[ -x "${ZEPHYR_BIN}" ]]; then
-    exec "${ZEPHYR_BIN}" "$@"
+    case "${1:-}" in
+        shell|run|job|build|config|stage|validate|init|gpu-check|verify-spack|uv-install|hf-download|entrypoint)
+            exec "${ZEPHYR_BIN}" "$@"
+            ;;
+    esac
 fi
 
 readonly LAUNCHER="${SYGALDRY_HOME}/container/launch_container.sh"
