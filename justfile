@@ -11,7 +11,7 @@ sygaldry_bin := "./bin/sygaldry"
 
 # ── SAIL: Sygaldry Agentic Improvement Loop ──────────────────────────────────
 
-# Run the full SAIL improvement loop (requires Temporal worker + gh CLI + claude CLI)
+# Run the full SAIL improvement loop (requires Temporal worker + gh CLI + an agent CLI)
 sail:
     {{sygaldry_bin}} sail
 
@@ -31,10 +31,10 @@ sail-worker:
 sail-cron:
     {{sygaldry_bin}} sail cron
 
-# Validate the pipeline, then launch the unattended cron wrapper once
-sail-initial:
+# Validate the pipeline, then launch one bounded unattended run
+sail-initial MAX_TASKS='1':
     just sail-validate
-    just sail-cron
+    SAIL_MAX_TASKS={{MAX_TASKS}} {{sygaldry_bin}} sail cron
 
 # Analyze a persisted SAIL run directory
 sail-analyze RUN_DIR:

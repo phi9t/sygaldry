@@ -477,10 +477,7 @@ _run_issue() {
 
         log "   attempt ${attempt_number}/$((MAX_RETRIES + 1))"
 
-        local prompt_file="${SCRIPT_DIR}/prompts/planner.md"
-        if [[ ${attempt} -gt 0 ]]; then
-            prompt_file="${SCRIPT_DIR}/prompts/retry.md"
-        fi
+        local prompt_file="${SCRIPT_DIR}/generate_plan.py"
 
         local failure_ctx_flag=""
         if [[ ${attempt} -gt 0 && -f "${failure_context_file}" ]]; then
@@ -504,9 +501,6 @@ _run_issue() {
                 -set "branch_name=${branch_name}" \
                 -set "repo_dir=${REPO_DIR}" \
                 -set "workflow_id=${workflow_id}-a${attempt}" \
-                -set "planner_engine=${PLANNER_ENGINE}" \
-                -set "planner_model=${PLANNER_MODEL}" \
-                -set "planner_prompt_file=${prompt_file}" \
                 -set "implementer_engine=${IMPLEMENTER_ENGINE}" \
                 -set "implementer_model=${IMPLEMENTER_MODEL}" \
                 -set "failure_context_file=${failure_ctx_flag}" \
@@ -577,10 +571,10 @@ REPO_DIR="$(cd "${REPO_DIR}" && pwd)"
 TEMPORAL_DIR="${REPO_DIR}/temporal"
 ATTEMPTED_FILE="${REPO_DIR}/.agentic/attempted.jsonl"
 
-PLANNER_ENGINE="${SAIL_PLANNER_ENGINE:-$(_cfg_section planner engine claude)}"
-PLANNER_MODEL="${SAIL_PLANNER_MODEL:-$(_cfg_section planner model claude-opus-4-6)}"
+PLANNER_ENGINE="${SAIL_PLANNER_ENGINE:-$(_cfg_section planner engine local)}"
+PLANNER_MODEL="${SAIL_PLANNER_MODEL-$(_cfg_section planner model '')}"
 IMPLEMENTER_ENGINE="${SAIL_IMPLEMENTER_ENGINE:-$(_cfg_section implementer engine claude)}"
-IMPLEMENTER_MODEL="${SAIL_IMPLEMENTER_MODEL:-$(_cfg_section implementer model claude-sonnet-4-6)}"
+IMPLEMENTER_MODEL="${SAIL_IMPLEMENTER_MODEL-$(_cfg_section implementer model claude-sonnet-4-6)}"
 MAX_TASKS="${SAIL_MAX_TASKS:-$(_cfg_section loop max_tasks_per_run 3)}"
 MAX_RETRIES="${SAIL_MAX_RETRIES:-$(_cfg_section loop max_retries_per_task 2)}"
 MIN_PRIORITY="${SAIL_MIN_PRIORITY:-$(_cfg_section loop min_priority 2)}"

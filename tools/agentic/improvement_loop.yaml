@@ -9,28 +9,26 @@
 #   branch_name        Branch to create (e.g. "agentic/20260307-120000-fix-sc2155")
 #   repo_dir           Absolute path to the repo root
 #   workflow_id        Workflow ID (used to name the plan temp file)
-#   planner_engine     Engine for the plan step (claude|codex|echo)
-#   planner_model      Model for the plan step (e.g. claude-opus-4-6)
 #   implementer_engine Engine for the implement step (claude|codex|cursor|echo)
 #   implementer_model  Model for the implement step (e.g. claude-sonnet-4-6)
 
 steps:
   # ── 1. Plan ───────────────────────────────────────────────────────────────
   - id: plan
-    name: Plan fix strategy
-    type: agent_task
-    agent_task:
-      engine: ${{ params.planner_engine }}
-      model: ${{ params.planner_model }}
-      prompt_file: ${{ params.planner_prompt_file }}
-      working_dir: ${{ params.repo_dir }}
-      params:
-        issue_json: ${{ params.issue_json }}
-        issue_title: ${{ params.issue_title }}
-        issue_type: ${{ params.issue_type }}
-        branch_name: ${{ params.branch_name }}
-        repo_dir: ${{ params.repo_dir }}
-        workflow_id: ${{ params.workflow_id }}
+    name: Generate fix plan
+    type: command
+    command: python3
+    args:
+      - tools/agentic/generate_plan.py
+      - --repo-dir
+      - ${{ params.repo_dir }}
+      - --workflow-id
+      - ${{ params.workflow_id }}
+      - --issue-json
+      - ${{ params.issue_json }}
+      - --failure-context-file
+      - ${{ params.failure_context_file }}
+    working_dir: ${{ params.repo_dir }}
     timeout_seconds: 600
 
   # ── 2. Create branch ──────────────────────────────────────────────────────

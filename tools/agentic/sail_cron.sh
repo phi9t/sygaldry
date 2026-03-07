@@ -57,7 +57,7 @@ _cfg_section() {
 }
 
 BASE_BRANCH="${SAIL_BASE_BRANCH:-$(_cfg_section repo base_branch main)}"
-PLANNER_ENGINE="${SAIL_PLANNER_ENGINE:-$(_cfg_section planner engine claude)}"
+PLANNER_ENGINE="${SAIL_PLANNER_ENGINE:-$(_cfg_section planner engine local)}"
 IMPLEMENTER_ENGINE="${SAIL_IMPLEMENTER_ENGINE:-$(_cfg_section implementer engine claude)}"
 
 mkdir -p "${RUNS_DIR}" "${INFRA_DIR}" "${WORKER_TEMPORAL_LOG_DIR}"
@@ -93,6 +93,8 @@ require_cmd() {
 require_agent_cli() {
     local engine="$1"
     case "${engine}" in
+        local)
+            ;;
         claude|codex|cursor|echo)
             [[ "${engine}" == "echo" ]] || require_cmd "${engine}"
             ;;
@@ -252,7 +254,9 @@ main() {
     require_cmd python3
     require_cmd nc
     require_cmd gh
-    require_agent_cli "${PLANNER_ENGINE}"
+    if [[ "${PLANNER_ENGINE}" != "local" ]]; then
+        require_agent_cli "${PLANNER_ENGINE}"
+    fi
     require_agent_cli "${IMPLEMENTER_ENGINE}"
     gh auth status >/dev/null 2>&1 || die "gh CLI is not authenticated"
 

@@ -3,8 +3,8 @@
 # Referenced by run_improvement_loop.sh and improvement_loop.yaml.
 
 planner:
-  engine: claude          # claude | codex
-  model: claude-opus-4-6  # high-capability planning model
+  engine: local           # local | claude | codex
+  model: ""               # unused by the deterministic local plan generator
 
 implementer:
   engine: claude             # claude | codex | cursor

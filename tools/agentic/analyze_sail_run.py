@@ -254,6 +254,14 @@ def detect_issues(
 
         plan = statuses.get("plan")
         if plan and plan.get("status") == "failed":
+            planner_files = ["tools/agentic/generate_plan.py"]
+            if run_meta.get("config", {}).get("planner", {}).get("engine", "") != "local":
+                planner_files.extend(
+                    [
+                        "temporal/internal/activities/agent_task.go",
+                        "tools/agentic/prompts/planner.md",
+                    ]
+                )
             issue = synthetic_issue(
                 issue_type="planner_failure",
                 priority=1,
@@ -262,10 +270,7 @@ def detect_issues(
                     f"Planner step failed for issue {record.get('issueId','')} during "
                     f"attempt {record.get('attempt', 0)}."
                 ),
-                files=[
-                    "temporal/internal/activities/agent_task.go",
-                    "tools/agentic/prompts/planner.md",
-                ],
+                files=planner_files,
                 context={
                     "issueId": record.get("issueId", ""),
                     "attempt": record.get("attempt", 0),

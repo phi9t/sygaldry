@@ -18,6 +18,7 @@ def test_pipeline_uses_typed_planner_title_for_commit_and_pr():
     pipeline = (REPO_ROOT / "tools" / "agentic" / "improvement_loop.yaml").read_text(
         encoding="utf-8"
     )
+    assert "tools/agentic/generate_plan.py" in pipeline
     expected_subject = "agentic(${{ params.issue_type }}): ${{ steps.plan.outputs.task_title }}"
     assert expected_subject in pipeline
     assert 'Planned fix: ${{ steps.plan.outputs.task_title }}' in pipeline
