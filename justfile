@@ -31,9 +31,9 @@ sail-worker:
 sail-cron:
     {{sygaldry_bin}} sail cron
 
-# Smoke-test the loop, then launch the unattended cron wrapper once
+# Validate the pipeline, then launch the unattended cron wrapper once
 sail-initial:
-    just sail-echo
+    just sail-validate
     just sail-cron
 
 # Analyze a persisted SAIL run directory

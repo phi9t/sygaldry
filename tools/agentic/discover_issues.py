@@ -54,7 +54,7 @@ def _issue_id(issue_type: str, data: str) -> str:
 
 
 def _utc_now() -> str:
-    return dt.datetime.utcnow().isoformat() + "Z"
+    return dt.datetime.now(dt.UTC).isoformat().replace("+00:00", "Z")
 
 
 def _run_source(

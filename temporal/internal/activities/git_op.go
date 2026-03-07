@@ -50,7 +50,7 @@ func GitOp(ctx context.Context, input GitOpInput) (RunCommandResult, error) {
 		)
 	}
 
-	scriptPath, err := resolveGitOpsScriptPath(input.GitOpsScript)
+	scriptPath, err := resolveGitOpsScriptPath(input.GitOpsScript, input.RepoDir)
 	if err != nil {
 		return RunCommandResult{ExitCode: -1}, err
 	}
@@ -95,17 +95,21 @@ func GitOp(ctx context.Context, input GitOpInput) (RunCommandResult, error) {
 }
 
 // resolveGitOpsScriptPath finds tools/agentic/git_ops.sh relative to known locations.
-func resolveGitOpsScriptPath(configuredPath string) (string, error) {
+func resolveGitOpsScriptPath(configuredPath string, repoDir string) (string, error) {
 	if strings.TrimSpace(configuredPath) != "" {
 		return configuredPath, nil
 	}
 
 	var candidates []string
+	if root := strings.TrimSpace(repoDir); root != "" {
+		candidates = append(candidates, filepath.Join(root, "tools", "agentic", "git_ops.sh"))
+	}
 	if home := strings.TrimSpace(os.Getenv("SYGALDRY_HOME")); home != "" {
 		candidates = append(candidates, filepath.Join(home, "tools", "agentic", "git_ops.sh"))
 	}
 	candidates = append(candidates,
 		"../tools/agentic/git_ops.sh",
+		"../../tools/agentic/git_ops.sh",
 		"./tools/agentic/git_ops.sh",
 		"/opt/sygaldry/tools/agentic/git_ops.sh",
 	)

@@ -108,7 +108,7 @@ func TestGitOpScriptConfigured(t *testing.T) {
 }
 
 func TestResolveGitOpsScriptPathConfigured(t *testing.T) {
-	path, err := resolveGitOpsScriptPath("/some/explicit/path.sh")
+	path, err := resolveGitOpsScriptPath("/some/explicit/path.sh", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -128,7 +128,26 @@ func TestResolveGitOpsScriptPathSygaldryHome(t *testing.T) {
 	}
 
 	t.Setenv("SYGALDRY_HOME", dir)
-	path, err := resolveGitOpsScriptPath("")
+	path, err := resolveGitOpsScriptPath("", "")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if path != script {
+		t.Errorf("expected %q, got %q", script, path)
+	}
+}
+
+func TestResolveGitOpsScriptPathRepoDir(t *testing.T) {
+	dir := t.TempDir()
+	script := filepath.Join(dir, "tools", "agentic", "git_ops.sh")
+	if err := os.MkdirAll(filepath.Dir(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(script, []byte("#!/bin/bash\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	path, err := resolveGitOpsScriptPath("", dir)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
