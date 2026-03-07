@@ -10,7 +10,7 @@ def test_planner_prompt_emits_task_title_output():
     planner_prompt = (REPO_ROOT / "tools" / "agentic" / "prompts" / "planner.md").read_text(
         encoding="utf-8"
     )
-    assert "::set-output name=task_title::<task.title>::" in planner_prompt
+    assert "::set-output name=task_title::<task.title>" in planner_prompt
     assert "lowercase, imperative" in planner_prompt
 
 

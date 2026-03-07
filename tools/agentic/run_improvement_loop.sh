@@ -305,13 +305,26 @@ print(payload.get("runId", ""))
 steps = payload.get("result", {}).get("steps", []) if isinstance(payload.get("result"), dict) else []
 pr_url = ""
 patch_file = ""
+validate_failed = False
 for step in steps:
     if step.get("id") == "create_pr":
         pr_url = step.get("result", {}).get("outputs", {}).get("pr_url", "")
+    if step.get("id") == "validate" and step.get("state") == "failed":
+        validate_failed = True
     if step.get("id") == "rollback":
         patch_file = step.get("result", {}).get("outputs", {}).get("patch_file", "")
+disposition = "workflow_failed"
+if pr_url:
+    disposition = "pr_created"
+elif validate_failed or patch_file:
+    disposition = "rolled_back"
+elif payload.get("result") is None:
+    disposition = "workflow_failed"
+else:
+    disposition = "completed_without_pr"
 print(pr_url)
 print(patch_file)
+print(disposition)
 PY
 }
 
@@ -517,15 +530,16 @@ _run_issue() {
 
         local run_result
         run_result="$(_load_run_result "${stdout_file}" "${manifest_workflow_id:-${workflow_id}-a${attempt}}" "${manifest_run_id}" "${result_file}")"
-        local parsed_workflow_id parsed_run_id
+        local parsed_workflow_id parsed_run_id workflow_disposition
         parsed_workflow_id="$(echo "${run_result}" | sed -n '1p')"
         parsed_run_id="$(echo "${run_result}" | sed -n '2p')"
         pr_url="$(echo "${run_result}" | sed -n '3p')"
         patch_file="$(echo "${run_result}" | sed -n '4p')"
+        workflow_disposition="$(echo "${run_result}" | sed -n '5p')"
         final_workflow_id="${parsed_workflow_id}"
         temporal_run_id="${parsed_run_id}"
 
-        if [[ ${exit_code} -eq 0 ]]; then
+        if [[ ${exit_code} -eq 0 && "${workflow_disposition}" == "pr_created" ]]; then
             _record_issue_attempt "${issue_json}" "success" "${branch_name}" "${attempt_number}" \
                 "${parsed_workflow_id}" "${parsed_run_id}" "${log_dir}" "${prompt_file}" "${exit_code}" \
                 "${pr_url}" "${patch_file}" "${failure_ctx_flag}" \
@@ -534,12 +548,12 @@ _run_issue() {
             break
         fi
 
-        log "   attempt ${attempt_number} failed (exit=${exit_code})"
+        log "   attempt ${attempt_number} failed (exit=${exit_code}, disposition=${workflow_disposition})"
         _capture_validate_failure "${log_dir}" "${failure_context_file}" "${parsed_workflow_id:-${workflow_id}-a${attempt}}"
         _record_issue_attempt "${issue_json}" "failed_attempt" "${branch_name}" "${attempt_number}" \
             "${parsed_workflow_id}" "${parsed_run_id}" "${log_dir}" "${prompt_file}" "${exit_code}" \
             "${pr_url}" "${patch_file}" "${failure_context_file}" \
-            "orchestrate failed" "${attempt_started_at}"
+            "orchestrate failed disposition=${workflow_disposition}" "${attempt_started_at}"
         attempt=$((attempt + 1))
     done
 

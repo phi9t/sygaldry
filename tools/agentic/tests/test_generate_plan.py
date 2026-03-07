@@ -52,8 +52,8 @@ def test_generate_plan_emits_outputs_and_meaningful_todo_title(tmp_path: Path) -
         },
     )
 
-    assert "::set-output name=plan_file::/tmp/sail-wf-123-plan.yaml::" in stdout
-    assert "::set-output name=task_title::avoid todo false positives in tools/agentic/discover_issues.py::" in stdout
+    assert "::set-output name=plan_file::/tmp/sail-wf-123-plan.yaml" in stdout
+    assert "::set-output name=task_title::avoid todo false positives in tools/agentic/discover_issues.py" in stdout
 
     plan_text = plan_path.read_text(encoding="utf-8")
     assert 'title: "avoid todo false positives in tools/agentic/discover_issues.py"' in plan_text

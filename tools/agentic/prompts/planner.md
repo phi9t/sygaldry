@@ -19,8 +19,8 @@ Then produce a **structured task plan** as a YAML document.
 2. Print the following lines to stdout (so the pipeline can pass the path and normalized title downstream):
 
 ```
-::set-output name=plan_file::/tmp/sail-${{ params.workflow_id }}-plan.yaml::
-::set-output name=task_title::<task.title>::
+::set-output name=plan_file::/tmp/sail-${{ params.workflow_id }}-plan.yaml
+::set-output name=task_title::<task.title>
 ```
 
 The plan must follow this exact schema:

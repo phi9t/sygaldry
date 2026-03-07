@@ -342,8 +342,8 @@ def main() -> None:
     failure_context = read_failure_context(args.failure_context_file)
     plan_path, plan = build_plan(repo_dir, args.workflow_id, issue, failure_context)
 
-    print(f"::set-output name=plan_file::{plan_path}::")
-    print(f"::set-output name=task_title::{plan['task']['title']}::")
+    print(f"::set-output name=plan_file::{plan_path}")
+    print(f"::set-output name=task_title::{plan['task']['title']}")
 
 
 if __name__ == "__main__":
