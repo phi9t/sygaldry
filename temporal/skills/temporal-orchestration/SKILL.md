@@ -7,15 +7,58 @@ description: Use when working in this repo to run or extend the Temporal-based o
 
 ## Overview
 
-Use the repo’s Temporal pipeline workflow to execute multi-step jobs (downloads, builds, packaging, model demos) and inspect results via logs, events, and the visualizer.
+Use the repo's Temporal pipeline workflow to execute multi-step jobs (downloads, builds, packaging, model demos) and inspect results via logs, events, and the visualizer.
 
 ## Quick start (run a plan)
 
-1) Start Temporal (Docker): use the repo script or compose.
-2) Start a worker (Go).
-3) Run a pipeline YAML with `cmd/orchestrate`.
+1. Start Temporal (Docker or script).
+2. Start a worker (Go).
+3. Run a pipeline YAML with `cmd/orchestrate`.
 
-Use the reference file for the exact commands and paths.
+## Core entry points
+
+- Worker: `cmd/worker`
+- Pipeline runner (YAML): `cmd/orchestrate`
+- Legacy JSON runner: `cmd/run`
+- Pipeline workflow definition: `internal/workflows/pipeline.go`
+- Activities: `internal/activities/`
+
+## Start Temporal (local)
+
+```bash
+# Docker compose
+docker compose up -d
+
+# Or use the repo script
+scripts/start-temporal.sh
+```
+
+Temporal UI: `http://localhost:8080` (Docker) or `http://localhost:8233` (script/CLI dev server).
+
+## Start a worker
+
+```bash
+go run ./cmd/worker
+
+# Or build then run
+go build -o /tmp/temporal-worker ./cmd/worker && /tmp/temporal-worker
+```
+
+## Run a pipeline plan
+
+```bash
+go run ./cmd/orchestrate -plan examples/qwen_demo.yaml
+go run ./cmd/orchestrate -plan examples/e2e_test.yaml
+go run ./cmd/orchestrate -plan examples/pipeline.yaml
+```
+
+Options:
+
+| Flag | Purpose |
+|------|---------|
+| `-workflow-id <id>` | Override auto-generated workflow ID |
+| `-task-queue <queue>` | Override task queue (default: `orchestration`) |
+| `-log-dir <dir>` | Override log directory (default: `./logs`) |
 
 ## Typical tasks
 
@@ -42,6 +85,51 @@ Use the reference file for the exact commands and paths.
 - Wire it into the pipeline workflow in `internal/workflows/pipeline.go`.
 - Update examples and validate with `scripts/test-e2e.sh`.
 
-## References
+## Logs and artifacts
 
-Read `references/temporal-setup.md` for concrete commands, env vars, file paths, and logging conventions.
+Default log dir is `./logs` unless overridden by `-log-dir` or `TEMPORAL_LOG_DIR`.
+
+| Path | Contents |
+|------|---------|
+| `logs/events.jsonl` | Structured workflow events |
+| `logs/<workflowId>_<runId>_<stepId>_stdout.log` | Step stdout |
+| `logs/<workflowId>_<runId>_<stepId>_stderr.log` | Step stderr |
+| `logs/<workflowId>_<runId>_<stepId>_structured.jsonl` | Structured step log |
+
+Control payload truncation via `TEMPORAL_LOG_MAX_BYTES`.
+
+## CLI + UI helpers
+
+```bash
+# Logs CLI
+./scripts/logs_cli.py list-runs
+./scripts/logs_cli.py show-steps --workflow-id <id> --run-id <run>
+./scripts/logs_cli.py follow --workflow-id <id> --run-id <run>
+
+# Structured log validation
+./scripts/validate-structured-logs.sh /tmp/temporal-e2e-logs
+
+# JS visualizer
+node visualizer/server.js
+# Open http://localhost:8787
+```
+
+## Environment variables
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `TEMPORAL_ADDRESS` | `localhost:7233` | Temporal server address |
+| `TEMPORAL_NAMESPACE` | `default` | Namespace |
+| `TEMPORAL_TASK_QUEUE` | `orchestration` | Task queue name |
+| `TEMPORAL_LOG_DIR` | `./logs` | Log output directory |
+| `TEMPORAL_LOG_MAX_BYTES` | `10000` | Max bytes for stdout/stderr in payloads |
+
+## Validation
+
+```bash
+# End-to-end test
+scripts/test-e2e.sh
+
+# Go unit tests (89 test cases)
+cd temporal && go test ./...
+```

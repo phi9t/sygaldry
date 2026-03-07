@@ -104,9 +104,9 @@ if [[ ! -f "${PARSER}" ]]; then
     exit 1
 fi
 
-# shellcheck disable=SC1090
 # Parse YAML into ENV_* and VALIDATION_* shell vars.
-eval "$(${PYTHON_BIN} "${PARSER}" "${ENV_YAML}")"
+# shellcheck disable=SC1090
+source <("${PYTHON_BIN}" "${PARSER}" "${ENV_YAML}")
 
 log "Environment: ${ENV_NAME}"
 log "Description: ${ENV_DESCRIPTION}"

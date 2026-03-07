@@ -236,8 +236,8 @@ for i in $(seq 1 "${iterations}"); do
         "python3 ${work_dir_in_container}/cuda_kernel_check.py"
 done
 
-"${TARGET_REPO}/.codex-zephyr-mlsys/bin/launch-mlsys.sh" hf-transformers --no-validate >/dev/null
-"${TARGET_REPO}/.codex-zephyr-mlsys/bin/launch-mlsys.sh" vllm --no-validate >/dev/null
+"${TARGET_REPO}/.zephyr-mlsys/bin/launch-mlsys.sh" hf-transformers --no-validate >/dev/null
+"${TARGET_REPO}/.zephyr-mlsys/bin/launch-mlsys.sh" vllm --no-validate >/dev/null
 
 if [[ "${WITH_HF_REAL_WORKLOAD}" -eq 1 ]]; then
     log "running optional HF real workload"

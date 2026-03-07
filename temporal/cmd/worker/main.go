@@ -52,6 +52,8 @@ func main() {
 	w.RegisterActivity(activities.HFDownloadDataset)
 	w.RegisterActivity(activities.HFDownloadModel)
 	w.RegisterActivity(activities.K8sJob)
+	w.RegisterActivity(activities.AgentTask)
+	w.RegisterActivity(activities.GitOp)
 
 	log.Printf("worker started on task queue %s (address=%s, namespace=%s)",
 		cfg.TaskQueue, cfg.Address, cfg.Namespace)

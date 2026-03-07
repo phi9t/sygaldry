@@ -1,4 +1,5 @@
 #!/bin/bash
+set -uo pipefail
 #
 # Sygaldry Container Entrypoint (interactive shell)
 # ==================================================
@@ -37,37 +38,7 @@ fi
 
 # Fail fast if GPU support is not functional for Torch/JAX.
 if [[ ${run_gpu_validation} -eq 1 ]]; then
-python3 - <<'PY'
-import sys
-
-errors = []
-try:
-    import torch
-    if not torch.cuda.is_available():
-        errors.append("torch.cuda.is_available() is False")
-    elif torch.cuda.device_count() < 1:
-        errors.append("torch reports zero CUDA devices")
-except Exception as exc:
-    errors.append(f"torch error: {exc}")
-
-try:
-    import jax
-    devices = jax.devices()
-    gpu_devices = [d for d in devices if d.platform == "gpu"]
-    if not gpu_devices:
-        errors.append(f"jax has no GPU devices (devices={devices})")
-except Exception as exc:
-    errors.append(f"jax error: {exc}")
-
-if errors:
-    print("ERROR: GPU validation failed in Zephyr container:", file=sys.stderr)
-    for item in errors:
-        print(f"  - {item}", file=sys.stderr)
-    print("HINT:  Check nvidia-smi on host; run container/diagnose_nvidia.sh", file=sys.stderr)
-    sys.exit(1)
-
-print("GPU validation passed: Torch and JAX both see a CUDA GPU.", file=sys.stderr)
-PY
+    sygaldry_validate_gpu || exit 1
 fi
 
 # ============================================================================

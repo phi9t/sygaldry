@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 # One-shot Spack build + torch/jax GPU validation inside the Zephyr container.
 # Intended to be called by autoretry wrappers or manually.
+#
+# DEPRECATED (2026-03-06): Use the Temporal pipeline instead:
+#   cd temporal && go run ./cmd/orchestrate run -plan examples/spack-build-pipeline.yaml
+# This script is retained for backward compatibility.
 
 set -euo pipefail
 

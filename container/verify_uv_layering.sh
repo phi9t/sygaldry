@@ -72,8 +72,6 @@ readonly IMAGE
 readonly GPU
 readonly WITH_VLLM
 
-verify_reset_counters
-
 # Run a command inside the image (no GPU)
 run_no_gpu() {
     local cmd="$1"
@@ -138,9 +136,9 @@ echo "=== T8.1: UV venv creation ==="
 
 result="$(run_no_gpu "${SETUP_SCRIPT} && echo UV_VENV_OK")" || true
 if echo "${result}" | grep -q "UV_VENV_OK"; then
-    pass "UV venv created and packages installed"
+    tap_ok "UV venv created and packages installed"
 else
-    fail "UV venv creation" "output: $(echo "${result}" | tail -5)"
+    tap_not_ok "UV venv creation" "output: $(echo "${result}" | tail -5)"
     echo ""
     echo "FATAL: Cannot proceed without UV venv. Stopping."
     exit 1
@@ -171,9 +169,9 @@ else:
     ")" || true
     last_line="$(echo "${result}" | tail -1)"
     if [[ "${last_line}" == "SPACK_OK" ]]; then
-        pass "${pkg} from Spack view"
+        tap_ok "${pkg} from Spack view"
     else
-        fail "${pkg} from Spack view" "got '${last_line}'"
+        tap_not_ok "${pkg} from Spack view" "got '${last_line}'"
     fi
 done
 
@@ -203,9 +201,9 @@ else:
     ")" || true
     last_line="$(echo "${result}" | tail -1)"
     if [[ "${last_line}" == "UV_OK" ]]; then
-        pass "${pkg} from UV venv"
+        tap_ok "${pkg} from UV venv"
     else
-        fail "${pkg} from UV venv" "got '${last_line}'"
+        tap_not_ok "${pkg} from UV venv" "got '${last_line}'"
     fi
 done
 
@@ -237,9 +235,9 @@ else:
 ")" || true
 last_line="$(echo "${result}" | tail -1)"
 if [[ "${last_line}" == "NO_NVIDIA_OK" ]]; then
-    pass "No nvidia-* pip packages installed by UV"
+    tap_ok "No nvidia-* pip packages installed by UV"
 else
-    fail "No nvidia-* pip packages installed by UV" "got '${last_line}'"
+    tap_not_ok "No nvidia-* pip packages installed by UV" "got '${last_line}'"
 fi
 
 # ============================================================================
@@ -273,9 +271,9 @@ print('GPU_OK')
         ")" || true
         last_line="$(echo "${result}" | tail -1)"
         if [[ "${last_line}" == "GPU_OK" ]]; then
-            pass "torch CUDA matmul works after UV layering"
+            tap_ok "torch CUDA matmul works after UV layering"
         else
-            fail "torch CUDA matmul after UV layering" "got '${last_line}'"
+            tap_not_ok "torch CUDA matmul after UV layering" "got '${last_line}'"
         fi
 
         # transformers model load (quick, verifies HF + torch integration)
@@ -290,9 +288,9 @@ print('HF_OK')
         ")" || true
         last_line="$(echo "${result}" | tail -1)"
         if [[ "${last_line}" == "HF_OK" ]]; then
-            pass "HuggingFace transformers tokenizer load"
+            tap_ok "HuggingFace transformers tokenizer load"
         else
-            fail "HuggingFace transformers tokenizer load" "got '${last_line}'"
+            tap_not_ok "HuggingFace transformers tokenizer load" "got '${last_line}'"
         fi
     fi
 fi
@@ -317,11 +315,10 @@ mkdir -p "${UV_CACHE_DIR}"
 
 result="$(run_no_gpu "${DATASETS_SETUP} && echo DATASETS_INSTALL_OK")" || true
 if echo "${result}" | grep -q "DATASETS_INSTALL_OK"; then
-    pass "datasets installed in separate venv"
+    tap_ok "datasets installed in separate venv"
 else
-    # Non-blocking: report but don't fail the run
-    echo "  WARN: datasets install failed (non-blocking)"
-    echo "        output: $(echo "${result}" | tail -3)"
+    tap_diag "WARN: datasets install failed (non-blocking)"
+    tap_diag "  output: $(echo "${result}" | tail -3)"
 fi
 
 if [[ "${WITH_VLLM}" == "true" ]]; then
@@ -351,9 +348,9 @@ export UV_EXTRA_OVERRIDES="/opt/container_entrypoints/llm_serving_overrides.txt"
 
     result="$($run_fn "${VLLM_SETUP} && echo VLLM_INSTALL_OK")" || true
     if echo "${result}" | grep -q "VLLM_INSTALL_OK"; then
-        pass "vllm installed"
+        tap_ok "vllm installed"
     else
-        fail "vllm install" "output: $(echo "${result}" | tail -5)"
+        tap_not_ok "vllm install" "output: $(echo "${result}" | tail -5)"
     fi
 
     # Check provenance in vllm venv — no nvidia-* pip leaks
@@ -377,9 +374,9 @@ else:
     ")" || true
     last_line="$(echo "${result}" | tail -1)"
     if [[ "${last_line}" == "NO_NVIDIA_OK" ]]; then
-        pass "No nvidia-* pip packages in vllm venv"
+        tap_ok "No nvidia-* pip packages in vllm venv"
     else
-        fail "No nvidia-* pip packages in vllm venv" "got '${last_line}'"
+        tap_not_ok "No nvidia-* pip packages in vllm venv" "got '${last_line}'"
     fi
 
     # Hard-fail check: verify vllm can import and use Spack torch
@@ -406,11 +403,11 @@ print('VLLM_FUNCTIONAL_OK')
     ")" || true
     last_line="$(echo "${result}" | tail -1)"
     if [[ "${last_line}" == "VLLM_FUNCTIONAL_OK" ]]; then
-        pass "vllm import + torch CUDA functional"
+        tap_ok "vllm import + torch CUDA functional"
     elif echo "${result}" | grep -q "HARD_FAIL"; then
-        fail "vllm HARD_FAIL: core package ABI mismatch" "$(echo "${result}" | grep -A3 'HARD_FAIL')"
+        tap_not_ok "vllm HARD_FAIL: core package ABI mismatch" "$(echo "${result}" | grep -A3 'HARD_FAIL')"
     else
-        fail "vllm functional check" "got '${last_line}'"
+        tap_not_ok "vllm functional check" "got '${last_line}'"
     fi
 
     # ========================================================================
@@ -434,9 +431,9 @@ export UV_EXTRA_OVERRIDES="/opt/container_entrypoints/llm_serving_overrides.txt"
 
     result="$($run_fn "${SGLANG_SETUP} && echo SGLANG_INSTALL_OK")" || true
     if echo "${result}" | grep -q "SGLANG_INSTALL_OK"; then
-        pass "sglang installed"
+        tap_ok "sglang installed"
     else
-        fail "sglang install" "output: $(echo "${result}" | tail -5)"
+        tap_not_ok "sglang install" "output: $(echo "${result}" | tail -5)"
     fi
 
     # Check provenance in sglang venv — no nvidia-* pip leaks
@@ -460,9 +457,9 @@ else:
     ")" || true
     last_line="$(echo "${result}" | tail -1)"
     if [[ "${last_line}" == "NO_NVIDIA_OK" ]]; then
-        pass "No nvidia-* pip packages in sglang venv"
+        tap_ok "No nvidia-* pip packages in sglang venv"
     else
-        fail "No nvidia-* pip packages in sglang venv" "got '${last_line}'"
+        tap_not_ok "No nvidia-* pip packages in sglang venv" "got '${last_line}'"
     fi
 
     # Hard-fail check: verify sglang can import and use Spack torch/triton
@@ -489,11 +486,11 @@ print('SGLANG_FUNCTIONAL_OK')
     ")" || true
     last_line="$(echo "${result}" | tail -1)"
     if [[ "${last_line}" == "SGLANG_FUNCTIONAL_OK" ]]; then
-        pass "sglang import + torch/triton CUDA functional"
+        tap_ok "sglang import + torch/triton CUDA functional"
     elif echo "${result}" | grep -q "HARD_FAIL"; then
-        fail "sglang HARD_FAIL: core package ABI mismatch" "$(echo "${result}" | grep -A5 'HARD_FAIL')"
+        tap_not_ok "sglang HARD_FAIL: core package ABI mismatch" "$(echo "${result}" | grep -A5 'HARD_FAIL')"
     else
-        fail "sglang functional check" "got '${last_line}'"
+        tap_not_ok "sglang functional check" "got '${last_line}'"
     fi
 fi
 
@@ -501,5 +498,6 @@ fi
 # Summary
 # ============================================================================
 
-verify_print_summary "UV-Spack Layering Verification Summary" "${IMAGE}"
-verify_exit_on_failures
+tap_plan "${_TAP_TEST_NUM}"
+tap_summary
+tap_exit

@@ -68,9 +68,7 @@ export PATH="/usr/local:/usr/local/bin:${PATH}"
 unset PYTHONPATH
 
 if ! command -v uv >/dev/null 2>&1; then
-    echo "ERROR: uv not found in PATH" >&2
-    echo "HINT:  uv is installed in the container image; ensure you are inside." >&2
-    exit 1
+    die_with_hint "uv not found in PATH" "uv is installed in the container image; ensure you are inside."
 fi
 
 VENV_DIR="${VENV_DIR:-.venv}"

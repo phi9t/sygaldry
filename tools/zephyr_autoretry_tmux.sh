@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
 # Launch the autoretry loop in a named tmux session for human + agent visibility.
+#
+# DEPRECATED (2026-03-06): Use the Temporal pipeline instead:
+#   cd temporal && go run ./cmd/orchestrate run -plan examples/spack-build-pipeline.yaml
+# This script is retained for backward compatibility.
 
 set -euo pipefail
 

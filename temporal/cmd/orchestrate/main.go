@@ -31,6 +31,8 @@ var allowedTypes = map[string]bool{
 	"hf_download_dataset": true,
 	"hf_download_model":   true,
 	"k8s_job":             true,
+	"agent_task":          true,
+	"git_op":              true,
 }
 
 type stringMapFlag map[string]string
@@ -503,6 +505,12 @@ func mergePipelineStep(base, override workflows.PipelineStep) workflows.Pipeline
 	if override.K8sJob != nil {
 		merged.K8sJob = mergeK8sJobSpec(merged.K8sJob, override.K8sJob)
 	}
+	if override.AgentTask != nil {
+		merged.AgentTask = mergeAgentTaskSpec(merged.AgentTask, override.AgentTask)
+	}
+	if override.GitOp != nil {
+		merged.GitOp = mergeGitOpSpec(merged.GitOp, override.GitOp)
+	}
 
 	return merged
 }
@@ -696,6 +704,73 @@ func mergeK8sJobSpec(base, override *workflows.K8sJobSpec) *workflows.K8sJobSpec
 	return &merged
 }
 
+func mergeAgentTaskSpec(base, override *workflows.AgentTaskSpec) *workflows.AgentTaskSpec {
+	if base == nil {
+		base = &workflows.AgentTaskSpec{}
+	}
+	merged := *base
+	if override.Engine != "" {
+		merged.Engine = override.Engine
+	}
+	if override.Model != "" {
+		merged.Model = override.Model
+	}
+	if override.Prompt != "" {
+		merged.Prompt = override.Prompt
+	}
+	if override.PromptFile != "" {
+		merged.PromptFile = override.PromptFile
+	}
+	if override.WorkingDir != "" {
+		merged.WorkingDir = override.WorkingDir
+	}
+	if override.Sandbox != "" {
+		merged.Sandbox = override.Sandbox
+	}
+	if override.Env != nil {
+		merged.Env = mergeStringMaps(merged.Env, override.Env)
+	}
+	if override.Params != nil {
+		merged.Params = mergeStringMaps(merged.Params, override.Params)
+	}
+	return &merged
+}
+
+func mergeGitOpSpec(base, override *workflows.GitOpSpec) *workflows.GitOpSpec {
+	if base == nil {
+		base = &workflows.GitOpSpec{}
+	}
+	merged := *base
+	if override.Op != "" {
+		merged.Op = override.Op
+	}
+	if override.RepoDir != "" {
+		merged.RepoDir = override.RepoDir
+	}
+	if override.Branch != "" {
+		merged.Branch = override.Branch
+	}
+	if override.BaseBranch != "" {
+		merged.BaseBranch = override.BaseBranch
+	}
+	if override.CommitMessage != "" {
+		merged.CommitMessage = override.CommitMessage
+	}
+	if override.PRTitle != "" {
+		merged.PRTitle = override.PRTitle
+	}
+	if override.PRBody != "" {
+		merged.PRBody = override.PRBody
+	}
+	if override.GitOpsScript != "" {
+		merged.GitOpsScript = override.GitOpsScript
+	}
+	if override.Env != nil {
+		merged.Env = mergeStringMaps(merged.Env, override.Env)
+	}
+	return &merged
+}
+
 func mergeStringMaps(base map[string]string, override map[string]string) map[string]string {
 	result := map[string]string{}
 	for key, value := range base {
@@ -767,6 +842,20 @@ func validatePlan(input *workflows.PipelineInput) error {
 		case "k8s_job":
 			if step.K8sJob == nil || step.K8sJob.Command == "" {
 				return fmt.Errorf("step %s k8s_job requires command", step.ID)
+			}
+		case "agent_task":
+			if step.AgentTask == nil {
+				return fmt.Errorf("step %s agent_task requires agent_task config", step.ID)
+			}
+			if step.AgentTask.Engine == "" {
+				return fmt.Errorf("step %s agent_task requires engine", step.ID)
+			}
+			if step.AgentTask.Prompt == "" && step.AgentTask.PromptFile == "" {
+				return fmt.Errorf("step %s agent_task requires prompt or prompt_file", step.ID)
+			}
+		case "git_op":
+			if step.GitOp == nil || step.GitOp.Op == "" {
+				return fmt.Errorf("step %s git_op requires op", step.ID)
 			}
 		}
 	}

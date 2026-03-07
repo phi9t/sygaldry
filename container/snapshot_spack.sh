@@ -36,6 +36,9 @@ readonly SCRIPT_DIR
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 readonly PROJECT_ROOT
 
+# shellcheck disable=SC1091
+source "${SCRIPT_DIR}/lib/snapshot_common.sh"
+
 # ============================================================================
 # Configuration
 # ============================================================================
@@ -270,13 +273,8 @@ if [[ "${PUSH}" == "true" ]]; then
     log "=============================================="
     log ""
 
-    # Derive registry image path
-    # REGISTRY = "ghcr.io/phi9t/sygaldry" -> push "ghcr.io/phi9t/sygaldry/zephyr:spack"
     REGISTRY_HOST="ghcr.io"
-
-    # Check registry auth
     if ! docker login "${REGISTRY_HOST}" --get-login >/dev/null 2>&1; then
-        # Try GITHUB_TOKEN if available (GHCR)
         if [[ -n "${GITHUB_TOKEN:-}" ]]; then
             log "Authenticating to ghcr.io with GITHUB_TOKEN..."
             echo "${GITHUB_TOKEN}" | docker login ghcr.io -u "$(echo "${REGISTRY}" | cut -d/ -f2)" --password-stdin
@@ -286,36 +284,17 @@ if [[ "${PUSH}" == "true" ]]; then
     fi
     log "Registry auth: OK"
 
-    # Tag for registry
-    REMOTE_TAG="${REGISTRY}/zephyr:spack"
-    DATE_TAG="${REGISTRY}/zephyr:spack-$(date +%Y%m%d)"
-
-    log "Tagging:"
-    log "  ${SNAPSHOT_TAG} -> ${REMOTE_TAG}"
-    log "  ${SNAPSHOT_TAG} -> ${DATE_TAG}"
-
-    docker tag "${SNAPSHOT_TAG}" "${REMOTE_TAG}"
-    docker tag "${SNAPSHOT_TAG}" "${DATE_TAG}"
-
-    # Push both tags
-    log ""
-    log "Pushing ${REMOTE_TAG} (this may take a while for ~37 GB)..."
-    if ! docker push "${REMOTE_TAG}"; then
-        error "Failed to push ${REMOTE_TAG}"
-    fi
-
-    log "Pushing ${DATE_TAG}..."
-    if ! docker push "${DATE_TAG}"; then
-        error "Failed to push ${DATE_TAG}"
-    fi
+    DATE_TAG="$(date +%Y%m%d)"
+    snapshot_tag_and_push "${SNAPSHOT_TAG}" "${REGISTRY}/zephyr" "spack" "${DATE_TAG}" 3 \
+        || error "Push failed"
 
     log ""
     log "Push complete!"
-    log "  ${REMOTE_TAG}"
-    log "  ${DATE_TAG}"
+    log "  ${REGISTRY}/zephyr:spack"
+    log "  ${REGISTRY}/zephyr:spack-${DATE_TAG}"
     log ""
     log "Pull with:"
-    log "  docker pull ${REMOTE_TAG}"
+    log "  docker pull ${REGISTRY}/zephyr:spack"
 fi
 
 # ============================================================================

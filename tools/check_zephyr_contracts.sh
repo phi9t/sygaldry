@@ -28,24 +28,8 @@ require_file() {
     fi
 }
 
-require_pattern() {
-    local file="$1"
-    local pattern="$2"
-    local message="$3"
-    if rg -Fq "${pattern}" "${file}"; then
-        pass "${message}"
-    else
-        fail "${message}"
-    fi
-}
-
 cd "${REPO_ROOT}"
 
-require_file "container/ZEPHYR_SYSTEM_DESIGN.md"
-require_file "container/ZEPHYR_UNIFIED_CACHE_SYSTEM_DESIGN.md"
-require_file "SYSTEM_DESIGN.md"
-require_file "container/ZEPHYR_CONTAINER_INFRA_REQUIREMENTS.md"
-require_file "container/PRODUCTION_READINESS.md"
 require_file "pkg/zephyr/build.sh"
 require_file "tools/spack_src.yaml"
 require_file "pkg/zephyr/spack_src.yaml"
@@ -64,48 +48,13 @@ else
     fail "tools/spack_src.yaml diverges from pkg/zephyr/spack_src.yaml"
 fi
 
-# Unified-cache doc should be a deprecation pointer to canonical design doc.
-require_pattern "container/ZEPHYR_UNIFIED_CACHE_SYSTEM_DESIGN.md" "Deprecated" \
-    "unified-cache doc marked deprecated"
-require_pattern "container/ZEPHYR_UNIFIED_CACHE_SYSTEM_DESIGN.md" "container/ZEPHYR_SYSTEM_DESIGN.md" \
-    "unified-cache doc points to canonical design doc"
-
-# Root design doc must explicitly delegate infra contract authority.
-require_pattern "SYSTEM_DESIGN.md" "Authoritative infra contract" \
-    "root design doc declares authoritative infra contract"
-require_pattern "SYSTEM_DESIGN.md" "container/ZEPHYR_SYSTEM_DESIGN.md" \
-    "root design doc references canonical infra design doc"
-
-require_pattern "container/ZEPHYR_CONTAINER_INFRA_REQUIREMENTS.md" "Deprecated" \
-    "requirements doc marked as deprecated"
-require_pattern "container/PRODUCTION_READINESS.md" "Deprecated" \
-    "production readiness doc marked as deprecated"
-
-# Launcher and design doc must agree on ZEPHYR_BUILD_ROOT default string.
-LAUNCH_BUILD_ROOT_DEFAULT="$(sed -n 's/^readonly ZEPHYR_BUILD_ROOT="${ZEPHYR_BUILD_ROOT:-\(.*\)}"/\1/p' container/launch_container.sh)"
-if [[ -z "${LAUNCH_BUILD_ROOT_DEFAULT}" ]]; then
-    fail "unable to extract ZEPHYR_BUILD_ROOT default from launcher"
-else
-    pass "launcher ZEPHYR_BUILD_ROOT default extracted: ${LAUNCH_BUILD_ROOT_DEFAULT}"
-    DOC_BUILD_LINE="\`ZEPHYR_BUILD_ROOT\` (default \`${LAUNCH_BUILD_ROOT_DEFAULT}\`)"
-    if rg -Fq "${DOC_BUILD_LINE}" container/ZEPHYR_SYSTEM_DESIGN.md; then
-        pass "design doc matches launcher ZEPHYR_BUILD_ROOT default"
-    else
-        fail "design doc does not match launcher ZEPHYR_BUILD_ROOT default"
-    fi
-fi
-
-# Stale token guardrails in docs.
+# Stale token guardrails in remaining docs.
 DOC_SCOPE=(
-    "README.md"
-    "SYSTEM_DESIGN.md"
-    "container/ZEPHYR_SYSTEM_DESIGN.md"
-    "container/ZEPHYR_HACKERS_GUIDE.md"
-    "container/ZEPHYR_CONTAINER_INFRA_REQUIREMENTS.md"
-    "container/PRODUCTION_READINESS.md"
-    "skills/zephyr-container-exec/SKILL.md"
-    "skills/zephyr-container-exec/VALIDATION.md"
+    "foundation.org"
     "example_repo_scoped_zephyr_skill/SKILL.md"
+    "skills/zephyr/SKILL.md"
+    "skills/nvidia-container-troubleshooting/SKILL.md"
+    "temporal/skills/temporal-orchestration/SKILL.md"
 )
 
 forbidden_token_check() {

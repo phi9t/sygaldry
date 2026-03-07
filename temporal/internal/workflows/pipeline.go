@@ -86,6 +86,29 @@ type K8sJobSpec struct {
 	Namespace  string            `json:"namespace" yaml:"namespace"`
 }
 
+type AgentTaskSpec struct {
+	Engine     string            `json:"engine" yaml:"engine"`
+	Model      string            `json:"model" yaml:"model"`
+	Prompt     string            `json:"prompt" yaml:"prompt"`
+	PromptFile string            `json:"promptFile" yaml:"prompt_file"`
+	WorkingDir string            `json:"workingDir" yaml:"working_dir"`
+	Sandbox    string            `json:"sandbox" yaml:"sandbox"`
+	Env        map[string]string `json:"env" yaml:"env"`
+	Params     map[string]string `json:"params" yaml:"params"`
+}
+
+type GitOpSpec struct {
+	Op            string            `json:"op" yaml:"op"`
+	RepoDir       string            `json:"repoDir" yaml:"repo_dir"`
+	Branch        string            `json:"branch" yaml:"branch"`
+	BaseBranch    string            `json:"baseBranch" yaml:"base_branch"`
+	CommitMessage string            `json:"commitMessage" yaml:"commit_message"`
+	PRTitle       string            `json:"prTitle" yaml:"pr_title"`
+	PRBody        string            `json:"prBody" yaml:"pr_body"`
+	GitOpsScript  string            `json:"gitOpsScript" yaml:"git_ops_script"`
+	Env           map[string]string `json:"env" yaml:"env"`
+}
+
 type PipelineStep struct {
 	ID             string            `json:"id" yaml:"id"`
 	Name           string            `json:"name" yaml:"name"`
@@ -109,6 +132,8 @@ type PipelineStep struct {
 	HFDownloadDataset *HFDownloadDatasetSpec `json:"hfDownloadDataset" yaml:"hf_download_dataset"`
 	HFDownloadModel   *HFDownloadModelSpec   `json:"hfDownloadModel" yaml:"hf_download_model"`
 	K8sJob            *K8sJobSpec            `json:"k8sJob" yaml:"k8s_job"`
+	AgentTask         *AgentTaskSpec         `json:"agentTask" yaml:"agent_task"`
+	GitOp             *GitOpSpec             `json:"gitOp" yaml:"git_op"`
 }
 
 type PipelineInput struct {
@@ -408,6 +433,12 @@ func prepareStep(step PipelineStep, input PipelineInput, outcomes map[string]Ste
 	if rendered.K8sJob != nil {
 		rendered.K8sJob.Env = mergeStringMaps(planEnv, rendered.K8sJob.Env)
 	}
+	if rendered.AgentTask != nil {
+		rendered.AgentTask.Env = mergeStringMaps(planEnv, rendered.AgentTask.Env)
+	}
+	if rendered.GitOp != nil {
+		rendered.GitOp.Env = mergeStringMaps(planEnv, rendered.GitOp.Env)
+	}
 
 	envLookup := cloneMap(planEnv)
 	envLookup = mergeStringMaps(envLookup, rendered.Env)
@@ -419,6 +450,12 @@ func prepareStep(step PipelineStep, input PipelineInput, outcomes map[string]Ste
 	}
 	if rendered.K8sJob != nil {
 		envLookup = mergeStringMaps(envLookup, rendered.K8sJob.Env)
+	}
+	if rendered.AgentTask != nil {
+		envLookup = mergeStringMaps(envLookup, rendered.AgentTask.Env)
+	}
+	if rendered.GitOp != nil {
+		envLookup = mergeStringMaps(envLookup, rendered.GitOp.Env)
 	}
 
 	if err := expandStepTemplates(&rendered, outcomes, input.Params, envLookup); err != nil {
@@ -746,6 +783,49 @@ func startActivity(ctx workflow.Context, info *workflow.Info, logDir string, ste
 			Image:       spec.Image,
 			Namespace:   spec.Namespace,
 			TimeoutSecs: step.TimeoutSeconds,
+		})
+	case "agent_task":
+		spec := step.AgentTask
+		if spec == nil {
+			spec = &AgentTaskSpec{}
+		}
+		return workflow.ExecuteActivity(ctx, activities.AgentTask, activities.AgentTaskInput{
+			Name:        stepName(step),
+			WorkflowID:  info.WorkflowExecution.ID,
+			RunID:       info.WorkflowExecution.RunID,
+			StepID:      step.ID,
+			LogDir:      logDir,
+			Engine:      activities.AgentTaskEngine(spec.Engine),
+			Model:       spec.Model,
+			Prompt:      spec.Prompt,
+			PromptFile:  spec.PromptFile,
+			WorkingDir:  spec.WorkingDir,
+			Sandbox:     spec.Sandbox,
+			Env:         spec.Env,
+			Params:      spec.Params,
+			TimeoutSecs: step.TimeoutSeconds,
+		})
+	case "git_op":
+		spec := step.GitOp
+		if spec == nil {
+			spec = &GitOpSpec{}
+		}
+		return workflow.ExecuteActivity(ctx, activities.GitOp, activities.GitOpInput{
+			Name:          stepName(step),
+			WorkflowID:    info.WorkflowExecution.ID,
+			RunID:         info.WorkflowExecution.RunID,
+			StepID:        step.ID,
+			LogDir:        logDir,
+			Op:            spec.Op,
+			RepoDir:       spec.RepoDir,
+			Branch:        spec.Branch,
+			BaseBranch:    spec.BaseBranch,
+			CommitMessage: spec.CommitMessage,
+			PRTitle:       spec.PRTitle,
+			PRBody:        spec.PRBody,
+			GitOpsScript:  spec.GitOpsScript,
+			Env:           spec.Env,
+			TimeoutSecs:   step.TimeoutSeconds,
 		})
 	default:
 		return workflow.ExecuteActivity(ctx, activities.RunCommand, activities.RunCommandInput{

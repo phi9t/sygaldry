@@ -6,6 +6,8 @@
 # Initializes Spack + CUDA + MLSys venv, validates GPU, and starts an
 # interactive shell. If arguments are provided, executes them directly.
 
+set -eu -o pipefail
+
 # Resolve lib path (works both with baked /opt/container_entrypoints and dev mounts)
 _LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../lib" 2>/dev/null && pwd)" \
     || _LIB_DIR="/opt/container_entrypoints/../lib"
@@ -125,4 +127,5 @@ else
     echo "+-------------------------------------------------------------+"
 fi
 
+set +euo pipefail  # relax strict mode for interactive shell
 exec bash -i

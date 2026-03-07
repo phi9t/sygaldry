@@ -78,17 +78,8 @@ fi
 [[ -f "${LOCK_FILE}" ]] || err "image.lock not found: ${LOCK_FILE}
 Run build-mlsys.sh first."
 
-# Read image_ref from image.lock (first matching key, strip leading whitespace)
-IMAGE_REF=""
-while IFS= read -r _line; do
-    case "${_line}" in
-        image_ref:*)
-            IMAGE_REF="${_line#image_ref:}"
-            IMAGE_REF="${IMAGE_REF#"${IMAGE_REF%%[! ]*}"}"
-            break
-            ;;
-    esac
-done < "${LOCK_FILE}"
+# Read image_ref from image.lock
+IMAGE_REF="$(awk -F': ' '/^image_ref:/{print $2; exit}' "${LOCK_FILE}")"
 
 [[ -n "${IMAGE_REF}" ]] || err "image_ref not found in ${LOCK_FILE}"
 

@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 # Retry loop around zephyr_autobuild.sh with basic remediation and locking.
 # Intended to run headless (tmux/systemd-run). Writes high-level log lines to STDOUT.
+#
+# DEPRECATED (2026-03-06): Use the Temporal pipeline instead:
+#   cd temporal && go run ./cmd/orchestrate run -plan examples/spack-build-pipeline.yaml
+# This script is retained for backward compatibility.
 
 set -euo pipefail
 

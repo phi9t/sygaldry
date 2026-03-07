@@ -79,6 +79,10 @@ func TestValidatePlanAllTypes(t *testing.T) {
 				step.HFDownloadModel = &workflows.HFDownloadModelSpec{ModelID: "ns/model"}
 			case "k8s_job":
 				step.K8sJob = &workflows.K8sJobSpec{Command: "nvidia-smi"}
+			case "agent_task":
+				step.AgentTask = &workflows.AgentTaskSpec{Engine: "claude", Prompt: "hello"}
+			case "git_op":
+				step.GitOp = &workflows.GitOpSpec{Op: "branch"}
 			}
 			input := &workflows.PipelineInput{Steps: []workflows.PipelineStep{step}}
 			if err := validatePlan(input); err != nil {
@@ -105,6 +109,11 @@ func TestValidatePlanMissingRequiredFields(t *testing.T) {
 		{"hf_download_dataset nil", workflows.PipelineStep{ID: "a", Type: "hf_download_dataset"}, "hf_download_dataset requires dataset_id"},
 		{"hf_download_model nil", workflows.PipelineStep{ID: "a", Type: "hf_download_model"}, "hf_download_model requires model_id"},
 		{"k8s_job nil", workflows.PipelineStep{ID: "a", Type: "k8s_job"}, "k8s_job requires command"},
+		{"agent_task nil", workflows.PipelineStep{ID: "a", Type: "agent_task"}, "agent_task requires agent_task config"},
+		{"agent_task no engine", workflows.PipelineStep{ID: "a", Type: "agent_task", AgentTask: &workflows.AgentTaskSpec{Prompt: "hi"}}, "agent_task requires engine"},
+		{"agent_task no prompt", workflows.PipelineStep{ID: "a", Type: "agent_task", AgentTask: &workflows.AgentTaskSpec{Engine: "claude"}}, "agent_task requires prompt or prompt_file"},
+		{"git_op nil", workflows.PipelineStep{ID: "a", Type: "git_op"}, "git_op requires op"},
+		{"git_op no op", workflows.PipelineStep{ID: "a", Type: "git_op", GitOp: &workflows.GitOpSpec{}}, "git_op requires op"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

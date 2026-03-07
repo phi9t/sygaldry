@@ -10,6 +10,7 @@
 #   sygaldry_ensure_view_fallback - Inject Spack view into PATH/PYTHONPATH/LD_LIBRARY_PATH
 #   sygaldry_setup_cuda           - Set CUDA_HOME, PATH, LD_LIBRARY_PATH
 #   sygaldry_activate_mlsys_venv  - Auto-activate baked MLSys venv (single or multi)
+#   sygaldry_validate_gpu         - Validate Torch + JAX GPU availability; die on failure
 #   sygaldry_full_init            - All of the above in sequence
 
 if [[ -n "${_SYGALDRY_SPACK_INIT_LOADED:-}" ]]; then
@@ -188,6 +189,52 @@ sygaldry_require_torch_jax() {
         "Torch/JAX unavailable and /opt/spack_store/view not found." \
         "Build with spack-build.sh or use a snapshot image."
     return 1
+}
+
+# ---------------------------------------------------------------------------
+# sygaldry_validate_gpu
+# ---------------------------------------------------------------------------
+# Validates that Torch and JAX both see a CUDA GPU. Calls die_with_hint on
+# failure. Returns 0 on success.
+sygaldry_validate_gpu() {
+    local _gpu_ret=0
+    python3 - >&2 <<'PY' || _gpu_ret=$?
+import sys
+
+errors = []
+try:
+    import torch
+    if not torch.cuda.is_available():
+        errors.append("torch.cuda.is_available() is False")
+    elif torch.cuda.device_count() < 1:
+        errors.append("torch reports zero CUDA devices")
+except Exception as exc:
+    errors.append(f"torch error: {exc}")
+
+try:
+    import jax
+    devices = jax.devices()
+    gpu_devices = [d for d in devices if d.platform == "gpu"]
+    if not gpu_devices:
+        errors.append(f"jax has no GPU devices (devices={devices})")
+except Exception as exc:
+    errors.append(f"jax error: {exc}")
+
+if errors:
+    print("GPU validation failed:", file=sys.stderr)
+    for item in errors:
+        print(f"  - {item}", file=sys.stderr)
+    sys.exit(1)
+
+print("GPU validation passed: Torch and JAX both see a CUDA GPU.", file=sys.stderr)
+PY
+
+    if [[ ${_gpu_ret} -ne 0 ]]; then
+        die_with_hint \
+            "GPU not functional in Zephyr container" \
+            "Check nvidia-smi on host; run container/diagnose_nvidia.sh"
+    fi
+    return 0
 }
 
 # ---------------------------------------------------------------------------

@@ -244,8 +244,8 @@ if [[ -d "${VENV_DIR}" ]]; then
         PYTEST_ARGS=(
             --ignore=pkg
             --ignore=outputs
+            --ignore=examples
             --ignore=llm_speculative_decoding_gpt2_test.py
-            --ignore=tools/qwen3_scale_test.py
             -q
         )
         if "${PYTEST}" "${PYTEST_ARGS[@]}"; then
@@ -310,11 +310,33 @@ run_check "check_zephyr_contracts.sh" "${SCRIPT_DIR}/tools/check_zephyr_contract
 
 # ---- Infra checks ----
 if [[ "${INFRA}" == "true" ]]; then
-    section "Infra: verify_all"
+    _INFRA_PROJECT="${SYGALDRY_PROJECT_ID:-zephyr-verify}"
+
+    section "Infra: preflight"
+    run_check "verify_preflight.sh" env \
+        SYGALDRY_PROJECT_ID="${_INFRA_PROJECT}" \
+        SYGALDRY_REQUIRE_GPU="true" \
+        SYGALDRY_FIX_GPU="true" \
+        "${SCRIPT_DIR}/container/verify_preflight.sh"
+
+    section "Infra: image build"
+    run_check "verify_image_build.sh" env \
+        SYGALDRY_PROJECT_ID="${_INFRA_PROJECT}" \
+        SYGALDRY_BUILD_IMAGE="never" \
+        "${SCRIPT_DIR}/container/verify_image_build.sh"
+
     if [[ "${INFRA_FULL}" == "true" ]]; then
-        run_check "verify_all (full)" ./container/verify_all.sh
-    else
-        run_check "verify_all (smoke)" ./container/verify_all.sh --smoke
+        section "Infra: spack build"
+        run_check "verify_build.sh" env \
+            SYGALDRY_PROJECT_ID="${_INFRA_PROJECT}" \
+            "${SCRIPT_DIR}/container/verify_build.sh"
+
+        section "Infra: epilogue"
+        run_check "verify_epilogue.sh" env \
+            SYGALDRY_PROJECT_ID="${_INFRA_PROJECT}" \
+            SYGALDRY_REQUIRE_GPU="true" \
+            "${SCRIPT_DIR}/container/verify_epilogue.sh" \
+            --project-id "${_INFRA_PROJECT}"
     fi
 fi
 

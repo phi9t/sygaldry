@@ -22,10 +22,8 @@ echo ""
 # Initialize Spack + CUDA + view fallback
 sygaldry_init_spack || true
 if ! sygaldry_activate_env; then
-    if [[ -d "/opt/spack_store/view" ]]; then
-        echo "WARNING: Spack env activation failed; using view fallback" >&2
-        sygaldry_ensure_view_fallback || true
-    fi
+    echo "WARNING: Spack env activation failed; using view fallback" >&2
+    sygaldry_ensure_view_fallback || true
 fi
 sygaldry_setup_cuda
 

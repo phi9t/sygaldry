@@ -124,11 +124,17 @@ sys.exit(1)
 
         if [[ "${has_mlsys_extra}" -eq 1 ]]; then
             log "Found [project.optional-dependencies.mlsys] -- pre-filling config"
-            sed -i '/^python_deps:/,/^[^ #]/{
-                /^python_deps:/c\python_deps:\n  pyproject: pyproject.toml\n  extras: [mlsys]
-                /^  packages:/d
-                /^    - /d
-            }' "${config_file}"
+            local HAS_MLSYS_EXTRA="${has_mlsys_extra}"
+            python3 - "${config_file}" "${HAS_MLSYS_EXTRA}" <<'PYEOF'
+import sys, re
+cfg_path, has_mlsys = sys.argv[1], sys.argv[2] == "1"
+content = open(cfg_path).read()
+new_block = "python_deps:\n  pyproject: pyproject.toml"
+if has_mlsys:
+    new_block += "\n  extras: [mlsys]"
+content = re.sub(r'python_deps:.*?(?=\n\S|\Z)', new_block, content, flags=re.DOTALL)
+open(cfg_path, 'w').write(content)
+PYEOF
         else
             log "Found pyproject.toml but no 'mlsys' extra -- using inline packages (edit config.yaml)"
         fi

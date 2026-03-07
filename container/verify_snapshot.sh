@@ -66,8 +66,6 @@ done
 readonly IMAGE
 readonly GPU
 
-verify_reset_counters
-
 # Run a command inside the snapshot image (no GPU, no host mounts for spack)
 run_no_gpu() {
     local cmd="$1"
@@ -105,25 +103,25 @@ echo "=== T1: Image Metadata ==="
 # Label: sygaldry.spack.baked=true
 baked_label="$(docker inspect --format='{{index .Config.Labels "sygaldry.spack.baked"}}' "${IMAGE}" 2>/dev/null || echo "")"
 if [[ "${baked_label}" == "true" ]]; then
-    pass "Label sygaldry.spack.baked=true"
+    tap_ok "Label sygaldry.spack.baked=true"
 else
-    fail "Label sygaldry.spack.baked=true" "got '${baked_label}'"
+    tap_not_ok "Label sygaldry.spack.baked=true" "got '${baked_label}'"
 fi
 
 # ENV: SYGALDRY_SPACK_ENV
 spack_env_val="$(docker inspect --format='{{range .Config.Env}}{{println .}}{{end}}' "${IMAGE}" 2>/dev/null | grep '^SYGALDRY_SPACK_ENV=' | head -1 | cut -d= -f2-)"
 if [[ "${spack_env_val}" == "/opt/spack_env/default" ]]; then
-    pass "ENV SYGALDRY_SPACK_ENV=/opt/spack_env/default"
+    tap_ok "ENV SYGALDRY_SPACK_ENV=/opt/spack_env/default"
 else
-    fail "ENV SYGALDRY_SPACK_ENV=/opt/spack_env/default" "got '${spack_env_val}'"
+    tap_not_ok "ENV SYGALDRY_SPACK_ENV=/opt/spack_env/default" "got '${spack_env_val}'"
 fi
 
 # ENV: SYGALDRY_IN_CONTAINER
 in_container_val="$(docker inspect --format='{{range .Config.Env}}{{println .}}{{end}}' "${IMAGE}" 2>/dev/null | grep '^SYGALDRY_IN_CONTAINER=' | head -1 | cut -d= -f2-)"
 if [[ "${in_container_val}" == "1" ]]; then
-    pass "ENV SYGALDRY_IN_CONTAINER=1"
+    tap_ok "ENV SYGALDRY_IN_CONTAINER=1"
 else
-    fail "ENV SYGALDRY_IN_CONTAINER=1" "got '${in_container_val}'"
+    tap_not_ok "ENV SYGALDRY_IN_CONTAINER=1" "got '${in_container_val}'"
 fi
 
 # ============================================================================
@@ -136,51 +134,51 @@ echo "=== T2: Filesystem Structure ==="
 # View symlink resolves
 result="$(run_no_gpu 'test -L /opt/spack_store/view && readlink /opt/spack_store/view')" || true
 if [[ "${result}" == /opt/spack_store/* ]]; then
-    pass "View symlink resolves to /opt/spack_store/..."
+    tap_ok "View symlink resolves to /opt/spack_store/..."
 else
-    fail "View symlink resolves" "got '${result}'"
+    tap_not_ok "View symlink resolves" "got '${result}'"
 fi
 
 # View target directory exists and has content
 result="$(run_no_gpu 'test -d /opt/spack_store/view/bin && echo yes')" || true
 if [[ "${result}" == "yes" ]]; then
-    pass "View directory /opt/spack_store/view/bin exists"
+    tap_ok "View directory /opt/spack_store/view/bin exists"
 else
-    fail "View directory /opt/spack_store/view/bin exists"
+    tap_not_ok "View directory /opt/spack_store/view/bin exists"
 fi
 
 # spack.yaml in baked env
 result="$(run_no_gpu 'test -f /opt/spack_env/default/spack.yaml && echo yes')" || true
 if [[ "${result}" == "yes" ]]; then
-    pass "Baked env: spack.yaml exists"
+    tap_ok "Baked env: spack.yaml exists"
 else
-    fail "Baked env: spack.yaml exists"
+    tap_not_ok "Baked env: spack.yaml exists"
 fi
 
 # spack.lock in baked env
 result="$(run_no_gpu 'test -f /opt/spack_env/default/spack.lock && echo yes')" || true
 if [[ "${result}" == "yes" ]]; then
-    pass "Baked env: spack.lock exists"
+    tap_ok "Baked env: spack.lock exists"
 else
-    fail "Baked env: spack.lock exists"
+    tap_not_ok "Baked env: spack.lock exists"
 fi
 
 # Entrypoints present and executable
 for ep in default.sh run-job.sh verify-gpu.sh verify-spack.sh spack-build.sh; do
     result="$(run_no_gpu "test -x /opt/container_entrypoints/${ep} && echo yes")" || true
     if [[ "${result}" == "yes" ]]; then
-        pass "Entrypoint ${ep} present and executable"
+        tap_ok "Entrypoint ${ep} present and executable"
     else
-        fail "Entrypoint ${ep} present and executable"
+        tap_not_ok "Entrypoint ${ep} present and executable"
     fi
 done
 
 # install_tree/.spack-db exists
 result="$(run_no_gpu 'test -d /opt/spack_store/install_tree/.spack-db && echo yes')" || true
 if [[ "${result}" == "yes" ]]; then
-    pass "install_tree/.spack-db exists"
+    tap_ok "install_tree/.spack-db exists"
 else
-    fail "install_tree/.spack-db exists"
+    tap_not_ok "install_tree/.spack-db exists"
 fi
 
 # ============================================================================
@@ -193,9 +191,9 @@ echo "=== T3: Python Imports ==="
 for mod in torch jax numpy scipy; do
     result="$(run_no_gpu "/opt/spack_store/view/bin/python3 -c 'import ${mod}; print(${mod}.__version__)'" 2>/dev/null)" || true
     if [[ -n "${result}" ]] && [[ "${result}" != *"Error"* ]] && [[ "${result}" != *"error"* ]]; then
-        pass "import ${mod} (version: ${result})"
+        tap_ok "import ${mod} (version: ${result})"
     else
-        fail "import ${mod}" "got '${result}'"
+        tap_not_ok "import ${mod}" "got '${result}'"
     fi
 done
 
@@ -213,9 +211,9 @@ result="$(run_no_gpu '
     echo "SPACK_ENV=${SPACK_ENV:-unset}"
 ')" || true
 if [[ "${result}" == *"SPACK_ENV=/opt/spack_env/default"* ]]; then
-    pass "spack env activate /opt/spack_env/default"
+    tap_ok "spack env activate /opt/spack_env/default"
 else
-    fail "spack env activate /opt/spack_env/default" "got '${result}'"
+    tap_not_ok "spack env activate /opt/spack_env/default" "got '${result}'"
 fi
 
 # spack find shows installed packages (at least py-torch)
@@ -225,9 +223,9 @@ result="$(run_no_gpu '
     spack find 2>&1 | grep -c "\\[+\\]"
 ')" || true
 if [[ -n "${result}" ]] && [[ "${result}" -gt 0 ]] 2>/dev/null; then
-    pass "spack find shows ${result} installed packages"
+    tap_ok "spack find shows ${result} installed packages"
 else
-    fail "spack find shows installed packages" "got '${result}'"
+    tap_not_ok "spack find shows installed packages" "got '${result}'"
 fi
 
 # ============================================================================
@@ -240,17 +238,17 @@ echo "=== T7: No spack_store Shadowing ==="
 # /opt/spack_store is NOT empty (baked content visible without host mount)
 result="$(run_no_gpu 'ls /opt/spack_store/install_tree/ | head -3 | wc -l')" || true
 if [[ -n "${result}" ]] && [[ "${result}" -gt 0 ]] 2>/dev/null; then
-    pass "Baked /opt/spack_store/install_tree is not empty (${result} entries)"
+    tap_ok "Baked /opt/spack_store/install_tree is not empty (${result} entries)"
 else
-    fail "Baked /opt/spack_store/install_tree is not empty" "got '${result}'"
+    tap_not_ok "Baked /opt/spack_store/install_tree is not empty" "got '${result}'"
 fi
 
 # view/bin/python3 exists (accessible without mount)
 result="$(run_no_gpu 'test -x /opt/spack_store/view/bin/python3 && echo yes')" || true
 if [[ "${result}" == "yes" ]]; then
-    pass "Baked view/bin/python3 accessible without host mount"
+    tap_ok "Baked view/bin/python3 accessible without host mount"
 else
-    fail "Baked view/bin/python3 accessible without host mount"
+    tap_not_ok "Baked view/bin/python3 accessible without host mount"
 fi
 
 # ============================================================================
@@ -282,9 +280,9 @@ else
             python3 -c "import torch; print(torch.cuda.is_available())"
         ')" || true
         if [[ "${result}" == "True" ]]; then
-            pass "torch.cuda.is_available() == True"
+            tap_ok "torch.cuda.is_available() == True"
         else
-            fail "torch.cuda.is_available()" "got '${result}'"
+            tap_not_ok "torch.cuda.is_available()" "got '${result}'"
         fi
 
         # JAX GPU devices
@@ -294,9 +292,9 @@ else
             python3 -c "import jax; devs=[d for d in jax.devices() if d.platform==\"gpu\"]; print(len(devs))"
         ')" || true
         if [[ -n "${result}" ]] && [[ "${result}" -gt 0 ]] 2>/dev/null; then
-            pass "JAX sees ${result} GPU device(s)"
+            tap_ok "JAX sees ${result} GPU device(s)"
         else
-            fail "JAX GPU devices" "got '${result}'"
+            tap_not_ok "JAX GPU devices" "got '${result}'"
         fi
 
         # Tensor matmul on GPU
@@ -313,9 +311,9 @@ print(\"OK\")
 "
         ')" || true
         if [[ "${result}" == "OK" ]]; then
-            pass "Tensor matmul on GPU"
+            tap_ok "Tensor matmul on GPU"
         else
-            fail "Tensor matmul on GPU" "got '${result}'"
+            tap_not_ok "Tensor matmul on GPU" "got '${result}'"
         fi
 
         # ====================================================================
@@ -335,9 +333,9 @@ print(\"OK\")
             2>/dev/null
         )" || true
         if [[ "${result}" == "OK" ]]; then
-            pass "Launcher + baked image: torch GPU OK"
+            tap_ok "Launcher + baked image: torch GPU OK"
         else
-            fail "Launcher + baked image: torch GPU" "got '${result}'"
+            tap_not_ok "Launcher + baked image: torch GPU" "got '${result}'"
         fi
 
         # Launcher log should show "baked into image" for spack
@@ -350,16 +348,16 @@ print(\"OK\")
             2>&1
         )" || true
         if echo "${launcher_log}" | grep -q "baked into image"; then
-            pass "Launcher log shows 'Spack: (baked into image)'"
+            tap_ok "Launcher log shows 'Spack: (baked into image)'"
         else
-            fail "Launcher log shows 'Spack: (baked into image)'"
+            tap_not_ok "Launcher log shows 'Spack: (baked into image)'"
         fi
 
         # Launcher uses baked entrypoints path
         if echo "${launcher_log}" | grep -q "/opt/container_entrypoints/"; then
-            pass "Launcher uses baked entrypoint path"
+            tap_ok "Launcher uses baked entrypoint path"
         else
-            fail "Launcher uses baked entrypoint path"
+            tap_not_ok "Launcher uses baked entrypoint path"
         fi
 
     fi  # nvidia runtime check
@@ -369,5 +367,6 @@ fi  # GPU flag
 # Summary
 # ============================================================================
 
-verify_print_summary "Snapshot Verification Summary" "${IMAGE}"
-verify_exit_on_failures
+tap_plan "${_TAP_TEST_NUM}"
+tap_summary
+tap_exit

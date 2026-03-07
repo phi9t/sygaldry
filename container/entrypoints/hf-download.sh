@@ -9,6 +9,7 @@ mkdir -p "${HF_HOME}" "${UV_CACHE_DIR}" "$(dirname "${VENV_DIR}")"
 
 if ! command -v "${UV_BIN}" >/dev/null 2>&1; then
     echo "ERROR: uv is required but not found in PATH (set UV_BIN to override)." >&2
+    echo "HINT:  uv is installed in the container image; run this inside the Sygaldry container." >&2
     exit 1
 fi
 

@@ -46,8 +46,11 @@ Subcommands:
   run               Run a command in the container
   job               Manage background jobs (run/status/tail/stop/health)
   k3s               K3s dev pods and batch jobs (enter/job/setup)
+  sail              SAIL agentic improvement loop (discover/worker/run)
   config show       Show effective configuration
+  snapshot          Build snapshot images (spack, mlsys, or all)
   validate          Run validation suite
+  completions       Print bash completion script (source or redirect)
   version           Show component versions
 
 Options (passed to launcher):
@@ -60,7 +63,13 @@ Examples:
   sygaldry --repo . -- python train.py  # Run command in current repo
   sygaldry job run train -- "python train.py"
   sygaldry job status train
+  sygaldry sail discover                # Preview discovered issues
+  sygaldry sail --dry-run               # Dry-run SAIL (no LLM calls)
+  sygaldry sail                         # Run SAIL improvement loop
+  sygaldry sail worker                  # Start Temporal worker
   sygaldry config show
+  sygaldry snapshot spack               # Build spack snapshot
+  sygaldry snapshot vllm sglang --push  # Build + push MLSys images
   sygaldry validate --quick
 EOF
 }
@@ -109,9 +118,42 @@ case "${1:-}" in
                 ;;
         esac
         ;;
+    snapshot)
+        shift
+        exec "${SYGALDRY_HOME}/container/snapshot_all.sh" "$@"
+        ;;
     validate)
         shift
         exec "${SYGALDRY_HOME}/validate_all.sh" "$@"
+        ;;
+    sail)
+        shift
+        case "${1:-}" in
+            discover)
+                shift
+                exec python3 "${SYGALDRY_HOME}/tools/agentic/discover_issues.py" \
+                    --repo-dir "${SYGALDRY_HOME}" "$@"
+                ;;
+            worker)
+                shift
+                cd "${SYGALDRY_HOME}/temporal"
+                exec go run ./cmd/worker "$@"
+                ;;
+            validate-plan)
+                shift
+                cd "${SYGALDRY_HOME}/temporal"
+                exec go run ./cmd/orchestrate validate \
+                    -plan "${SYGALDRY_HOME}/tools/agentic/improvement_loop.yaml" "$@"
+                ;;
+            *)
+                exec "${SYGALDRY_HOME}/tools/agentic/run_improvement_loop.sh" "$@"
+                ;;
+        esac
+        ;;
+    completions)
+        declare -f _sygaldry_completions
+        echo "complete -F _sygaldry_completions sygaldry"
+        exit 0
         ;;
     k3s)
         shift
@@ -142,3 +184,41 @@ case "${1:-}" in
         exec "${LAUNCHER}" "$@"
         ;;
 esac
+
+# ============================================================================
+# Bash completion
+# ============================================================================
+# To enable tab completion, add to ~/.bash_completion or ~/.bashrc:
+#   eval "$(sygaldry completions bash)"
+# Or write to a completion file:
+#   sygaldry completions bash > ~/.bash_completion.d/sygaldry
+
+_sygaldry_completions() {
+    local cur="${COMP_WORDS[COMP_CWORD]}"
+    local prev="${COMP_WORDS[COMP_CWORD-1]}"
+    local subcommands="shell run job config snapshot validate completions version k3s sail --help --repo"
+
+    case "${prev}" in
+        snapshot)
+            mapfile -t COMPREPLY < <(compgen -W "spack hf-transformers hf-datasets vllm sglang torchtitan megatronlm llm-serving-all all --dry-run --push --no-verify" -- "${cur}")
+            return ;;
+        job)
+            mapfile -t COMPREPLY < <(compgen -W "run status tail stop health" -- "${cur}")
+            return ;;
+        config)
+            mapfile -t COMPREPLY < <(compgen -W "show" -- "${cur}")
+            return ;;
+        k3s)
+            mapfile -t COMPREPLY < <(compgen -W "enter job setup" -- "${cur}")
+            return ;;
+        sail)
+            mapfile -t COMPREPLY < <(compgen -W "discover worker validate-plan --dry-run --repo-dir" -- "${cur}")
+            return ;;
+        validate)
+            mapfile -t COMPREPLY < <(compgen -W "--quick --verify-only --infra --infra-full --snapshot --snapshot-no-gpu --uv-layering --multi-repo" -- "${cur}")
+            return ;;
+    esac
+
+    mapfile -t COMPREPLY < <(compgen -W "${subcommands}" -- "${cur}")
+}
+complete -F _sygaldry_completions sygaldry

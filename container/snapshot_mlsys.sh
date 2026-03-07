@@ -34,6 +34,9 @@ readonly SCRIPT_DIR
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 readonly PROJECT_ROOT
 
+# shellcheck disable=SC1091
+source "${SCRIPT_DIR}/lib/snapshot_common.sh"
+
 # ============================================================================
 # Configuration
 # ============================================================================
@@ -295,8 +298,6 @@ for env in "${BUILD_LIST[@]}"; do
         log "Pushing ${local_tag} to registry..."
 
         REGISTRY_HOST="ghcr.io"
-
-        # Check registry auth
         if ! docker login "${REGISTRY_HOST}" --get-login >/dev/null 2>&1; then
             if [[ -n "${GITHUB_TOKEN:-}" ]]; then
                 log "Authenticating to ghcr.io with GITHUB_TOKEN..."
@@ -306,31 +307,14 @@ for env in "${BUILD_LIST[@]}"; do
             fi
         fi
 
-        remote_tag="${REGISTRY}/zephyr:${tag_suffix}"
-        remote_date_tag="${REGISTRY}/zephyr:${tag_suffix}-$(date +%Y%m%d)"
-
-        log "Tagging:"
-        log "  ${local_tag} -> ${remote_tag}"
-        log "  ${local_tag} -> ${remote_date_tag}"
-
-        docker tag "${local_tag}" "${remote_tag}"
-        docker tag "${local_tag}" "${remote_date_tag}"
-
-        log "Pushing ${remote_tag}..."
-        if ! docker push "${remote_tag}"; then
-            log "FAIL: Push failed for ${remote_tag}"
+        DATE_TAG="$(date +%Y%m%d)"
+        if ! snapshot_tag_and_push "${local_tag}" "${REGISTRY}/zephyr" "${tag_suffix}" "${DATE_TAG}" 3; then
+            log "FAIL: Push failed for ${local_tag}"
             FAILED_ENVS+=("${env}")
             continue
         fi
 
-        log "Pushing ${remote_date_tag}..."
-        if ! docker push "${remote_date_tag}"; then
-            log "FAIL: Push failed for ${remote_date_tag}"
-            FAILED_ENVS+=("${env}")
-            continue
-        fi
-
-        log "Push complete: ${remote_tag}, ${remote_date_tag}"
+        log "Push complete: ${REGISTRY}/zephyr:${tag_suffix}, ${REGISTRY}/zephyr:${tag_suffix}-${DATE_TAG}"
     fi
 
     BUILT_IMAGES+=("${local_tag}")

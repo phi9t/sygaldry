@@ -26,10 +26,8 @@ required_paths=(
     "${TARGET_ROOT}/scripts/zephyr_mlsys_vendor.sh"
     "${TARGET_ROOT}/scripts/package_mlsys.sh"
     "${TARGET_ROOT}/assets/zephyr-mlsys-runtime/bin/launch-mlsys.sh"
-    "${TARGET_ROOT}/assets/zephyr-mlsys-runtime/container_entrypoints/uv-install.sh"
-    "${TARGET_ROOT}/assets/zephyr-mlsys-runtime/container_entrypoints/spack_owned_packages.conf"
-    "${TARGET_ROOT}/assets/zephyr-mlsys-runtime/container_entrypoints/nvidia_overrides.txt"
-    "${TARGET_ROOT}/assets/zephyr-mlsys-runtime/container_entrypoints/llm_serving_overrides.txt"
+    "${TARGET_ROOT}/assets/zephyr-mlsys-runtime/container/entrypoint.sh"
+    "${TARGET_ROOT}/assets/zephyr-mlsys-runtime/container/run-job.sh"
 )
 
 for path in "${required_paths[@]}"; do

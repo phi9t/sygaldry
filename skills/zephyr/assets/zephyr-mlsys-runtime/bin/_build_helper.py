@@ -17,7 +17,6 @@ import os
 import re
 import shutil
 import sys
-from datetime import datetime, timezone
 
 
 def die(msg: str) -> None:
@@ -32,6 +31,7 @@ def info(msg: str) -> None:
 # ---------------------------------------------------------------------------
 # Minimal YAML parser (stdlib only -- avoids PyYAML dependency on host)
 # ---------------------------------------------------------------------------
+
 
 def strip_comment(s: str) -> str:
     return re.sub(r"\s+#.*$", "", s).strip()
@@ -134,6 +134,7 @@ def parse_config(path: str) -> dict:
 # Dependency resolution
 # ---------------------------------------------------------------------------
 
+
 def resolve_packages(python_deps: dict | list | None, repo_root: str) -> list[str]:
     """Resolve Python packages from config python_deps section."""
     if not python_deps or not isinstance(python_deps, dict):
@@ -176,7 +177,9 @@ def resolve_packages(python_deps: dict | list | None, repo_root: str) -> list[st
             opt_deps = project.get("optional-dependencies", {})
             for extra in extras:
                 if extra not in opt_deps:
-                    die(f"extra '{extra}' not found in pyproject.toml optional-dependencies")
+                    die(
+                        f"extra '{extra}' not found in pyproject.toml optional-dependencies"
+                    )
                 packages.extend(opt_deps[extra])
         else:
             packages.extend(project.get("dependencies", []))
@@ -187,6 +190,7 @@ def resolve_packages(python_deps: dict | list | None, repo_root: str) -> list[st
 # ---------------------------------------------------------------------------
 # Dockerfile generation
 # ---------------------------------------------------------------------------
+
 
 def generate_dockerfile(
     base_image: str,
@@ -210,20 +214,24 @@ def generate_dockerfile(
 
     if apt_packages:
         lines.append("")
-        lines.append("RUN apt-get update && apt-get install -y --no-install-recommends \\")
+        lines.append(
+            "RUN apt-get update && apt-get install -y --no-install-recommends \\"
+        )
         for pkg in apt_packages:
             lines.append(f"    {pkg} \\")
         lines.append("    && rm -rf /var/lib/apt/lists/*")
 
     if packages:
         lines.append("")
-        lines.append("# Python venv on top of Spack base -- uv-install.sh and constraint")
+        lines.append(
+            "# Python venv on top of Spack base -- uv-install.sh and constraint"
+        )
         lines.append("# files (spack_owned_packages.conf, nvidia_overrides.txt) are")
         lines.append("# baked into the base image at /opt/container_entrypoints/.")
-        uv_line = f"RUN --mount=type=cache,target=/opt/uv_cache \\\n"
+        uv_line = "RUN --mount=type=cache,target=/opt/uv_cache \\\n"
         uv_line += f"    VENV_DIR={venv_path} \\\n"
-        uv_line += f"    UV_CACHE_DIR=/opt/uv_cache \\\n"
-        uv_line += f"    /opt/container_entrypoints/uv-install.sh"
+        uv_line += "    UV_CACHE_DIR=/opt/uv_cache \\\n"
+        uv_line += "    /opt/container_entrypoints/uv-install.sh"
         for pkg in packages:
             uv_line += f" \\\n    {pkg}"
         lines.append(uv_line)
@@ -254,9 +262,12 @@ def generate_dockerfile(
 # Main
 # ---------------------------------------------------------------------------
 
+
 def main() -> None:
     if len(sys.argv) < 5:
-        die("Usage: _build_helper.py <config.yaml> <build_ctx_dir> <repo_root> <kit_root>")
+        die(
+            "Usage: _build_helper.py <config.yaml> <build_ctx_dir> <repo_root> <kit_root>"
+        )
 
     config_file = sys.argv[1]
     build_ctx_dir = sys.argv[2]
@@ -267,6 +278,14 @@ def main() -> None:
         die(f"config not found: {config_file}")
 
     config = parse_config(config_file)
+
+    # Validate apiVersion
+    api = config.get("apiVersion", "")
+    if api != "zephyr-mlsys/v1":
+        print(
+            f"WARNING: unexpected apiVersion '{api}' (expected 'zephyr-mlsys/v1')",
+            file=sys.stderr,
+        )
 
     # Validate required fields
     errors: list[str] = []
@@ -301,6 +320,12 @@ def main() -> None:
     python_deps = config.get("python_deps") or {}
     packages = resolve_packages(python_deps, repo_root)
 
+    if config.get("python_deps") and not packages:
+        print(
+            "WARNING: python_deps section present but resolved to 0 packages",
+            file=sys.stderr,
+        )
+
     apt_packages = config.get("apt_packages") or []
     if isinstance(apt_packages, str):
         apt_packages = [apt_packages]
@@ -326,7 +351,9 @@ def main() -> None:
         shutil.copy2(src, os.path.join(container_dir, script_name))
 
     # Generate Dockerfile
-    dockerfile_content = generate_dockerfile(base_image, apt_packages, packages, venv_path)
+    dockerfile_content = generate_dockerfile(
+        base_image, apt_packages, packages, venv_path
+    )
     dockerfile_path = os.path.join(build_ctx_dir, "Dockerfile")
     with open(dockerfile_path, "w") as f:
         f.write(dockerfile_content)

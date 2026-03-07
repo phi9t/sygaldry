@@ -1,100 +1,181 @@
 ---
 name: zephyr
-description: Run GPU container jobs with Spack (PyTorch/JAX), build and validate MLSys UV overlay environments, and vendor hermetic Zephyr runtime kits into target repos.
+description: Run GPU container jobs with Spack (PyTorch/JAX), build and validate MLSys UV
+  overlay environments, and vendor hermetic Zephyr runtime kits into target repos.
 ---
 
-# Zephyr
+# Zephyr Skill
 
 ## Overview
 
-This skill provides a GPU-only, vendorable runtime for:
+The Zephyr skill provides two operating modes:
 
-- Container execution with Spack-backed PyTorch/JAX
-- Structured background job execution
-- MLSys UV overlay environment builds
-- Cross-repo vendoring with digest-pinned images
+**Mode A — Direct usage from the sygaldry repo.** Use `container/launch_container.sh` to
+launch the Docker container backed by the shared Spack store (PyTorch, JAX, CUDA).
 
-## Runtime Contract
+**Mode B — Vendored kit in a target repo.** After running `zephyr_mlsys_vendor.sh install`,
+the target repo gains a `.zephyr-mlsys/` directory with a self-contained `launch-mlsys.sh`
+launcher and pre-built UV overlay environments for common MLSys profiles
+(hf-transformers, vllm, hf-datasets).
 
-- GPU-only mode; NVIDIA runtime is required.
-- Snapshot/base image references must be digest-pinned.
-- Vendored runtime must execute from the target repo without source-checkout coupling.
+The snapshot image (`ghcr.io/phi9t/sygaldry/zephyr:spack@sha256:8c9507aea53995f29a5712c0cbdb99deb3d571fb9631b3d42352b3d6d6fb668c`)
+is the single hermetic baseline for both modes.
 
-## Install Into Target Repo
+---
 
-```bash
-SKILL_DIR="/path/to/skills/zephyr"
-TARGET_REPO="/path/to/target-repo"
-SNAPSHOT_REF="ghcr.io/phi9t/sygaldry/zephyr:spack@sha256:8c9507aea53995f29a5712c0cbdb99deb3d571fb9631b3d42352b3d6d6fb668c"
+## Prerequisites
 
-"${SKILL_DIR}/scripts/zephyr_vendor_infra.sh" install \
-  --target-repo "${TARGET_REPO}" \
-  --snapshot-ref "${SNAPSHOT_REF}" \
-  --image-mode auto
+- NVIDIA Docker runtime installed and configured (`nvidia-ctk runtime configure --runtime=docker`)
+- Docker installed and running
+- CUDA 12.9.1 host driver (or compatible)
+- Snapshot image available locally or pullable from `ghcr.io`
 
-"${SKILL_DIR}/scripts/zephyr_mlsys_vendor.sh" install \
-  --target-repo "${TARGET_REPO}" \
-  --snapshot-ref "${SNAPSHOT_REF}" \
-  --force
-```
+---
 
-## Validate Vendored Infra
+## Mode A: Direct usage (from sygaldry repo)
 
 ```bash
-cd "${TARGET_REPO}"
-KIT_DIR="$(dirname "$(find . -maxdepth 4 -type f -name repoctl | head -n 1)")"
+# Interactive shell (builds image if needed)
+./container/launch_container.sh
 
-"${KIT_DIR}/repoctl" config show
-"${KIT_DIR}/repoctl" verify image --skip-spack
-"${KIT_DIR}/repoctl" verify spack
-"${KIT_DIR}/repoctl" verify uv-layering --no-gpu
+# Run a command inside the container
+./container/launch_container.sh -- python train.py
+
+# Multi-repo mode: mount an external repo
+./container/launch_container.sh --repo /path/to/my-project -- python train.py
+
+# Run with a named entrypoint
+./container/launch_container.sh --entrypoint verify-gpu.sh
+
+# Download a HuggingFace model
+./container/launch_container.sh --entrypoint hf-download.sh -- model Qwen/Qwen3-0.6B-Base
 ```
 
-## Run Jobs
+**Key flags:**
+
+| Flag | Purpose |
+|------|---------|
+| `--repo <path>` | Mount external repo at `/workspace/<repo_name>` |
+| `--entrypoint <name>` | Use a named entrypoint from `container/entrypoints/` |
+| `--run-id <id>` | Set a unique run identifier for log isolation |
+| `--lease-mode` | Enable lease-based container lifecycle management |
+| `--print-effective-config` | Print resolved env/mount config and exit |
+
+---
+
+## Mode B: Vendored kit (target repo has `.zephyr-mlsys/`)
+
+**Install into a target repo:**
 
 ```bash
-cd "${TARGET_REPO}"
-JOBCTL="$(dirname "$(find . -maxdepth 4 -type f -name jobctl | head -n 1)")/jobctl"
-
-"${JOBCTL}" run --project-id zephyr-a --job torch-gpu -- \
-  "python -c 'import torch; print(torch.cuda.is_available())'"
-
-"${JOBCTL}" status --project-id zephyr-a --job torch-gpu
-"${JOBCTL}" health --project-id zephyr-a --job torch-gpu
-"${JOBCTL}" tail --project-id zephyr-a --job torch-gpu --lines 40
+skills/zephyr/scripts/zephyr_mlsys_vendor.sh install \
+    --target-repo /path/to/target-repo \
+    --snapshot-ref ghcr.io/phi9t/sygaldry/zephyr:spack@sha256:8c9507aea53995f29a5712c0cbdb99deb3d571fb9631b3d42352b3d6d6fb668c
 ```
 
-## MLSys Overlay Runtime
+**Launch MLSys profiles from the vendored kit:**
 
 ```bash
-cd "${TARGET_REPO}"
-"${TARGET_REPO}/.codex-zephyr-mlsys/bin/launch-mlsys.sh" hf-transformers --no-validate
-"${TARGET_REPO}/.codex-zephyr-mlsys/bin/launch-mlsys.sh" vllm --no-validate
+# HuggingFace Transformers (GPU)
+.zephyr-mlsys/bin/launch-mlsys.sh hf-transformers
+
+# vLLM serving (GPU)
+.zephyr-mlsys/bin/launch-mlsys.sh vllm
+
+# HuggingFace Datasets (CPU-only, skip GPU validation)
+MLSYS_DISABLE_GPU=1 .zephyr-mlsys/bin/launch-mlsys.sh hf-datasets --no-validate
 ```
 
-## Hermetic Burn-In Suite
+---
 
-Run the full hermetic validation (separate repo + NCCL/JAX/LLVM/CUDA workloads):
+## Job execution (host-side)
+
+The `tools/zephyr_job` CLI manages container jobs from the host:
 
 ```bash
-"${SKILL_DIR}/scripts/validate_hermetic_runtime_suite.sh" \
-  --snapshot-ref "${SNAPSHOT_REF}" \
-  --mode burnin \
-  --burnin-iterations 5
+tools/zephyr_job run    --project-id <id> --job <name> -- <command>
+tools/zephyr_job status --project-id <id> --job <name>
+tools/zephyr_job tail   --project-id <id> --job <name> [--lines N]
+tools/zephyr_job stop   --project-id <id> --job <name>
+tools/zephyr_job health --project-id <id> --job <name>
 ```
 
-## Packaging Gates
+Jobs produce JSONL logs and status files under `/mnt/data_infra/zephyr_container_infra/<id>/`.
+
+---
+
+## Validation
 
 ```bash
-"${SKILL_DIR}/scripts/package_infra.sh" \
-  --out-dir /tmp/zephyr-dist \
-  --version 2026.02.25 \
-  --smoke-mode skip \
-  --force
-
-"${SKILL_DIR}/scripts/package_mlsys.sh" \
-  --out-dir /tmp/zephyr-mlsys-dist \
-  --version 2026.02.25 \
-  --smoke-mode skip \
-  --force
+repoctl verify image        --repo <path>
+repoctl verify spack        --repo <path>
+repoctl verify uv-layering  --repo <path>
 ```
+
+Quick GPU checks inside the container:
+
+```bash
+./container/launch_container.sh --entrypoint verify-gpu.sh   # PyTorch + JAX
+./container/launch_container.sh --entrypoint verify-spack.sh # Fast Spack only
+```
+
+---
+
+## Burn-in
+
+Run repeated smoke iterations against the hermetic runtime suite:
+
+```bash
+skills/zephyr/scripts/validate_hermetic_runtime_suite.sh \
+    --snapshot-ref ghcr.io/phi9t/sygaldry/zephyr:spack@sha256:8c9507aea53995f29a5712c0cbdb99deb3d571fb9631b3d42352b3d6d6fb668c \
+    --mode burnin \
+    --burnin-iterations 5
+```
+
+---
+
+## Packaging
+
+Build a versioned hermetic package for distribution:
+
+```bash
+skills/zephyr/scripts/package_mlsys.sh \
+    --version <ver> \
+    --out-dir <dir> \
+    --snapshot-ref ghcr.io/phi9t/sygaldry/zephyr:spack@sha256:8c9507aea53995f29a5712c0cbdb99deb3d571fb9631b3d42352b3d6d6fb668c \
+    [--smoke-mode full|skip]
+```
+
+---
+
+## Key environment variables
+
+| Variable | Purpose | Default |
+|----------|---------|---------|
+| `ZEPHYR_CACHE_ROOT` | Host root for all container data | `/mnt/data_infra/zephyr_container_infra` |
+| `SYGALDRY_PROJECT_ID` | Per-project isolation namespace | (required for multi-repo) |
+| `ZEPHYR_LEASE_MODE` | Enable lease-based container lifecycle | `false` |
+| `ZEPHYR_CACHE_PROFILE` | Cache sharing profile | `default` |
+| `SYGALDRY_RUN_ID` | Unique run identifier for log isolation | (auto-generated) |
+| `MLSYS_DISABLE_GPU` | Skip GPU validation (CPU-only workloads) | `0` |
+| `HF_TOKEN` | Token for gated HuggingFace models/datasets | (unset) |
+
+---
+
+## Current snapshot reference
+
+```
+ghcr.io/phi9t/sygaldry/zephyr:spack@sha256:8c9507aea53995f29a5712c0cbdb99deb3d571fb9631b3d42352b3d6d6fb668c
+```
+
+Spack stack versions baked into this snapshot:
+- Python 3.13.8, CUDA 12.9.1
+- torch 2.9.0, torchvision 0.24.0, torchaudio 2.9.0
+- jax 0.7.0, numpy 2.3.4, scipy 1.16.3
+- triton 3.4.0, numba 0.62.0rc2, llvmlite 0.45.0rc2
+
+---
+
+## See also
+
+`foundation.org` — full system design (Pillar 1–7, Skill Distribution SD.1–SD.7)

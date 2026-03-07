@@ -69,6 +69,7 @@ done
 [[ -f "${CONFIG_FILE}" ]] || err "config.yaml not found: ${CONFIG_FILE}"
 command -v docker >/dev/null 2>&1 || err "docker not found in PATH"
 command -v python3 >/dev/null 2>&1 || err "python3 not found in PATH"
+docker buildx version >/dev/null 2>&1 || err "docker buildx not available; BuildKit is required. Run: docker buildx install"
 
 # ---------------------------------------------------------------------------
 # Prepare build context via Python helper

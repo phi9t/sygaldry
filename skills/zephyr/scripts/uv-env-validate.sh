@@ -123,7 +123,8 @@ PARSER="${SCRIPT_DIR}/parse-env-yaml.py"
     echo "ERROR: parser not found: ${PARSER}" >&2
     exit 1
 }
-eval "$("${PYTHON_BIN}" "${PARSER}" "${ENV_YAML}")"
+# shellcheck disable=SC1090
+source <("${PYTHON_BIN}" "${PARSER}" "${ENV_YAML}")
 
 log "Validating environment: ${ENV_NAME}"
 

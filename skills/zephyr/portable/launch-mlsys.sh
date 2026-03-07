@@ -6,7 +6,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly SCRIPT_DIR
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 readonly REPO_ROOT
-KIT_ROOT="${REPO_ROOT}/.codex-zephyr-mlsys"
+KIT_ROOT="${REPO_ROOT}/.zephyr-mlsys"
 readonly KIT_ROOT
 
 if [[ ! -x "${KIT_ROOT}/bin/launch-mlsys.sh" ]]; then

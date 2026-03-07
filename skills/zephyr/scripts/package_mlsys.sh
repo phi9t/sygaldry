@@ -123,11 +123,11 @@ log "Running static checks"
 bash -n "${SKILL_ROOT}/scripts/"*.sh
 bash -n "${SKILL_ROOT}/portable/"*.sh
 bash -n "${SKILL_ROOT}/assets/zephyr-mlsys-runtime/bin/"*.sh
-bash -n "${SKILL_ROOT}/assets/zephyr-mlsys-runtime/container_entrypoints/"*.sh
+bash -n "${SKILL_ROOT}/assets/zephyr-mlsys-runtime/container/"*.sh
 if command -v shellcheck >/dev/null 2>&1; then
     shellcheck -s bash -S warning "${SKILL_ROOT}/scripts/"*.sh "${SKILL_ROOT}/portable/"*.sh \
         "${SKILL_ROOT}/assets/zephyr-mlsys-runtime/bin/"*.sh \
-        "${SKILL_ROOT}/assets/zephyr-mlsys-runtime/container_entrypoints/"*.sh
+        "${SKILL_ROOT}/assets/zephyr-mlsys-runtime/container/"*.sh
 else
     log "shellcheck not found; skipping"
 fi
@@ -148,7 +148,7 @@ run_local_smoke() {
     "${SKILL_ROOT}/scripts/zephyr_mlsys_vendor.sh" check \
         --target-repo "${temp_repo}/repo"
 
-    "${temp_repo}/repo/.codex-zephyr-mlsys/scripts/uv-env-build.sh" --help >/dev/null
+    "${temp_repo}/repo/.zephyr-mlsys/scripts/uv-env-build.sh" --help >/dev/null
 }
 
 run_full_smoke() {
@@ -167,7 +167,7 @@ run_full_smoke() {
         --snapshot-ref "${smoke_snapshot_ref}" \
         --force
 
-    MLSYS_DISABLE_GPU=1 "${temp_repo}/repo/.codex-zephyr-mlsys/bin/launch-mlsys.sh" hf-transformers --no-validate
+    MLSYS_DISABLE_GPU=1 "${temp_repo}/repo/.zephyr-mlsys/bin/launch-mlsys.sh" hf-transformers --no-validate
 }
 
 log "Running runtime smoke checks"
@@ -196,7 +196,7 @@ find "${stage_skill}" -type f -name '*.pyc' -delete
 chmod +x "${stage_skill}/scripts/"*.sh
 chmod +x "${stage_skill}/portable/"*.sh
 chmod +x "${stage_skill}/assets/zephyr-mlsys-runtime/bin/"*.sh
-chmod +x "${stage_skill}/assets/zephyr-mlsys-runtime/container_entrypoints/"*.sh
+chmod +x "${stage_skill}/assets/zephyr-mlsys-runtime/container/"*.sh
 
 manifest_file="${stage_skill}/SHA256SUMS"
 provenance_file="${stage_skill}/provenance.json"

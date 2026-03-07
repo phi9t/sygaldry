@@ -1,0 +1,22 @@
+# tools/agentic/config.yaml — Configuration for the Sygaldry Agentic Improvement Loop (SAIL).
+#
+# Referenced by run_improvement_loop.sh and improvement_loop.yaml.
+
+planner:
+  engine: claude          # claude | codex
+  model: claude-opus-4-6  # high-capability planning model
+
+implementer:
+  engine: claude             # claude | codex | cursor
+  model: claude-sonnet-4-6   # efficient implementation model
+
+loop:
+  max_tasks_per_run: 3    # cap on issues processed per outer-loop invocation
+  max_retries_per_task: 2 # how many times to re-run the pipeline if validate fails
+  min_priority: 2         # 1=critical, 2=high, 3=normal; lower = more selective
+  interval_minutes: 360   # for cron / autoretry_tmux mode (6 h)
+  max_parallel: 1         # concurrent pipelines (1 = sequential, safe default)
+
+repo:
+  dir: /mnt/data_infra/workspace/sygaldry  # absolute path to the sygaldry repo
+  base_branch: main
