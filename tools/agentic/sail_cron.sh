@@ -168,6 +168,7 @@ restart_worker() {
 
     log "Starting managed Temporal worker"
     (
+        exec 9>&-
         cd "${ROOT_DIR}/temporal"
         nohup env \
             TEMPORAL_ADDRESS="${TEMPORAL_ADDRESS}" \
