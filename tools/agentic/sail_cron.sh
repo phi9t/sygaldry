@@ -81,7 +81,7 @@ payload = {
     "primaryExitCode": primary_rc,
     "selfFixExitCode": selffix_rc,
     "syntheticIssueCount": int(synthetic_count or 0),
-    "updatedAt": dt.datetime.utcnow().isoformat() + "Z",
+    "updatedAt": dt.datetime.now(dt.UTC).isoformat().replace("+00:00", "Z"),
 }
 with open(path, "w", encoding="utf-8") as file:
     json.dump(payload, file, indent=2, sort_keys=True)

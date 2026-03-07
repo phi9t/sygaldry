@@ -112,7 +112,7 @@ record = {
     "pr_url": pr_url,
     "workflow_id": workflow_id,
     "temporal_run_id": temporal_run_id,
-    "timestamp": dt.datetime.utcnow().isoformat() + "Z",
+    "timestamp": dt.datetime.now(dt.UTC).isoformat().replace("+00:00", "Z"),
 }
 with open(path, "a", encoding="utf-8") as file:
     file.write(json.dumps(record, sort_keys=True) + "\n")
@@ -170,7 +170,7 @@ record = {
     "failureContextFile": failure_context_file,
     "note": note,
     "startedAt": started_at,
-    "finishedAt": dt.datetime.utcnow().isoformat() + "Z",
+    "finishedAt": dt.datetime.now(dt.UTC).isoformat().replace("+00:00", "Z"),
 }
 with open(path, "a", encoding="utf-8") as file:
     file.write(json.dumps(record, sort_keys=True) + "\n")
@@ -351,10 +351,21 @@ PY
 
 _capture_validate_failure() {
     local log_dir="$1" failure_context_file="$2" workflow_id="$3"
-    local validate_stderr
+    local validate_stderr validate_stdout
     validate_stderr="$(find "${log_dir}" -name "*validate*stderr*" -type f 2>/dev/null | head -1)"
-    if [[ -n "${validate_stderr}" && -f "${validate_stderr}" ]]; then
-        tail -100 "${validate_stderr}" > "${failure_context_file}"
+    validate_stdout="$(find "${log_dir}" -name "*validate*stdout*" -type f 2>/dev/null | head -1)"
+    if [[ (-n "${validate_stderr}" && -f "${validate_stderr}") || (-n "${validate_stdout}" && -f "${validate_stdout}") ]]; then
+        {
+            echo "Workflow: ${workflow_id}"
+            if [[ -n "${validate_stdout}" && -f "${validate_stdout}" ]]; then
+                echo "=== validate stdout ==="
+                tail -120 "${validate_stdout}"
+            fi
+            if [[ -n "${validate_stderr}" && -f "${validate_stderr}" ]]; then
+                echo "=== validate stderr ==="
+                tail -120 "${validate_stderr}"
+            fi
+        } > "${failure_context_file}"
         log "   validation failure captured to ${failure_context_file}"
     else
         echo "No validation stderr captured for ${workflow_id}." > "${failure_context_file}"
@@ -402,8 +413,8 @@ payload = {
     "repoDir": repo_dir,
     "mode": "issues_file",
     "issuesFile": issues_file,
-    "startedAt": dt.datetime.utcnow().isoformat() + "Z",
-    "finishedAt": dt.datetime.utcnow().isoformat() + "Z",
+    "startedAt": dt.datetime.now(dt.UTC).isoformat().replace("+00:00", "Z"),
+    "finishedAt": dt.datetime.now(dt.UTC).isoformat().replace("+00:00", "Z"),
     "durationSec": 0.0,
     "sources": [
         {

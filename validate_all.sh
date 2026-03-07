@@ -233,7 +233,7 @@ if [[ -d "${VENV_DIR}" ]]; then
 
     section "Python: black"
     if [[ -x "${BLACK}" ]] && [[ ${#py_files[@]} -gt 0 ]]; then
-        run_check "black --check" "${BLACK}" --check --quiet "${py_files[@]}"
+        run_check "black --check" "${BLACK}" --check "${py_files[@]}"
     else
         log "SKIP: black not installed or no Python files"
     fi
