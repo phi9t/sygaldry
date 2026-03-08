@@ -278,3 +278,143 @@ JSON
     ]
     assert attempted_rows[0]["status"] == "landed"
     assert attempted_rows[0]["branch"] == "main"
+
+
+def test_run_loop_routes_major_challenge_to_major_workflow_and_updates_state(tmp_path):
+    repo_dir = tmp_path / "repo"
+    repo_dir.mkdir()
+    (repo_dir / "temporal").mkdir()
+    (repo_dir / "README.md").write_text("hello\n", encoding="utf-8")
+
+    subprocess.run(["git", "init", "-b", "main"], cwd=repo_dir, check=True)
+    subprocess.run(
+        ["git", "config", "user.name", "Test User"], cwd=repo_dir, check=True
+    )
+    subprocess.run(
+        ["git", "config", "user.email", "test@example.com"], cwd=repo_dir, check=True
+    )
+    subprocess.run(["git", "add", "README.md"], cwd=repo_dir, check=True)
+    subprocess.run(["git", "commit", "-m", "init"], cwd=repo_dir, check=True)
+
+    runtime_root = tmp_path / "runtime"
+    state_dir = runtime_root / "major_challenges" / "alpha"
+    state_dir.mkdir(parents=True)
+
+    issues_file = tmp_path / "issues.json"
+    issues_file.write_text(
+        json.dumps(
+            [
+                {
+                    "id": "major-alpha-slice-1",
+                    "priority": 1,
+                    "type": "major_challenge",
+                    "title": "advance alpha challenge (slice 1)",
+                    "description": "desc",
+                    "files": ["README.md"],
+                    "context": "alpha",
+                    "challengeId": "alpha",
+                    "sliceIndex": 1,
+                    "sliceStateFile": str(state_dir / "slice_state.json"),
+                    "historyFile": str(state_dir / "history.jsonl"),
+                    "epicPlanFile": str(state_dir / "epic_plan.md"),
+                    "validationCommands": ["./validate_all.sh --quick"],
+                }
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    fakebin = tmp_path / "fakebin"
+    fakebin.mkdir()
+    write_executable(
+        fakebin / "nc",
+        "#!/usr/bin/env bash\nexit 0\n",
+    )
+    write_executable(
+        fakebin / "go",
+        """#!/usr/bin/env bash
+set -eu -o pipefail
+workflow_id=""
+log_dir=""
+plan_file=""
+record_file="${FAKE_PLAN_RECORD:?}"
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    run)
+      shift
+      ;;
+    -workflow-id)
+      workflow_id="$2"
+      shift 2
+      ;;
+    -log-dir)
+      log_dir="$2"
+      shift 2
+      ;;
+    -plan)
+      plan_file="$2"
+      shift 2
+      ;;
+    *)
+      shift
+      ;;
+  esac
+done
+mkdir -p "$log_dir"
+printf '%s\\n' "$plan_file" > "$record_file"
+cat >"${log_dir}/${workflow_id}_fake-run_plan.json" <<JSON
+{"workflowId":"${workflow_id}","runId":"fake-run","steps":[]}
+JSON
+cat <<JSON
+{
+  "workflowId": "${workflow_id}",
+  "runId": "fake-run",
+  "async": false,
+  "result": {
+    "succeeded": true,
+    "steps": [
+      {"id":"create_pr","state":"success","result":{"outputs":{"landed_branch":"main"}}}
+    ]
+  }
+}
+JSON
+""",
+    )
+
+    artifacts_dir = tmp_path / "artifacts"
+    plan_record = tmp_path / "plan.txt"
+    env = dict(os.environ)
+    env["PATH"] = f"{fakebin}:{env['PATH']}"
+    env["SAIL_RUNTIME_ROOT"] = str(runtime_root)
+    env["FAKE_PLAN_RECORD"] = str(plan_record)
+
+    result = subprocess.run(
+        [
+            str(RUN_LOOP),
+            "--repo-dir",
+            str(repo_dir),
+            "--run-id",
+            "majorrun",
+            "--artifacts-dir",
+            str(artifacts_dir),
+            "--issues-file",
+            str(issues_file),
+        ],
+        cwd=REPO_ROOT,
+        env=env,
+        text=True,
+        capture_output=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert (
+        plan_record.read_text(encoding="utf-8")
+        .strip()
+        .endswith("tools/agentic/major_improvement_loop.yaml")
+    )
+
+    payload = json.loads(
+        (runtime_root / "major_challenges" / "state.json").read_text(encoding="utf-8")
+    )
+    assert payload["activeChallengeId"] == "alpha"
+    assert payload["challenges"]["alpha"]["nextSlice"] == 2

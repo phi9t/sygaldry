@@ -29,6 +29,8 @@ CONFIG="${SCRIPT_DIR}/config.yaml"
 readonly CONFIG
 PLAN_FILE="${SCRIPT_DIR}/improvement_loop.yaml"
 readonly PLAN_FILE
+MAJOR_PLAN_FILE="${SCRIPT_DIR}/major_improvement_loop.yaml"
+readonly MAJOR_PLAN_FILE
 DISCOVER="${SCRIPT_DIR}/discover_issues.py"
 readonly DISCOVER
 
@@ -42,6 +44,7 @@ ARTIFACTS_DIR="${SAIL_ARTIFACTS_DIR:-}"
 ISSUES_FILE="${SAIL_ISSUES_FILE:-}"
 RUN_KIND="${SAIL_RUN_KIND:-primary}"
 LANDING_MODE=""
+RUNTIME_ROOT="${SAIL_RUNTIME_ROOT:-/mnt/data_infra/zephyr_container_infra/sygaldry/logs/sail}"
 
 RUN_FILE=""
 DISCOVERED_ISSUES_FILE=""
@@ -473,16 +476,26 @@ _capture_validate_failure() {
 }
 
 _attempt_plan_file() {
-    local attempt="$1" attempt_dir="$2"
+    local attempt="$1" attempt_dir="$2" issue_type="$3"
+    local source_plan implementer_prompt retry_prompt
+    if [[ "${issue_type}" == "major_challenge" ]]; then
+        source_plan="${MAJOR_PLAN_FILE}"
+        implementer_prompt="tools/agentic/prompts/major_implementer.md"
+        retry_prompt="tools/agentic/prompts/major_retry.md"
+    else
+        source_plan="${PLAN_FILE}"
+        implementer_prompt="tools/agentic/prompts/implementer.md"
+        retry_prompt="tools/agentic/prompts/retry.md"
+    fi
     if [[ "${attempt}" -eq 0 ]]; then
-        echo "${PLAN_FILE}"
+        echo "${source_plan}"
         return 0
     fi
 
     local retry_plan="${attempt_dir}/improvement_loop.retry.yaml"
-    sed 's|prompt_file: tools/agentic/prompts/implementer.md|prompt_file: tools/agentic/prompts/retry.md|' \
-        "${PLAN_FILE}" > "${retry_plan}"
-    grep -q 'prompt_file: tools/agentic/prompts/retry.md' "${retry_plan}" \
+    sed "s|prompt_file: ${implementer_prompt}|prompt_file: ${retry_prompt}|" \
+        "${source_plan}" > "${retry_plan}"
+    grep -q "prompt_file: ${retry_prompt}" "${retry_plan}" \
         || die "retry plan generation failed for ${retry_plan}"
     echo "${retry_plan}"
 }
@@ -507,6 +520,25 @@ _restore_repo_state() {
     if [[ -n "${branch}" ]] && git -C "${REPO_DIR}" show-ref --verify --quiet "refs/heads/${branch}"; then
         git -C "${REPO_DIR}" branch -D "${branch}" >/dev/null 2>&1 || true
     fi
+}
+
+_update_major_challenge_state() {
+    local issue_json="$1" attempt_status="$2" workflow_id="$3" temporal_run_id="$4" note="$5"
+    local issue_type
+    issue_type="$(_json_get_issue_field "${issue_json}" type)"
+    if [[ "${issue_type}" != "major_challenge" ]]; then
+        return 0
+    fi
+    python3 "${SCRIPT_DIR}/update_major_challenge_state.py" \
+        --runtime-root "${RUNTIME_ROOT}" \
+        --repo-dir "${REPO_DIR}" \
+        --issue-json "${issue_json}" \
+        --attempt-status "${attempt_status}" \
+        --run-id "${RUN_ID}" \
+        --workflow-id "${workflow_id}" \
+        --temporal-run-id "${temporal_run_id}" \
+        --max-failed-runs "${MAJOR_MAX_FAILED_RUNS}" \
+        --note "${note}"
 }
 
 _is_already_handled() {
@@ -634,8 +666,11 @@ _run_issue() {
         log "   attempt ${attempt_number}/$((MAX_RETRIES + 1))"
 
         local prompt_file="${SCRIPT_DIR}/generate_plan.py"
+        if [[ "${issue_type}" == "major_challenge" ]]; then
+            prompt_file="${SCRIPT_DIR}/prompts/major_planner.md"
+        fi
         local plan_to_run
-        plan_to_run="$(_attempt_plan_file "${attempt}" "${attempt_dir}")"
+        plan_to_run="$(_attempt_plan_file "${attempt}" "${attempt_dir}" "${issue_type}")"
 
         local failure_ctx_flag=""
         if [[ ${attempt} -gt 0 && -f "${failure_context_file}" ]]; then
@@ -662,6 +697,10 @@ _run_issue() {
                 -set "workflow_id=${workflow_id}-a${attempt}" \
                 -set "implementer_engine=${IMPLEMENTER_ENGINE}" \
                 -set "implementer_model=${IMPLEMENTER_MODEL}" \
+                -set "major_planner_engine=${MAJOR_PLANNER_ENGINE}" \
+                -set "major_planner_model=${MAJOR_PLANNER_MODEL}" \
+                -set "major_max_changed_files=${MAJOR_MAX_CHANGED_FILES}" \
+                -set "major_max_changed_lines=${MAJOR_MAX_CHANGED_LINES}" \
                 -set "failure_context_file=${failure_ctx_flag}" \
                 >"${stdout_file}" 2>"${stderr_file}"
         ) || exit_code=$?
@@ -710,11 +749,15 @@ _run_issue() {
 
     if [[ "${success}" == "true" ]]; then
         log "   ✓ issue ${issue_id} handled"
+        _update_major_challenge_state "${issue_json}" "success" "${final_workflow_id}" "${temporal_run_id}" \
+            "workflow_disposition=${workflow_disposition}"
         _record_attempt_registry "${issue_id}" "${workflow_disposition}" "${branch_name}" "${pr_url}" "${final_workflow_id}" "${temporal_run_id}"
         return 0
     fi
 
     log "   ✗ issue ${issue_id} exhausted retries"
+    _update_major_challenge_state "${issue_json}" "failed" "${final_workflow_id}" "${temporal_run_id}" \
+        "workflow_disposition=${workflow_disposition}"
     _record_attempt_registry "${issue_id}" "failed" "${branch_name}" "${pr_url}" "${final_workflow_id}" "${temporal_run_id}"
     return 1
 }
@@ -738,6 +781,11 @@ PLANNER_ENGINE="${SAIL_PLANNER_ENGINE:-$(_cfg_section planner engine local)}"
 PLANNER_MODEL="${SAIL_PLANNER_MODEL-$(_cfg_section planner model '')}"
 IMPLEMENTER_ENGINE="${SAIL_IMPLEMENTER_ENGINE:-$(_cfg_section implementer engine claude)}"
 IMPLEMENTER_MODEL="${SAIL_IMPLEMENTER_MODEL-$(_cfg_section implementer model claude-sonnet-4-6)}"
+MAJOR_PLANNER_ENGINE="${SAIL_MAJOR_PLANNER_ENGINE:-${IMPLEMENTER_ENGINE}}"
+MAJOR_PLANNER_MODEL="${SAIL_MAJOR_PLANNER_MODEL:-${IMPLEMENTER_MODEL}}"
+MAJOR_MAX_CHANGED_FILES="${SAIL_MAJOR_MAX_CHANGED_FILES:-8}"
+MAJOR_MAX_CHANGED_LINES="${SAIL_MAJOR_MAX_CHANGED_LINES:-600}"
+MAJOR_MAX_FAILED_RUNS="${SAIL_MAJOR_MAX_FAILED_RUNS:-3}"
 MAX_TASKS="${SAIL_MAX_TASKS:-$(_cfg_section loop max_tasks_per_run 3)}"
 MAX_RETRIES="${SAIL_MAX_RETRIES:-$(_cfg_section loop max_retries_per_task 2)}"
 MIN_PRIORITY="${SAIL_MIN_PRIORITY:-$(_cfg_section loop min_priority 2)}"
@@ -781,6 +829,7 @@ trap '_write_run_metadata "${FINAL_STATUS}"' EXIT
 log "SAIL starting (run_id=${RUN_ID}, run_kind=${RUN_KIND}, dry_run=${DRY_RUN}, max_tasks=${MAX_TASKS}, max_retries=${MAX_RETRIES})"
 log "planner: engine=${PLANNER_ENGINE} model=${PLANNER_MODEL}"
 log "implementer: engine=${IMPLEMENTER_ENGINE} model=${IMPLEMENTER_MODEL}"
+log "major planner: engine=${MAJOR_PLANNER_ENGINE} model=${MAJOR_PLANNER_MODEL}"
 log "landing: mode=${LANDING_MODE} base_branch=${BASE_BRANCH}"
 log "artifacts: ${ARTIFACTS_DIR}"
 

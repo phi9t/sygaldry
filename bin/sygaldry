@@ -68,6 +68,7 @@ Examples:
   sygaldry job run train -- "python train.py"
   sygaldry job status train
   sygaldry sail discover                # Preview discovered issues
+  sygaldry sail discover-major          # Preview eligible curated major challenges
   sygaldry sail --dry-run               # Dry-run SAIL (no LLM calls)
   sygaldry sail                         # Run SAIL improvement loop
   sygaldry sail worker                  # Start Temporal worker
@@ -139,6 +140,14 @@ case "${1:-}" in
                 shift
                 exec python3 "${SYGALDRY_HOME}/tools/agentic/discover_issues.py" \
                     --repo-dir "${SYGALDRY_HOME}" "$@"
+                ;;
+            discover-major)
+                shift
+                exec python3 "${SYGALDRY_HOME}/tools/agentic/discover_major_challenges.py" \
+                    --repo-dir "${SYGALDRY_HOME}" \
+                    --runtime-root "${SAIL_RUNTIME_ROOT:-/mnt/data_infra/zephyr_container_infra/sygaldry/logs/sail}" \
+                    --empty-streak "${SAIL_MAJOR_EMPTY_STREAK:-3}" \
+                    --min-empty-streak "${SAIL_MAJOR_EMPTY_STREAK:-3}" "$@"
                 ;;
             worker)
                 shift
@@ -234,7 +243,7 @@ _sygaldry_completions() {
             mapfile -t COMPREPLY < <(compgen -W "enter job setup" -- "${cur}")
             return ;;
         sail)
-            mapfile -t COMPREPLY < <(compgen -W "discover worker cron ensure-infra supervisor analyze-run validate-plan --dry-run --repo-dir --run-id --artifacts-dir --issues-file --run-dir --output-dir --once --no-fix --runtime-root --poll-secs --stall-secs" -- "${cur}")
+            mapfile -t COMPREPLY < <(compgen -W "discover discover-major worker cron ensure-infra supervisor analyze-run validate-plan --dry-run --repo-dir --run-id --artifacts-dir --issues-file --run-dir --output-dir --once --no-fix --runtime-root --poll-secs --stall-secs --empty-streak --min-empty-streak --backlog-file" -- "${cur}")
             return ;;
         validate)
             mapfile -t COMPREPLY < <(compgen -W "--quick --verify-only --infra --infra-full --snapshot --snapshot-no-gpu --uv-layering --multi-repo" -- "${cur}")

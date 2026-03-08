@@ -23,6 +23,10 @@ sail-dry:
 sail-discover:
     {{sygaldry_bin}} sail discover | python3 -c "import json,sys; [print(f\"[p{i['priority']}] {i['type']}: {i['title']}\") for i in json.load(sys.stdin)]"
 
+# Preview curated major redesign challenges eligible for scarcity mode
+sail-discover-major:
+    {{sygaldry_bin}} sail discover-major | python3 -c "import json,sys; [print(f\"[p{i['priority']}] {i['type']}: {i['challengeId']} :: {i['title']}\") for i in json.load(sys.stdin)]"
+
 # Start the Temporal worker (leave running in a separate terminal)
 sail-worker:
     {{sygaldry_bin}} sail worker

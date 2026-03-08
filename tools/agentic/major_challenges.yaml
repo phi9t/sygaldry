@@ -1,0 +1,55 @@
+version: 1
+challenges:
+  - id: temporal-next-phase
+    title: Advance Temporal orchestration UX and engine reliability
+    priority: 1
+    enabled: true
+    summary: >
+      Improve the Temporal workflow authoring and operations experience in
+      bounded slices. The committed planning transcript calls out quick wins
+      such as easier CLI usage, better status/log UX, template ergonomics, and
+      engine hardening like cycle detection, stricter validation, and better
+      retry semantics.
+    context_files:
+      - temporal_next_phase_planning.txt
+      - foundation.org
+      - temporal/examples/doc-processing.yaml
+      - temporal/examples/ml-training.yaml
+    target_paths:
+      - temporal/
+      - foundation.org
+      - bin/sygaldry
+    completion_criteria:
+      - Temporal workflows are easier for humans and coding agents to author, run, and inspect from the CLI.
+      - At least one meaningful UX or engine improvement slice lands without regressing existing workflow behavior.
+      - Documentation and examples stay aligned with the shipped Temporal UX.
+    validation_commands:
+      - cd temporal && go test ./...
+      - ./validate_all.sh --quick
+    max_slices: 8
+  - id: zephyr-mlsys-infra-redesign
+    title: Redesign the MLSys build-time image system
+    priority: 2
+    enabled: true
+    summary: >
+      Restructure the MLSys image build path into a clearer, more maintainable
+      system while preserving the proven Spack-plus-UV layering model. The
+      committed redesign transcript emphasizes splitting orchestration logic,
+      reducing vendor/config friction, supporting chained base images, and
+      shipping in-container entrypoint/job scripts.
+    context_files:
+      - 2026-03-04-082305-zephyr-mlsys-infra-redesign.txt
+      - foundation.org
+      - container/
+    target_paths:
+      - container/
+      - bin/
+      - tools/
+      - foundation.org
+    completion_criteria:
+      - The MLSys image build flow is easier to follow and safer to modify.
+      - The redesign lands in bounded slices without changing the core Spack-plus-UV invariants.
+      - The repo documentation reflects the shipped MLSys image workflow.
+    validation_commands:
+      - ./validate_all.sh --quick
+    max_slices: 10
