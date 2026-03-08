@@ -360,11 +360,82 @@ for manifest in sorted(Path(sys.argv[1]).glob("*_plan.json")):
 PY
 }
 
+_summarize_validate_failure() {
+    local validate_stdout="$1" validate_stderr="$2"
+    python3 - "$validate_stdout" "$validate_stderr" <<'PY'
+import hashlib
+import sys
+from pathlib import Path
+
+
+def read_lines(path_value: str) -> list[str]:
+    if not path_value:
+        return []
+    path = Path(path_value)
+    if not path.exists():
+        return []
+    try:
+        return path.read_text(encoding="utf-8", errors="replace").splitlines()
+    except OSError:
+        return []
+
+
+paths = sys.argv[1:3]
+candidates: list[str] = []
+for raw_path in paths:
+    for line in read_lines(raw_path):
+        text = line.strip()
+        if text.startswith("[validate] FAIL:"):
+            candidates.append(text)
+
+if not candidates:
+    for raw_path in paths:
+        for line in read_lines(raw_path):
+            text = line.strip()
+            if text.startswith("[validate]") and (
+                "failed" in text.lower() or "error" in text.lower()
+            ):
+                candidates.append(text)
+
+if not candidates:
+    for raw_path in paths:
+        tail = [line.strip() for line in read_lines(raw_path) if line.strip()]
+        candidates.extend(tail[-4:])
+
+summary: list[str] = []
+seen: set[str] = set()
+for line in candidates:
+    if line in seen:
+        continue
+    seen.add(line)
+    summary.append(line)
+summary = summary[-6:]
+
+for line in summary:
+    print(line)
+
+text = "\n".join(summary).strip()
+if text:
+    print(f"__SIGNATURE__ {hashlib.sha1(text.encode()).hexdigest()[:12]}")
+PY
+}
+
 _capture_validate_failure() {
     local log_dir="$1" failure_context_file="$2" workflow_id="$3"
-    local validate_stderr validate_stdout
+    local validate_stderr validate_stdout previous_signature summary_output failure_signature failure_summary
     validate_stderr="$(find "${log_dir}" -name "*validate*stderr*" -type f 2>/dev/null | head -1)"
     validate_stdout="$(find "${log_dir}" -name "*validate*stdout*" -type f 2>/dev/null | head -1)"
+    previous_signature=""
+    if [[ -f "${failure_context_file}" ]]; then
+        previous_signature="$(
+            grep '^Failure summary signature:' "${failure_context_file}" 2>/dev/null \
+                | tail -1 \
+                | sed 's/^Failure summary signature:[[:space:]]*//'
+        )"
+    fi
+    summary_output="$(_summarize_validate_failure "${validate_stdout}" "${validate_stderr}")"
+    failure_signature="$(echo "${summary_output}" | awk '/^__SIGNATURE__ /{print $2}')"
+    failure_summary="$(echo "${summary_output}" | sed '/^__SIGNATURE__ /d')"
     if [[ (-n "${validate_stderr}" && -f "${validate_stderr}") || (-n "${validate_stdout}" && -f "${validate_stdout}") ]]; then
         {
             echo "Workflow: ${workflow_id}"
@@ -375,6 +446,17 @@ _capture_validate_failure() {
             if [[ -n "${validate_stderr}" && -f "${validate_stderr}" ]]; then
                 echo "=== validate stderr ==="
                 tail -120 "${validate_stderr}"
+            fi
+            if [[ -n "${failure_summary}" ]]; then
+                echo "=== validate failure summary ==="
+                printf '%s\n' "${failure_summary}"
+            fi
+            if [[ -n "${failure_signature}" ]]; then
+                echo "Failure summary signature: ${failure_signature}"
+                if [[ -n "${previous_signature}" && "${previous_signature}" == "${failure_signature}" ]]; then
+                    echo "Repeated validate failure signature detected from the prior retry."
+                    echo "Retry guidance: do not repeat the previous fix; target the failing check(s) above or inspect the rollback patch."
+                fi
             fi
         } > "${failure_context_file}"
         log "   validation failure captured to ${failure_context_file}"
