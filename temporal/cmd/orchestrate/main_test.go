@@ -496,6 +496,39 @@ func TestMergeGitOpSpec(t *testing.T) {
 	})
 }
 
+func TestRunDispatchToValidate(t *testing.T) {
+	dir := t.TempDir()
+	planPath := filepath.Join(dir, "plan.yaml")
+	if err := os.WriteFile(planPath, []byte("steps:\n  - id: s1\n    type: command\n    command: echo\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := run([]string{"validate", "-plan", planPath}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestRunDispatchToRunMissingPlan(t *testing.T) {
+	err := run([]string{"run"})
+	if err == nil || err.Error() != "-plan is required" {
+		t.Fatalf("expected '-plan is required', got: %v", err)
+	}
+}
+
+func TestRunDispatchDefaultSubcommand(t *testing.T) {
+	// empty args defaults to "run" subcommand → requires -plan
+	err := run([]string{})
+	if err == nil || err.Error() != "-plan is required" {
+		t.Fatalf("expected '-plan is required', got: %v", err)
+	}
+}
+
+func TestRunDispatchStatusMissingWorkflowID(t *testing.T) {
+	err := run([]string{"status"})
+	if err == nil || err.Error() != "-workflow-id is required" {
+		t.Fatalf("expected '-workflow-id is required', got: %v", err)
+	}
+}
+
 func TestMergeDockerPushSpec(t *testing.T) {
 	t.Run("nil base gets override image", func(t *testing.T) {
 		result := mergeDockerPushSpec(nil, &workflows.DockerPushSpec{Image: "myrepo/img:latest"})

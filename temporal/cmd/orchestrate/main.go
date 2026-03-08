@@ -108,21 +108,22 @@ type templateImport struct {
 }
 
 func main() {
-	subcommand, args := parseSubcommand(os.Args[1:])
+	if err := run(os.Args[1:]); err != nil {
+		log.Fatal(err)
+	}
+}
 
-	var err error
+func run(args []string) error {
+	subcommand, rest := parseSubcommand(args)
 	switch subcommand {
 	case "run":
-		err = runCommand(args)
+		return runCommand(rest)
 	case "validate":
-		err = validateCommand(args)
+		return validateCommand(rest)
 	case "status":
-		err = statusCommand(args)
+		return statusCommand(rest)
 	default:
-		err = fmt.Errorf("unknown subcommand %q", subcommand)
-	}
-	if err != nil {
-		log.Fatal(err)
+		return fmt.Errorf("unknown subcommand %q", subcommand)
 	}
 }
 
