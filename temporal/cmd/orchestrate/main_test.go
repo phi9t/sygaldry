@@ -402,3 +402,60 @@ func TestMergeDockerPushSpec(t *testing.T) {
 		}
 	})
 }
+
+func TestMergePackageBuildSpec(t *testing.T) {
+	t.Run("nil base gets override fields", func(t *testing.T) {
+		result := mergePackageBuildSpec(nil, &workflows.PackageBuildSpec{
+			Command:    "make",
+			Args:       []string{"all"},
+			WorkingDir: "/src",
+		})
+		if result.Command != "make" {
+			t.Errorf("command = %q, want %q", result.Command, "make")
+		}
+		if len(result.Args) != 1 || result.Args[0] != "all" {
+			t.Errorf("args = %v, want [all]", result.Args)
+		}
+		if result.WorkingDir != "/src" {
+			t.Errorf("working_dir = %q, want %q", result.WorkingDir, "/src")
+		}
+	})
+
+	t.Run("base fields preserved when override empty", func(t *testing.T) {
+		base := &workflows.PackageBuildSpec{Command: "cmake", WorkingDir: "/build"}
+		result := mergePackageBuildSpec(base, &workflows.PackageBuildSpec{})
+		if result.Command != "cmake" {
+			t.Errorf("command = %q, want %q", result.Command, "cmake")
+		}
+		if result.WorkingDir != "/build" {
+			t.Errorf("working_dir = %q, want %q", result.WorkingDir, "/build")
+		}
+	})
+
+	t.Run("override command replaces base", func(t *testing.T) {
+		base := &workflows.PackageBuildSpec{Command: "make"}
+		result := mergePackageBuildSpec(base, &workflows.PackageBuildSpec{Command: "ninja"})
+		if result.Command != "ninja" {
+			t.Errorf("command = %q, want %q", result.Command, "ninja")
+		}
+	})
+
+	t.Run("override args replace base args", func(t *testing.T) {
+		base := &workflows.PackageBuildSpec{Args: []string{"old"}}
+		result := mergePackageBuildSpec(base, &workflows.PackageBuildSpec{Args: []string{"new1", "new2"}})
+		if len(result.Args) != 2 || result.Args[0] != "new1" || result.Args[1] != "new2" {
+			t.Errorf("args = %v, want [new1 new2]", result.Args)
+		}
+	})
+
+	t.Run("override env merges with base env", func(t *testing.T) {
+		base := &workflows.PackageBuildSpec{Env: map[string]string{"A": "1"}}
+		result := mergePackageBuildSpec(base, &workflows.PackageBuildSpec{Env: map[string]string{"B": "2"}})
+		if result.Env["A"] != "1" {
+			t.Errorf("env[A] = %q, want %q", result.Env["A"], "1")
+		}
+		if result.Env["B"] != "2" {
+			t.Errorf("env[B] = %q, want %q", result.Env["B"], "2")
+		}
+	})
+}
