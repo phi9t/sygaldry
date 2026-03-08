@@ -64,7 +64,14 @@ BASE_BRANCH="${SAIL_BASE_BRANCH:-$(_cfg_section repo base_branch main)}"
 PLANNER_ENGINE="${SAIL_PLANNER_ENGINE:-$(_cfg_section planner engine local)}"
 IMPLEMENTER_ENGINE="${SAIL_IMPLEMENTER_ENGINE:-$(_cfg_section implementer engine claude)}"
 MAJOR_PLANNER_ENGINE="${SAIL_MAJOR_PLANNER_ENGINE:-${IMPLEMENTER_ENGINE}}"
-MAJOR_PLANNER_MODEL="${SAIL_MAJOR_PLANNER_MODEL:-${SAIL_IMPLEMENTER_MODEL:-$(_cfg_section implementer model claude-sonnet-4-6)}}"
+IMPLEMENTER_MODEL="${SAIL_IMPLEMENTER_MODEL-$(_cfg_section implementer model claude-sonnet-4-6)}"
+if [[ "${SAIL_MAJOR_PLANNER_MODEL+x}" == "x" ]]; then
+    MAJOR_PLANNER_MODEL="${SAIL_MAJOR_PLANNER_MODEL}"
+elif [[ "${MAJOR_PLANNER_ENGINE}" == "${IMPLEMENTER_ENGINE}" ]]; then
+    MAJOR_PLANNER_MODEL="${IMPLEMENTER_MODEL}"
+else
+    MAJOR_PLANNER_MODEL=""
+fi
 MAJOR_BACKLOG_FILE="${SAIL_MAJOR_BACKLOG_FILE:-${ROOT_DIR}/tools/agentic/major_challenges.yaml}"
 MAJOR_EMPTY_STREAK="${SAIL_MAJOR_EMPTY_STREAK:-3}"
 
