@@ -45,6 +45,7 @@ def test_generate_plan_emits_outputs_and_meaningful_todo_title(tmp_path: Path) -
     fixme_tag = "FIX" "ME"
     hack_tag = "HA" "CK"
     scanner_context = f'priority = 2 if tag in ("{fixme_tag}", "{hack_tag}") else 3'
+    issue_title = "scanner implementation literal false positive"
 
     stdout, plan_path = run_generate_plan(
         tmp_path,
@@ -52,7 +53,7 @@ def test_generate_plan_emits_outputs_and_meaningful_todo_title(tmp_path: Path) -
             "id": "todo-59c78fad",
             "priority": 2,
             "type": "todo",
-            "title": f'{fixme_tag}: ", "{hack_tag}") else 3',
+            "title": issue_title,
             "description": f"tools/agentic/discover_issues.py:116: {scanner_context}",
             "files": ["tools/agentic/discover_issues.py"],
             "context": scanner_context,
