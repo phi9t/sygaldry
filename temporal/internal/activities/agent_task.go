@@ -90,9 +90,15 @@ func AgentTask(ctx context.Context, input AgentTaskInput) (RunCommandResult, err
 
 	switch engine {
 	case AgentEngineClaude:
-		// claude -p "<prompt>" [--model <model>]
+		// claude -p "<prompt>" --allowedTools "..." --permission-mode acceptEdits [--model <model>]
+		// --allowedTools grants file-editing access; --permission-mode acceptEdits auto-accepts
+		// file changes so the pipeline can run unattended.
 		command = "claude"
-		args = []string{"-p", prompt}
+		args = []string{
+			"-p", prompt,
+			"--allowedTools", "Edit,Read,Write,Bash,Glob,Grep",
+			"--permission-mode", "acceptEdits",
+		}
 		if input.Model != "" {
 			args = append(args, "--model", input.Model)
 		}
