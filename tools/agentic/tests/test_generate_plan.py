@@ -40,6 +40,7 @@ def run_generate_plan(
 
 
 def test_generate_plan_emits_outputs_and_meaningful_todo_title(tmp_path: Path) -> None:
+    # Keep marker tokens split so this fixture stays data, not a repo annotation.
     todo_tag = "TO" "DO"
     fixme_tag = "FIX" "ME"
     hack_tag = "HA" "CK"

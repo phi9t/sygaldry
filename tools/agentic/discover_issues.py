@@ -88,6 +88,68 @@ def _run_source(
 # ---------------------------------------------------------------------------
 
 _TODO_RE = re.compile(r"(TODO|FIXME|HACK)\b[:\s]*(.*)", re.IGNORECASE)
+_DOC_TODO_RE = re.compile(
+    r"^\s*(?:[-*+]\s+|\d+\.\s+|\*+\s+|#+\s+)?(TODO|FIXME|HACK)\b[:\s]*(.*)",
+    re.IGNORECASE,
+)
+_DOC_TODO_EXTENSIONS = {".md", ".markdown", ".org", ".rst", ".txt"}
+
+
+def _strip_comment_closer(text: str) -> str:
+    return re.sub(r"\s*(?:\*/|-->)\s*$", "", text).strip()
+
+
+def _extract_unquoted_comment(content: str) -> str | None:
+    quote = ""
+    escaped = False
+    index = 0
+    while index < len(content):
+        char = content[index]
+        if quote:
+            if escaped:
+                escaped = False
+            elif char == "\\" and quote in {'"', "'", "`"}:
+                escaped = True
+            elif char == quote:
+                quote = ""
+            index += 1
+            continue
+        if char in {'"', "'", "`"}:
+            quote = char
+            index += 1
+            continue
+        if content.startswith("<!--", index):
+            return content[index:]
+        if content.startswith("//", index):
+            return content[index:]
+        if content.startswith("/*", index):
+            return content[index:]
+        if char == "#":
+            return content[index:]
+        index += 1
+
+    stripped = content.lstrip()
+    if stripped.startswith("*"):
+        return stripped
+    return None
+
+
+def _match_todo_annotation(file_path: str, content: str) -> tuple[str, str] | None:
+    if Path(file_path).suffix.lower() in _DOC_TODO_EXTENSIONS:
+        match = _DOC_TODO_RE.match(content)
+        if not match:
+            return None
+    else:
+        comment = _extract_unquoted_comment(content)
+        if not comment:
+            return None
+        match = _TODO_RE.search(comment)
+        if not match:
+            return None
+
+    tag = match.group(1).upper()
+    desc = _strip_comment_closer(match.group(2)) or f"Unaddressed {tag}"
+    return tag, desc
 
 
 def discover_todos(repo_dir: Path, max_per_type: int) -> list[Issue]:
@@ -117,11 +179,10 @@ def discover_todos(repo_dir: Path, max_per_type: int) -> list[Issue]:
         if len(parts) < 3:
             continue
         file_path, lineno, content = parts
-        m = _TODO_RE.search(content)
-        if not m:
+        annotation = _match_todo_annotation(file_path, content)
+        if not annotation:
             continue
-        tag = m.group(1).upper()
-        desc = m.group(2).strip() or f"Unaddressed {tag}"
+        tag, desc = annotation
         priority = 2 if tag in ("FIXME", "HACK") else 3
         issues.append(
             {
