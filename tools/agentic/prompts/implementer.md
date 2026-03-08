@@ -17,9 +17,10 @@ Issue being fixed: **${{ params.issue_title }}**
    - Use the Edit tool to make targeted changes.
    - Do **not** reformat unrelated code, add docstrings, or fix unrelated issues.
    - Follow existing style conventions in each file.
-5. After editing, verify the fix logically satisfies the `acceptance_criteria`.
-6. Do **not** run `validate_all.sh` yourself — the pipeline will do that next.
-7. Do **not** create a commit — the pipeline does that after validation.
+5. If the plan is not `SKIP:`, leave the repository with an actual diff that implements the requested fix; a no-change run is incomplete and will not proceed to commit.
+6. After editing, verify the fix logically satisfies the `acceptance_criteria`.
+7. Do **not** run `validate_all.sh` yourself — the pipeline will do that next.
+8. Do **not** create a commit — the pipeline does that after validation.
 
 ## Repository Root
 

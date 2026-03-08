@@ -62,11 +62,28 @@ steps:
         plan_file: ${{ steps.plan.outputs.plan_file }}
     timeout_seconds: 1800
 
+  - id: verify_changes
+    name: Verify implementer changed files
+    type: command
+    depends_on: [implement]
+    allow_failure: true
+    command: bash
+    args:
+      - -lc
+      - |
+        if git status --short --untracked-files=all | grep -q .; then
+          exit 0
+        fi
+        echo "implementer produced no repository changes; skipping validate/commit" >&2
+        exit 1
+    working_dir: ${{ params.repo_dir }}
+    timeout_seconds: 30
+
   # ── 4. Validate ───────────────────────────────────────────────────────────
   - id: validate
     name: Run quality gate
     type: command
-    depends_on: [implement]
+    depends_on: [verify_changes]
     command: ./validate_all.sh
     args: [--quick]
     working_dir: ${{ params.repo_dir }}
