@@ -378,6 +378,49 @@ func TestRunCommandInvalidPlan(t *testing.T) {
 	}
 }
 
+func TestValidateCommandMissingPlan(t *testing.T) {
+	err := validateCommand([]string{})
+	if err == nil || err.Error() != "-plan is required" {
+		t.Fatalf("expected '-plan is required', got: %v", err)
+	}
+}
+
+func TestValidateCommandPlanFileNotFound(t *testing.T) {
+	err := validateCommand([]string{"-plan", "/nonexistent/path/plan.yaml"})
+	if err == nil || !strings.Contains(err.Error(), "unable to read plan file") {
+		t.Fatalf("expected 'unable to read plan file', got: %v", err)
+	}
+}
+
+func TestValidateCommandInvalidPlan(t *testing.T) {
+	dir := t.TempDir()
+	planPath := filepath.Join(dir, "bad.yaml")
+	if err := os.WriteFile(planPath, []byte("steps: []\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	err := validateCommand([]string{"-plan", planPath})
+	if err == nil || !strings.Contains(err.Error(), "plan validation failed") {
+		t.Fatalf("expected 'plan validation failed', got: %v", err)
+	}
+}
+
+func TestValidateCommandValidPlan(t *testing.T) {
+	dir := t.TempDir()
+	planPath := filepath.Join(dir, "good.yaml")
+	yaml := `steps:
+  - id: step1
+    type: command
+    command: echo hello
+`
+	if err := os.WriteFile(planPath, []byte(yaml), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	err := validateCommand([]string{"-plan", planPath})
+	if err != nil {
+		t.Fatalf("expected no error for valid plan, got: %v", err)
+	}
+}
+
 func TestMergeDockerPushSpec(t *testing.T) {
 	t.Run("nil base gets override image", func(t *testing.T) {
 		result := mergeDockerPushSpec(nil, &workflows.DockerPushSpec{Image: "myrepo/img:latest"})
