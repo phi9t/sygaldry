@@ -91,7 +91,7 @@ import sys
     major_rc,
     major_id,
     major_count,
-) = sys.argv[1:11]
+) = sys.argv[1:12]
 payload = {
     "status": status,
     "message": message,
