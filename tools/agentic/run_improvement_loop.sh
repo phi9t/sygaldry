@@ -58,6 +58,13 @@ TOTAL=0
 log() { echo "[$(date +'%Y-%m-%d %H:%M:%S')] [SAIL:${BASH_LINENO[0]}] $*" >&2; }
 die() { log "ERROR: $*"; exit 1; }
 
+_touch_heartbeat() {
+    if [[ -n "${SAIL_HEARTBEAT_FILE:-}" ]]; then
+        mkdir -p "$(dirname "${SAIL_HEARTBEAT_FILE}")"
+        touch "${SAIL_HEARTBEAT_FILE}"
+    fi
+}
+
 _cfg_section() {
     local section="$1" key="$2" default="$3"
     local value
@@ -611,6 +618,7 @@ _run_issue() {
         local stderr_file="${attempt_dir}/orchestrate.stderr"
         local result_file="${attempt_dir}/orchestrate_result.json"
         mkdir -p "${log_dir}"
+        _touch_heartbeat
 
         if [[ "${DRY_RUN}" == "true" ]]; then
             log "   [dry-run] would run orchestrate for issue ${issue_id} (attempt ${attempt_number})"
@@ -635,6 +643,7 @@ _run_issue() {
         fi
 
         local exit_code=0
+        _touch_heartbeat
         (
             cd "${TEMPORAL_DIR}"
             go run ./cmd/orchestrate run \
@@ -656,6 +665,7 @@ _run_issue() {
                 -set "failure_context_file=${failure_ctx_flag}" \
                 >"${stdout_file}" 2>"${stderr_file}"
         ) || exit_code=$?
+        _touch_heartbeat
 
         local workflow_manifest_ids
         workflow_manifest_ids="$(_manifest_ids_from_log_dir "${log_dir}")"
@@ -763,6 +773,7 @@ ISSUE_ATTEMPTS_FILE="${ARTIFACTS_DIR}/issue_attempts.jsonl"
 
 mkdir -p "${ARTIFACTS_DIR}" "$(dirname "${ATTEMPTED_FILE}")"
 touch "${ATTEMPTED_FILE}" "${ISSUE_ATTEMPTS_FILE}"
+_touch_heartbeat
 
 _write_run_metadata "running"
 trap '_write_run_metadata "${FINAL_STATUS}"' EXIT
@@ -783,10 +794,12 @@ if [[ "${DRY_RUN}" != "true" ]]; then
 fi
 
 _load_issues
+_touch_heartbeat
 log "discovered ${TOTAL} issues (min_priority<=${MIN_PRIORITY})"
 
 if [[ "${TOTAL}" -eq 0 ]]; then
     FINAL_STATUS="success"
+    _touch_heartbeat
     log "no issues to fix; exiting"
     exit 0
 fi
@@ -799,6 +812,7 @@ while IFS= read -r issue_json; do
         FAILED=$((FAILED + 1))
     fi
     PROCESSED=$((PROCESSED + 1))
+    _touch_heartbeat
 done < <(echo "${ISSUES_JSON}" | python3 -c '
 import json
 import sys
@@ -806,10 +820,13 @@ for issue in json.load(sys.stdin):
     print(json.dumps(issue, separators=(",", ":")))
 ')
 
+_touch_heartbeat
 log "SAIL complete: processed=${PROCESSED} succeeded=${SUCCEEDED} failed=${FAILED}"
 if [[ ${FAILED} -eq 0 ]]; then
     FINAL_STATUS="success"
+    _touch_heartbeat
     exit 0
 fi
 FINAL_STATUS="failed"
+_touch_heartbeat
 exit 1

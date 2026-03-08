@@ -31,6 +31,22 @@ sail-worker:
 sail-cron:
     {{sygaldry_bin}} sail cron
 
+# Ensure Temporal + managed worker are healthy without launching a run
+sail-ensure-infra:
+    {{sygaldry_bin}} sail ensure-infra
+
+# Run the SAIL supervisor continuously
+sail-supervisor:
+    {{sygaldry_bin}} sail supervisor
+
+# Poll once and write supervisor status without looping
+sail-supervisor-once:
+    {{sygaldry_bin}} sail supervisor --once
+
+# Pretty-print the latest supervisor status snapshot
+sail-supervisor-status:
+    @python3 -c "import json,pathlib,os; p=pathlib.Path(os.environ.get('SAIL_RUNTIME_ROOT','/mnt/data_infra/zephyr_container_infra/sygaldry/logs/sail')+'/supervisor_status.json'); print(json.dumps(json.loads(p.read_text()),indent=2)) if p.exists() else print('no status yet')"
+
 # Validate the pipeline, then launch one bounded unattended run
 sail-initial MAX_TASKS='1':
     just sail-validate

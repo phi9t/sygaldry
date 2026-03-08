@@ -65,6 +65,8 @@ PLANNER_ENGINE="${SAIL_PLANNER_ENGINE:-$(_cfg_section planner engine local)}"
 IMPLEMENTER_ENGINE="${SAIL_IMPLEMENTER_ENGINE:-$(_cfg_section implementer engine claude)}"
 
 mkdir -p "${RUNS_DIR}" "${INFRA_DIR}" "${WORKER_TEMPORAL_LOG_DIR}"
+HEARTBEAT_FILE="${RUNTIME_ROOT}/heartbeat"
+export SAIL_HEARTBEAT_FILE="${HEARTBEAT_FILE}"
 
 write_status() {
     local status="$1" message="$2" run_id="${3:-}" primary_rc="${4:-}" selffix_rc="${5:-}" synthetic_count="${6:-0}"
@@ -253,7 +255,26 @@ print(len(data) if isinstance(data, list) else 0)
 PY
 }
 
+ensure_infra_main() {
+    require_cmd git
+    require_cmd go
+    require_cmd python3
+    require_cmd nc
+
+    local head_sha
+    head_sha="$(git -C "${ROOT_DIR}" rev-parse --short HEAD)"
+
+    ensure_temporal_server
+    ensure_worker "${head_sha}"
+}
+
 main() {
+    if [[ "${1:-}" == "ensure-infra" ]]; then
+        shift
+        ensure_infra_main "$@"
+        return 0
+    fi
+
     require_cmd git
     require_cmd go
     require_cmd python3

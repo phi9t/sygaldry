@@ -104,8 +104,10 @@ JSON
     )
 
     artifacts_dir = tmp_path / "artifacts"
+    heartbeat_file = tmp_path / "heartbeat"
     env = dict(os.environ)
     env["PATH"] = f"{fakebin}:{env['PATH']}"
+    env["SAIL_HEARTBEAT_FILE"] = str(heartbeat_file)
 
     result = subprocess.run(
         [
@@ -145,6 +147,7 @@ JSON
     ]
     assert attempt_rows[0]["status"] == "success"
     assert attempt_rows[0]["prUrl"] == "https://example.test/pr/1"
+    assert heartbeat_file.exists()
     assert (
         subprocess.check_output(
             ["git", "branch", "--show-current"], cwd=repo_dir, text=True

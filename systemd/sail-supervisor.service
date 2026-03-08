@@ -1,0 +1,17 @@
+[Unit]
+Description=SAIL supervisor
+After=network.target docker.service
+Wants=docker.service
+
+[Service]
+Type=simple
+WorkingDirectory=/mnt/data_infra/workspace/sygaldry
+EnvironmentFile=-/mnt/data_infra/zephyr_container_infra/sygaldry/config/sail-cron.env
+ExecStart=/bin/bash -lc "./bin/sygaldry sail supervisor"
+Restart=on-failure
+RestartSec=30
+StandardOutput=append:/mnt/data_infra/zephyr_container_infra/sygaldry/logs/sail/supervisor-systemd.log
+StandardError=append:/mnt/data_infra/zephyr_container_infra/sygaldry/logs/sail/supervisor-systemd.log
+
+[Install]
+WantedBy=multi-user.target

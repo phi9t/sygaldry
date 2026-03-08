@@ -149,9 +149,17 @@ case "${1:-}" in
                 shift
                 exec "${SYGALDRY_HOME}/tools/agentic/sail_cron.sh" "$@"
                 ;;
+            ensure-infra)
+                shift
+                exec "${SYGALDRY_HOME}/tools/agentic/sail_cron.sh" ensure-infra "$@"
+                ;;
             analyze-run)
                 shift
                 exec python3 "${SYGALDRY_HOME}/tools/agentic/analyze_sail_run.py" "$@"
+                ;;
+            supervisor)
+                shift
+                exec python3 "${SYGALDRY_HOME}/tools/agentic/sail_supervisor.py" "$@"
                 ;;
             validate-plan)
                 shift
@@ -226,7 +234,7 @@ _sygaldry_completions() {
             mapfile -t COMPREPLY < <(compgen -W "enter job setup" -- "${cur}")
             return ;;
         sail)
-            mapfile -t COMPREPLY < <(compgen -W "discover worker cron analyze-run validate-plan --dry-run --repo-dir --run-id --artifacts-dir --issues-file --run-dir --output-dir" -- "${cur}")
+            mapfile -t COMPREPLY < <(compgen -W "discover worker cron ensure-infra supervisor analyze-run validate-plan --dry-run --repo-dir --run-id --artifacts-dir --issues-file --run-dir --output-dir --once --no-fix --runtime-root --poll-secs --stall-secs" -- "${cur}")
             return ;;
         validate)
             mapfile -t COMPREPLY < <(compgen -W "--quick --verify-only --infra --infra-full --snapshot --snapshot-no-gpu --uv-layering --multi-repo" -- "${cur}")
