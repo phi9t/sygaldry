@@ -715,31 +715,31 @@ They are only needed during compilation and waste ~20 GB of image space.
 
 Each test runs inside the snapshot image container.  No host mounts for Spack.
 
-| ID | Name                     | Runner   | What it checks                                              |
-|----+--------------------------+----------+-------------------------------------------------------------|
-| T1 | Image Metadata           | No GPU   | Label =sygaldry.spack.baked=true=                           |
-|    |                          |          | ENV =SYGALDRY_SPACK_ENV=/opt/spack_env/default=             |
-|    |                          |          | ENV =SYGALDRY_IN_CONTAINER=1=                               |
-| T2 | Filesystem Structure     | No GPU   | =/opt/spack_store/view= symlink resolves                    |
-|    |                          |          | =/opt/spack_store/view/bin= directory exists                 |
-|    |                          |          | =/opt/spack_env/default/spack.yaml= exists                   |
-|    |                          |          | =/opt/spack_env/default/spack.lock= exists                   |
-|    |                          |          | All 5 core entrypoints present and executable                |
-|    |                          |          | =install_tree/.spack-db= exists                              |
-| T3 | Python Imports           | No GPU   | =import torch= + version (from view python)                 |
-|    |                          |          | =import jax= + version                                      |
-|    |                          |          | =import numpy= + version                                    |
-|    |                          |          | =import scipy= + version                                    |
-| T4 | Spack Env Activation     | No GPU   | =spack env activate /opt/spack_env/default= succeeds        |
-|    |                          |          | =spack find= shows >0 installed packages                    |
-| T5 | GPU Validation           | GPU      | =torch.cuda.is_available()= is True                         |
-|    |                          |          | JAX sees >= 1 GPU device                                    |
-|    |                          |          | 64x64 tensor matmul on CUDA                                 |
-| T6 | Launcher Integration     | GPU      | Launcher + baked image: torch GPU check via run-job          |
-|    |                          |          | Launcher log contains "baked into image"                     |
-|    |                          |          | Launcher uses =/opt/container_entrypoints/= path             |
-| T7 | No spack_store Shadowing | No GPU   | =install_tree= is not empty (baked content visible)          |
-|    |                          |          | =view/bin/python3= executable without host mount             |
+| ID | Name                     | Runner | What it checks                                      |
+|----+--------------------------+--------+-----------------------------------------------------|
+| T1 | Image Metadata           | No GPU | Label =sygaldry.spack.baked=true=                     |
+|    |                          |        | ENV =SYGALDRY_SPACK_ENV=/opt/spack_env/default=       |
+|    |                          |        | ENV =SYGALDRY_IN_CONTAINER=1=                         |
+| T2 | Filesystem Structure     | No GPU | =/opt/spack_store/view= symlink resolves              |
+|    |                          |        | =/opt/spack_store/view/bin= directory exists          |
+|    |                          |        | =/opt/spack_env/default/spack.yaml= exists            |
+|    |                          |        | =/opt/spack_env/default/spack.lock= exists            |
+|    |                          |        | All 5 core entrypoints present and executable       |
+|    |                          |        | =install_tree/.spack-db= exists                       |
+| T3 | Python Imports           | No GPU | =import torch= + version (from view python)           |
+|    |                          |        | =import jax= + version                                |
+|    |                          |        | =import numpy= + version                              |
+|    |                          |        | =import scipy= + version                              |
+| T4 | Spack Env Activation     | No GPU | =spack env activate /opt/spack_env/default= succeeds  |
+|    |                          |        | =spack find= shows >0 installed packages              |
+| T5 | GPU Validation           | GPU    | =torch.cuda.is_available()= is True                   |
+|    |                          |        | JAX sees >= 1 GPU device                            |
+|    |                          |        | 64x64 tensor matmul on CUDA                         |
+| T6 | Launcher Integration     | GPU    | Launcher + baked image: torch GPU check via run-job |
+|    |                          |        | Launcher log contains "baked into image"            |
+|    |                          |        | Launcher uses =/opt/container_entrypoints/= path      |
+| T7 | No spack_store Shadowing | No GPU | =install_tree= is not empty (baked content visible)   |
+|    |                          |        | =view/bin/python3= executable without host mount      |
 
 ** Launcher Integration with Baked Images
 
@@ -1810,1249 +1810,6 @@ Adding a new step type (checklist):
 - Log retention/cleanup policy is not implemented; manual or cron cleanup expected
 - No built-in plan parameter validation beyond type checks (e.g., URL format)
 
-* Verification Infrastructure
-:PROPERTIES:
-:CUSTOM_ID: verification
-:END:
-
-** Layered Test Architecture
-
-Tests are organized by cost (time, prerequisites) into 9 layers:
-
-| Layer | Script(s)                  | Prerequisites        | Time   | Coverage                                |
-|-------+----------------------------+----------------------+--------+-----------------------------------------|
-| L0    | =bash -n=, =shellcheck=    | None                 | ~5s    | Shell syntax, linting                   |
-| L1    | =launch_container_test.sh= | None                 | ~3s    | Launcher arg parsing, config resolution |
-| L2    | =go test ./...=            | Go                   | ~10s   | Temporal orchestration (89 tests)       |
-| L3    | =ruff=, =black=, =pytest=  | =.venv-lint=         | ~5s    | Python style, formatting, unit tests    |
-| L4    | =verify_multi_repo.sh=     | Docker               | ~30s   | Mount layout, env vars, store integrity |
-| L5    | =verify_snapshot.sh=       | Docker + snapshot    | ~60s   | Baked image (T1-T7)                     |
-| L6    | =verify_uv_layering.sh=    | Docker + snapshot    | ~120s  | UV+Spack layering (T8.1-T8.8)          |
-| L7    | =verify_multi_repo_e2e.sh= | Docker + GPU         | ~120s  | GPU from external repo                  |
-| L8    | =--infra-full= flag        | Docker + GPU + Spack | ~30min | Full infra: build, install, validate    |
-
-** CI Orchestrator (=validate_all.sh=)
-
-Selectively runs layers based on flags:
-
-| Flag                  | Layers       | Typical Use                         |
-|-----------------------+--------------+-------------------------------------|
-| (none)                | L0 + L2 + L3 | Developer pre-commit                |
-| =--quick=             | L2 + L3      | Fast lint, skip shellcheck          |
-| =--multi-repo-unit=   | L1           | Launcher unit tests only            |
-| =--multi-repo=        | L1 + L4 + L7 | Full multi-repo integration         |
-| =--snapshot=          | L5           | After building snapshot image       |
-| =--snapshot-no-gpu=   | L5 (T1-T4,T7) | CI without GPU hardware           |
-| =--uv-layering=       | L6           | After UV layering changes           |
-| =--uv-layering-no-gpu= | L6 (T8.1-T8.4) | CI without GPU                  |
-| =--infra=             | L8 (smoke)   | Preflight + image verify            |
-| =--infra-full=        | L8 (full)    | Everything: build + install + test  |
-
-** Release Gates
-
-| Image Type       | Required Tests              | Blocking |
-|------------------+-----------------------------+----------|
-| Spack snapshot   | T1-T5, T7                   | All      |
-| Spack (no GPU CI) | T1-T4, T7                  | All      |
-| UV layering base | T8.1-T8.5                   | All      |
-| Serving profile  | T8.6 (vLLM), T8.8 (sglang) | Serving  |
-| datasets         | T8.7                        | Non-block |
-
-** Infra Verification Pipeline (=--infra= / =--infra-full= flags)
-
-The full infra pipeline is orchestrated by =validate_all.sh= and chains four sequential stage scripts:
-
-| Step | Script                  | What it does                                                       |
-|------+-------------------------+--------------------------------------------------------------------|
-|    0 | =verify_preflight.sh=   | Docker check, storage layout, host GPU (=diagnose_nvidia.sh=),    |
-|      |                         | container GPU check (=verify-gpu.sh= entrypoint)                   |
-|    1 | =verify_image_build.sh= | Build/verify base Docker image (auto/always/never policy)         |
-|    2 | =verify_build.sh=       | Run Spack build job and wait for completion                       |
-|    3 | =verify_epilogue.sh=    | ML validation (torch/jax), uv install test, UV-Spack provenance   |
-|      |                         | (=verify_uv_spack.py=), job status/log checks                     |
-
-=--infra= runs steps 0-1 (smoke).  =--infra-full= runs all four steps.
-
-Note: =container/verify_all.sh= was deleted in R3 (2026-03-06); stages are now
-invoked directly by =validate_all.sh=.
-
-** Anti-Drift Contract Checks
-
-=tools/check_zephyr_contracts.sh= validates that runtime behavior matches documented
-contracts.  Invoked automatically by =validate_all.sh=.
-
-** Validation Runbook
-
-*** Developer pre-commit (fast, no Docker)
-
-#+begin_example
-./validate_all.sh --quick           # Go + Python lint (~15s)
-./validate_all.sh --multi-repo-unit # Launcher unit tests (~5s)
-#+end_example
-
-*** Post image change (Docker, no GPU)
-
-#+begin_example
-./validate_all.sh --snapshot-no-gpu    # T1-T4, T7
-./validate_all.sh --uv-layering-no-gpu # T8.1-T8.4
-#+end_example
-
-*** Full GPU validation
-
-#+begin_example
-./validate_all.sh --snapshot         # T1-T7 (snapshot image, GPU)
-./validate_all.sh --uv-layering      # T8.1-T8.5 (UV layering, GPU)
-./validate_all.sh --multi-repo       # Multi-repo unit + integration + E2E
-#+end_example
-
-*** Full infrastructure validation (Spack build + ML + uv)
-
-#+begin_example
-./validate_all.sh --infra            # Preflight + image only (~smoke)
-./validate_all.sh --infra-full       # All stages: build + install + GPU + uv (30+ min)
-#+end_example
-
-* Cross-cutting concerns
-:PROPERTIES:
-:CUSTOM_ID: cross-cutting
-:END:
-
-** Security
-
-*** Container Security
-
-- *Dynamic user mapping*: Container user =kvothe= matches exact host UID/GID.
-  Automatic conflict resolution if UID/GID already exists in image.
-- *Minimal attack surface*: Ubuntu 24.04 LTS base, headless, no GUI components.
-- *Network*: Host network access only when required (=--net=host=).
-- *Resource limits*: CPU/memory constraints available via Docker.
-- *Non-root execution*: =sudo= available for development convenience only.
-
-*** Dependency Security
-
-- *Trusted sources*: Official Spack packages and verified repositories.
-- *Isolation*: Sandboxed builds prevent supply chain attacks.
-- *Reproducible builds*: Lockfile-pinned installs (=spack.lock=) for cryptographic verification.
-
-*** Access Control
-
-- *Volume mounts*: Read-only mounts where possible (e.g., =/opt/sygaldry= in multi-repo mode).
-- *Secrets management*: Environment variables and mounted files; never baked into images.
-- *GPU access*: Controlled NVIDIA runtime exposure; no CPU-only mode.
-- *Builder role gate*: Only =SYGALDRY_BUILD_ROLE=builder= can mutate Spack store.
-
-** Operational
-
-*** Prerequisites
-
-| Resource | Minimum          | Recommended        |
-|----------+------------------+--------------------|
-| CPU      | 4 cores          | 8+ cores           |
-| RAM      | 16 GB            | 32 GB              |
-| Storage  | 50 GB            | 100 GB+            |
-| GPU      | NVIDIA (any)     | NVIDIA (any)       |
-| Software | Docker + NVIDIA runtime | Same          |
-
-*** Timing Expectations
-
-| Operation            | Duration           |
-|----------------------+--------------------|
-| Initial image build  | 15–25 min          |
-| Spack env from scratch | 30–60 min (3-8 hr for full rebuild) |
-| Subsequent launch    | <10 s              |
-| Image rebuild        | 5–15 min           |
-| Cold CI build        | 60–120 min         |
-| Warm CI build        | 5–15 min           |
-| Incremental build    | 10 s – 5 min       |
-
-*** Performance Targets
-
-- Cache hit ratio target: >80% for incremental builds.
-- Container launch: <10 seconds.
-- Spack unified concretization prevents host contamination and version conflicts.
-
-** Human and agent ergonomics
-
-- *Human*: One-line commands (Spack build, uv install, HF download); clear defaults; minimal env vars to start.
-- *Agent*: Structured JSONL logs and status files for low-token monitoring; deterministic paths for introspection.
-- *Job runner*: =tools/zephyr_job=; status under =outputs/.run-metadata/<run_id>/=; logs =<job>-<timestamp>.jsonl=.
-
-** Container image
-
-=dev_container.dockerfile=: Ubuntu 24.04, CUDA 12.9.1+cuDNN, dynamic user (host UID/GID), Python 3.13, Rust, Go, Bazel 6.4.0.  Conflict resolution for existing UID/GID; non-root execution with sudo for development.
-
-* Host Storage Layout
-:PROPERTIES:
-:CUSTOM_ID: storage
-:END:
-
-** Zephyr v2 Unified Layout
-
-#+begin_example
-/mnt/data_infra/zephyr_container_infra/              ($ZEPHYR_CACHE_ROOT)
-├── shared/                                           ($ZEPHYR_SHARED_ROOT)
-│   ├── hf_cache/           → /opt/hf_cache          HuggingFace models/datasets
-│   ├── uv_cache/           → /opt/uv_cache          UV download cache
-│   ├── bazel_cache/        → /opt/bazel_cache        Bazel build cache
-│   ├── torch_cache/        → /opt/torch_cache        torch.hub downloads
-│   ├── triton_cache/       → /opt/triton_cache       Triton kernel cache
-│   ├── nv_compute_cache/   → /opt/nv_compute_cache   NVIDIA compute cache
-│   └── jax_cache/          → /opt/jax_cache          JAX compilation cache
-├── sygaldry/                                         ($ZEPHYR_BUILD_ROOT)
-│   └── spack_store/        → /opt/spack_store        42 GB, builder-only mount
-├── projects/                                         ($ZEPHYR_PROJECTS_ROOT)
-│   └── <project_id>/                                 ($ZEPHYR_PROJECT_ROOT)
-│       ├── home/             → /home/kvothe          User home (bash history, etc.)
-│       ├── config/           → /home/kvothe/.config  XDG config
-│       ├── local_share/      → /home/kvothe/.local/share  XDG data
-│       ├── outputs/          → /workspace/outputs    Job outputs, staging results
-│       ├── workspace/        → /workspace            Persistent workspace (multi-repo)
-│       ├── runs/                                     Per-run raw logs
-│       ├── leases/                                   GPU advisory leases
-│       └── logs/                                     Per-project logs
-└── meta/
-    └── layout_version.json                           {"layout_version":2,...}
-#+end_example
-
-** Cache Sharing vs Isolation
-
-| Cache          | Scope       | Why shared/isolated                                |
-|----------------+-------------+----------------------------------------------------|
-| =hf_cache=     | All projects | Models are large; avoid duplicate downloads         |
-| =uv_cache=     | All projects | Package wheels are identical across projects        |
-| =spack_store=  | Builder only | Consumers use baked images                         |
-| =torch_cache=  | All projects | Pre-trained model weights                          |
-| =home/=        | Per-project | Bash history, SSH keys, git config vary per project |
-| =outputs/=     | Per-project | Job results should not cross-contaminate            |
-
-** Concurrency: Lease Model
-
-The launcher writes advisory GPU leases to prevent concurrent GPU-intensive
-operations from interfering with each other:
-
-#+begin_example
-# Lease file: leases/gpu-all.lease
-resource=gpu-all
-owner=sygaldry
-run_id=run-20260216-143022-12345
-pid=12345
-created_epoch=1739712622
-expires_epoch=1739734222    # 6-hour TTL
-#+end_example
-
-Lease behavior controlled by =--lease-mode=:
-- =off=: ignore leases
-- =warn=: print warning if lease exists, continue
-- =enforce=: fail if active lease exists
-
-* Launcher Contract
-:PROPERTIES:
-:CUSTOM_ID: launcher
-:END:
-
-=container/launch_container.sh= is the single entry point for all container
-operations.  It handles image building, volume mounting, environment injection,
-entrypoint resolution, and lease management.
-
-** Host-Side Configuration Knobs
-
-These environment variables configure the launcher itself (set on the host before
-invocation):
-
-| Variable             | Default                                    | Purpose                               |
-|----------------------+--------------------------------------------+---------------------------------------|
-| =ZEPHYR_CACHE_ROOT=    | =/mnt/data_infra/zephyr_container_infra=     | Top-level storage root                |
-| =ZEPHYR_SHARED_ROOT=   | =$ZEPHYR_CACHE_ROOT/shared=                  | Shared caches (HF, UV, etc.)          |
-| =ZEPHYR_BUILD_ROOT=    | =$ZEPHYR_CACHE_ROOT/sygaldry=                | Builder Spack store root              |
-| =ZEPHYR_PROJECTS_ROOT= | =$ZEPHYR_CACHE_ROOT/projects=                | Per-project roots                     |
-| =ZEPHYR_PROJECT_ROOT=  | =$ZEPHYR_PROJECTS_ROOT/$SYGALDRY_PROJECT_ID= | Current project root                  |
-| =SYGALDRY_RUN_ID=      | Auto-generated =run-YYYYMMDD-HHMMSS-PID=     | Per-run identifier                    |
-| =ZEPHYR_LEASE_MODE=    | =warn=                                       | GPU lease: =off/warn/enforce=           |
-| =ZEPHYR_CACHE_PROFILE= | =shared=                                     | Cache sharing: =shared/isolated/hybrid= |
-
-*** Backward Compatibility
-
-Legacy overrides are still honored with deprecation warnings:
-- =SYGALDRY_SPACK_STORE= → overrides Spack store mount
-- =SYGALDRY_HF_CACHE= → overrides HF cache mount
-- =SYGALDRY_UV_CACHE= → overrides UV cache mount
-
-** CLI Flags
-
-| Flag                                   | Purpose                                 |
-|----------------------------------------+-----------------------------------------|
-| =--repo <path>=                          | Enable multi-repo mode                  |
-| =--entrypoint <name>=                    | Select entrypoint (default: =default.sh=) |
-| =--run-id <id>=                          | Set explicit run ID                     |
-| =--lease-mode off/warn/enforce=          | Override lease behavior                 |
-| =--cache-profile shared/isolated/hybrid= | Override cache sharing mode             |
-| =--print-effective-config=               | Print resolved config and exit          |
-
-** Control Flow
-
-#+begin_example
-1. Parse arguments (--repo, --entrypoint, --run-id, --lease-mode, etc.)
-2. Determine mode: legacy (no --repo) or multi-repo (--repo <path>)
-3. Warn on deprecated env vars (SYGALDRY_SPACK_STORE, etc.)
-4. Check requirements: Docker daemon, NVIDIA runtime
-5. Setup host directories: create all directories in the storage layout
-6. Build container image (auto/always/never policy)
-7. Detect baked Spack (docker inspect for sygaldry.spack.baked label)
-8. Resolve mount paths (realpath all host directories)
-9. Resolve entrypoint path (baked vs host-mounted)
-10. Acquire GPU lease (if lease mode != off)
-11. Build docker run args:
-    ├── --rm --init [--interactive --tty]
-    ├── --net=host --ipc=host
-    ├── --user=<host-uid>:<host-gid>
-    ├── Volume mounts (home, spack, caches, etc.)
-    ├── --runtime=nvidia --gpus=all
-    ├── Environment variables (30+ injected)
-    └── --entrypoint=<resolved-path>
-12. docker run $ARGS $IMAGE $PASSTHROUGH_ARGS
-13. Release GPU lease
-14. Exit with container's exit code
-#+end_example
-
-** Environment Variables Injected into Container
-
-| Variable                       | Value                          | Purpose                     |
-|--------------------------------+--------------------------------+-----------------------------|
-| =SYGALDRY_IN_CONTAINER=       | =1=                            | Container detection flag    |
-| =SYGALDRY_PROJECT_ID=         | Project name                   | Project isolation namespace |
-| =SYGALDRY_RUN_ID=             | =run-YYYYMMDD-HHMMSS-PID=     | Per-run identifier          |
-| =SYGALDRY_ROOT=               | =/workspace= or =/workspace/<name>= | Sygaldry repo root   |
-| =ZEPHYR_LEASE_MODE=           | =off/warn/enforce=             | Lease behavior              |
-| =ZEPHYR_CACHE_PROFILE=        | =shared/isolated/hybrid=       | Cache sharing mode          |
-| =HF_HOME=                     | =/opt/hf_cache=                | HuggingFace cache           |
-| =UV_CACHE_DIR=                | =/opt/uv_cache=                | UV download cache           |
-| =TORCH_HOME=                  | =/opt/torch_cache=             | PyTorch hub cache           |
-| =TRITON_CACHE_DIR=            | =/opt/triton_cache=            | Triton kernel cache         |
-| =CUDA_CACHE_PATH=             | =/opt/nv_compute_cache=        | NVIDIA compute cache        |
-| =JAX_COMPILATION_CACHE_DIR=   | =/opt/jax_cache=               | JAX compilation cache       |
-| =XDG_CONFIG_HOME=             | =/home/kvothe/.config=         | XDG config directory        |
-| =XDG_DATA_HOME=               | =/home/kvothe/.local/share=    | XDG data directory          |
-| =XDG_CACHE_HOME=              | =/opt/uv_cache=                | XDG cache directory         |
-
-** GPU Validation
-
-The launcher performs two GPU checks:
-
-1. =docker info | grep nvidia= -- confirms NVIDIA runtime is installed
-2. Host CUDA version >= =SYGALDRY_REQUIRED_CUDA_VERSION= (default 12.9)
-
-If either fails, the launcher exits with an error.  There is no CPU-only mode.
-
-** Concurrency Model
-
-Run isolation is =project_id + run_id=.
-
-- Per-run metadata and logs are stored under project outputs:
-  =projects/<id>/outputs/.run-metadata/<run_id>/=
-- The launcher creates an advisory GPU lease (=leases/gpu-all.lease=) with TTL.
-- Lease behavior is controlled by =ZEPHYR_LEASE_MODE= (see Host-Side Configuration Knobs).
-
-** Job Runner (=tools/zephyr_job=)
-
-The host-side job runner manages container jobs with structured logging:
-
-#+begin_example
-tools/zephyr_job run    --project-id <id> --job <name> -- <command>
-tools/zephyr_job status --project-id <id> --job <name>
-tools/zephyr_job tail   --project-id <id> --job <name> [--lines N]
-tools/zephyr_job stop   --project-id <id> --job <name>
-tools/zephyr_job health --project-id <id> --job <name>
-#+end_example
-
-Storage paths:
-- Raw logs: =projects/<id>/runs/<run_id>/raw/=
-- JSONL + status: =projects/<id>/outputs/.run-metadata/<run_id>/<job>.status=
-- JSONL logs: =projects/<id>/outputs/.run-metadata/<run_id>/<job>-<timestamp>.jsonl=
-
-The job runner forwards =SYGALDRY_RUN_ID= and =ZEPHYR_LEASE_MODE= to the launcher.
-This enables frequent, low-cost status polling without streaming full logs.
-
-* Skill Distribution and Vendoring
-:PROPERTIES:
-:CUSTOM_ID: skill-distribution
-:END:
-
-Sygaldry exposes its container infrastructure to external repositories through a
-vendored skill kit.  The skill kit is small (~5 files), self-contained, and
-versioned independently of the Sygaldry monorepo.  Target repos never need a
-Sygaldry clone.
-
-** SD.1 Install into Target Repo
-
-#+begin_example
-# Infrastructure vendoring (required for jobctl, repoctl, container launch)
-zephyr_vendor_infra.sh install \
-    --target-repo <path> --snapshot-ref <digest-ref> [--force]
-
-# MLSys overlay (optional; adds HF/vLLM/sglang profile launch)
-skills/zephyr/scripts/zephyr_mlsys_vendor.sh install \
-    --target-repo <path> --snapshot-ref <digest-ref> [--force]
-#+end_example
-
-The install script:
-- Creates =.zephyr-mlsys/= (or updates it) in the target repo
-- Writes =.zephyr-mlsys/bin/= with the portable launcher and job runner
-- Records the pinned =snapshot-ref= for hermetic validation
-- Migrates =.codex-zephyr-mlsys/= to =.zephyr-mlsys/= if the legacy directory exists
-
-** SD.2 Validation Commands
-
-#+begin_example
-# Show effective configuration for a repo
-repoctl config show --repo <path>
-
-# Verify the pinned snapshot image is reachable and passes smoke tests
-repoctl verify image --repo <path> [--skip-spack]
-
-# Verify Spack view integrity inside the image
-repoctl verify spack --repo <path>
-
-# Verify UV+Spack layering (T8.1-T8.5)
-repoctl verify uv-layering --repo <path>
-#+end_example
-
-** SD.3 Job Execution
-
-The =jobctl= CLI manages container jobs from the host:
-
-#+begin_example
-jobctl run    --project-id <id> --job <name> -- <command>
-jobctl status --project-id <id> --job <name>
-jobctl health --project-id <id> --job <name>
-jobctl tail   --project-id <id> --job <name> [--lines N]
-jobctl stop   --project-id <id> --job <name>
-#+end_example
-
-Jobs produce JSONL logs and status files under:
-=projects/<id>/outputs/.run-metadata/<run_id>/=
-
-** SD.4 MLSys Overlay Launch
-
-The portable kit in =.zephyr-mlsys/= provides profile-based container launch:
-
-#+begin_example
-# HuggingFace Transformers profile
-.zephyr-mlsys/bin/launch-mlsys.sh hf-transformers [--no-validate]
-
-# vLLM serving profile
-.zephyr-mlsys/bin/launch-mlsys.sh vllm [--no-validate]
-
-# HuggingFace Datasets profile (CPU-only test)
-MLSYS_DISABLE_GPU=1 .zephyr-mlsys/bin/launch-mlsys.sh hf-datasets --no-validate
-#+end_example
-
-Each profile activates the corresponding UV venv and sets =HF_HOME=, =UV_CACHE_DIR=,
-and related env vars.
-
-** SD.5 Hermetic Burn-In Suite
-
-The burn-in suite validates concurrent isolation, GPU utilization, and
-framework correctness at a given snapshot reference:
-
-#+begin_example
-skills/zephyr/scripts/validate_hermetic_runtime_suite.sh \
-    --snapshot-ref <digest> --mode burnin --burnin-iterations 5
-#+end_example
-
-Expected outcomes per iteration:
-- Concurrent run isolation (no cross-contamination of outputs)
-- PyTorch NCCL multi-GPU DDP
-- JAX =pmap= across GPUs
-- LLVM/Numba JIT compilation and execution
-- CUDA kernel launch
-
-** SD.6 Packaging Gates
-
-Skill packages are deterministic archives with provenance:
-
-#+begin_example
-# Package infrastructure skill
-skills/zephyr/scripts/package_infra.sh \
-    --version <ver> --out-dir <dir> --snapshot-ref <ref> [--smoke-mode full|skip]
-
-# Package MLSys overlay skill
-skills/zephyr/scripts/package_mlsys.sh \
-    --version <ver> --out-dir <dir> --snapshot-ref <ref> [--smoke-mode full|skip]
-#+end_example
-
-Outputs per package:
-- =<name>-<ver>.tar.gz= — deterministic archive
-- =<name>-<ver>.SHA256SUMS= — SHA-256 checksum
-- =<name>-<ver>.provenance.json= — build metadata (timestamp, git ref, snapshot digest)
-
-** SD.7 Validation Snapshot Reference
-
-Current pinned snapshot digest (update when image is rebuilt and validated):
-
-#+begin_example
-ghcr.io/phi9t/sygaldry/zephyr:spack@sha256:8c9507aea53995f29a5712c0cbdb99deb3d571fb9631b3d42352b3d6d6fb668c
-#+end_example
-
-This digest is the reference for all =--snapshot-ref= flags in burn-in and
-packaging commands.  When updating, run the full T1-T8.5 test suite and update
-this section.
-
-* Next-Version Roadmap: Ease of Use, Understanding, and Maintenance
-:PROPERTIES:
-:CUSTOM_ID: roadmap-v3
-:END:
-
-This roadmap is informed by a quantitative audit of the current system.  Key
-metrics that motivate the changes below:
-
-#+begin_example
-Component                    Lines    Observation
-─────────────────────────────────────────────────────────────────────
-Entrypoints (8 files)          922    4 copies of Spack init cascade,
-                                      3 copies of view fallback,
-                                      2 copies of MLSys venv activation
-Launcher                       673    23-positional-param function,
-                                      45+ env vars, dual namespace
-Verification (15+ scripts)   3,836    1.8:1 ratio to functional code,
-                                      2 test frameworks, 5x GPU test overlap
-Snapshot scripts (2)           742    80+ lines of duplicated arg parsing,
-                                      40 lines of duplicated push logic
-MLSys build system           1,226    300-line fallback YAML parser,
-                                      overlapping validation paths
-Build script (build.sh)        215    5 distinct code paths, librosa policy
-                                      for single optional package
-Documentation (.md files)    8,328    35 files, 7 arch docs in container/,
-                                      multiple overlapping design docs
-Tools (wrappers)             1,600    4-deep wrapper chain, 479-line dead code
-Config files                    10+   6-7 files to understand one uv install
-Error messages                  26    Only 3 include remediation hints
-─────────────────────────────────────────────────────────────────────
-Total operational shell      ~7,400
-#+end_example
-
-The three pillars of the next version:
-
-1. *Ease of use* -- fewer knobs, better defaults, actionable errors.
-2. *Ease of understanding* -- less duplication, consolidated docs, standard patterns.
-3. *Ease of maintenance* -- shared libraries, single test framework, dead code removal.
-
-** R1: Shared Entrypoint Library (=container/lib/spack_init.sh=) [COMPLETE: 2026-03-06]
-:PROPERTIES:
-:CUSTOM_ID: r1-shared-lib
-:END:
-
-*** Problem
-
-The Spack initialization cascade (source setup-env.sh → activate env from
-candidate list → view fallback → CUDA setup → MLSys venv activation) is
-duplicated across 7 of 8 entrypoints with subtle divergences.  The candidate
-path order differs between =default.sh= and =run-job.sh=, creating silent
-behavioral differences.  A bug fix to the cascade requires editing 4+ files.
-
-*** Current State
-
-| Logic Block              | Copies | Divergent? | Lines (each) |
-|--------------------------+--------+------------+--------------|
-| Spack init + activation  |      4 | Yes        | 25-30        |
-| View fallback            |      3 | Minor      | 10-15        |
-| CUDA_HOME setup          |      2 | No         | 5            |
-| MLSys venv activation    |      2 | Yes        | 25-40        |
-
-Total duplicated lines: ~200+.
-
-*** Design
-
-Create =container/lib/spack_init.sh= exporting these functions:
-
-#+begin_example
-sygaldry_init_spack()           # Source setup-env.sh, guard on missing
-sygaldry_activate_env()         # Cascade: $SYGALDRY_SPACK_ENV → baked → workspace
-sygaldry_ensure_view_fallback() # Inject view into PATH/PYTHONPATH/LD_LIBRARY_PATH
-sygaldry_setup_cuda()           # CUDA_HOME, PATH, LD_LIBRARY_PATH for CUDA
-sygaldry_activate_mlsys_venv()  # Single/multi-venv auto-activation
-sygaldry_full_init()            # All of the above in sequence
-#+end_example
-
-Each entrypoint reduces to:
-
-#+begin_example
-#!/bin/bash
-set -euo pipefail
-source /opt/container_entrypoints/lib/spack_init.sh
-sygaldry_full_init
-
-# Persona-specific dispatch (5-20 lines)
-#+end_example
-
-*** Acceptance Criteria
-
-- [ ] All 7 Spack-using entrypoints source the shared library
-- [ ] Candidate path order is identical across all entrypoints
-- [ ] =default.sh= drops from 257 to ~60 lines (banner + aliases + dispatch)
-- [ ] =run-job.sh= drops from 90 to ~15 lines
-- [ ] Existing T1-T7 and T8.x tests pass without modification
-
-*** Estimated Impact
-
-| Metric                   | Before | After  |
-|--------------------------+--------+--------|
-| Total entrypoint lines   |    922 | ~500   |
-| Files to edit for cascade bug | 4+ | 1      |
-| Behavioral divergence risk | High | None   |
-
-** R2: Launcher Refactor (Config Struct + Tiered Env Vars) [COMPLETE: 2026-03-06]
-:PROPERTIES:
-:CUSTOM_ID: r2-launcher-refactor
-:END:
-
-*** Problem
-
-=launch_container.sh= has a 23-positional-parameter function (=build_docker_args=)
-where parameters like =${10}= through =${23}= are unreadable without
-cross-referencing the function signature.  Adding a new cache mount requires
-changes in 4+ places.  The 45+ environment variables with dual =SYGALDRY_*= /
-=ZEPHYR_*= namespaces confuse new users.
-
-*** Design
-
-**** Phase 1: Config struct
-
-Replace positional params with an associative array or a generated config file:
-
-#+begin_example
-# Before (unreadable):
-build_docker_args "$image" "$entrypoint" "$repo_path" ... "${23}"
-
-# After (self-documenting):
-declare -A CFG=(
-    [image]="$image"
-    [entrypoint]="$entrypoint"
-    [repo_path]="$repo_path"
-    [spack_store]="$spack_store"
-    ...
-)
-build_docker_args CFG
-#+end_example
-
-**** Phase 2: Tiered env vars
-
-Group environment variables into tiers with explicit documentation:
-
-#+begin_example
-# Tier 1: Essential (3 vars -- most users need only these)
-SYGALDRY_PROJECT_ID     # Project name
-SYGALDRY_IMAGE          # Docker image (default: auto-detected)
-SYGALDRY_REPO           # External repo path (enables multi-repo)
-
-# Tier 2: Shared caches (6 vars -- power users)
-ZEPHYR_CACHE_ROOT       # Top-level storage root
-HF_HOME                 # HuggingFace cache
-UV_CACHE_DIR            # UV download cache
-TORCH_HOME              # PyTorch hub cache
-TRITON_CACHE_DIR        # Triton kernel cache
-JAX_COMPILATION_CACHE_DIR  # JAX compilation cache
-
-# Tier 3: Advanced (remaining -- operators/infra only)
-ZEPHYR_LEASE_MODE, ZEPHYR_CACHE_PROFILE, SYGALDRY_BUILD_ROLE, ...
-#+end_example
-
-**** Phase 3: Deprecation cleanup
-
-Remove the dual namespace.  All new variables use =SYGALDRY_= prefix.  Legacy
-=ZEPHYR_*= names continue to work with warnings for two releases, then are removed.
-
-**** Phase 4: Extract lease management
-
-Move lease acquire/release (~60 lines) into =container/lib/lease.sh=.  The
-launcher imports it only when =ZEPHYR_LEASE_MODE != off=.
-
-*** Acceptance Criteria
-
-- [ ] =build_docker_args= uses named config struct, no positional params past $2
-- [ ] =--print-effective-config= shows tiered output with tier labels
-- [ ] Adding a new cache mount requires changes in exactly 2 places (config declaration + mount rule)
-- [ ] All existing launcher unit tests (=launch_container_test.sh=, 427 lines) pass
-
-*** Estimated Impact
-
-| Metric                         | Before | After   |
-|--------------------------------+--------+---------|
-| Launcher lines                 |    673 | ~550    |
-| Params to =build_docker_args=  |     23 | 1 (ref) |
-| Places to change for new mount |     4+ | 2       |
-
-** R3: Verification Consolidation [COMPLETE: 2026-03-06]
-:PROPERTIES:
-:CUSTOM_ID: r3-verification
-:END:
-
-*** Problem
-
-3,836 lines of verification code for ~2,100 lines of functional code (1.8:1
-ratio).  GPU validation is tested in 5+ different places.  Two test output
-formats coexist (pass/fail vs TAP).  Two overlapping validation paths exist
-for MLSys images (hardcoded =verify_uv_layering.sh= and YAML-driven
-=uv-env-validate.sh=).  NVIDIA pip leak detection is implemented as ~30 lines
-of inline Python in two separate scripts.
-
-*** Design
-
-**** Phase 1: Shared test primitives
-
-Create =container/lib/test_primitives.sh= with TAP as the standard:
-
-#+begin_example
-tap_plan()       # Emit TAP plan line
-tap_ok()         # Pass a test
-tap_not_ok()     # Fail a test
-tap_skip()       # Skip a test (with reason)
-tap_bail_out()   # Abort the entire suite
-#+end_example
-
-Create =container/lib/verify_python.py= with reusable Python checks:
-
-#+begin_example
-check_spack_provenance(packages, view_path)   # T8.2
-check_uv_provenance(packages, venv_path)      # T8.3
-check_no_nvidia_pip(view_path)                 # T8.4
-check_gpu_functional(framework, test_code)     # T8.5
-check_abi_safety(import_stmt, hard_fail_pats)  # T8.6, T8.8
-#+end_example
-
-**** Phase 2: Single MLSys validation path
-
-Retire the hardcoded tests in =verify_uv_layering.sh= for T8.6-T8.8.  The
-YAML-driven =uv-env-validate.sh= becomes the single implementation for all
-MLSys environment validation.  =verify_uv_layering.sh= retains only the
-baseline tests (T8.1-T8.5) and delegates MLSys-specific tests to the YAML
-validator.
-
-**** Phase 3: Collapse orchestration layers
-
-Merge =container/verify_all.sh= (188 lines) into =validate_all.sh= (269 lines)
-as a single CI orchestrator.  The flag interface stays the same; the
-implementation calls stage scripts directly instead of through an intermediate
-orchestrator.
-
-*** Acceptance Criteria
-
-- [ ] All test scripts use TAP output format
-- [ ] Shared Python checks eliminate inline duplication (3 copies → 1)
-- [ ] GPU validation tested in exactly 2 places: entrypoint verifier (quick) and
-  snapshot/layering suite (thorough)
-- [ ] MLSys validation has one path: YAML-driven =uv-env-validate.sh=
-- [ ] Total verification lines reduced by ~30%
-
-*** Estimated Impact
-
-| Metric                        | Before  | After    |
-|-------------------------------+---------+----------|
-| Total verification lines      |   3,836 | ~2,600   |
-| Test output formats           |       2 | 1 (TAP)  |
-| GPU test locations            |      5+ | 2        |
-| NVIDIA pip check copies       |       2 | 1        |
-| Orchestration scripts         |       2 | 1        |
-
-** R4: Configuration Consolidation [COMPLETE: 2026-03-06]
-:PROPERTIES:
-:CUSTOM_ID: r4-config
-:END:
-
-*** Problem
-
-A user must consult 6-7 separate files to understand how a single
-=uv pip install vllm= resolves: =spack_owned_packages.conf= → =nvidia_overrides.txt=
-→ =llm_serving_overrides.txt= → =spack_src.yaml= → =uv-install.sh=.  Config
-files are scattered across =container/=, =container/entrypoints/=, =pkg/zephyr/=,
-and =skills/zephyr-mlsys-env/envs/=.
-
-*** Design
-
-**** Phase 1: Centralize config files
-
-Create =container/config/= directory:
-
-#+begin_example
-container/config/
-├── spack_owned_packages.conf     # Moved from container/
-├── nvidia_overrides.txt          # Moved from container/
-├── llm_serving_overrides.txt     # Moved from container/
-└── envs/                         # Moved from skills/zephyr-mlsys-env/envs/
-    ├── hf-transformers.yaml
-    ├── vllm.yaml
-    ├── sglang.yaml
-    ├── torchtitan.yaml
-    ├── megatronlm.yaml
-    ├── hf-datasets.yaml
-    └── llm-serving-all.yaml
-#+end_example
-
-Entrypoints and build scripts reference =container/config/= (or the baked path
-=/opt/container_config/=) as the single config root.
-
-**** Phase 2: =sygaldry config show=
-
-Add a CLI subcommand that dumps the effective configuration from inside
-a container:
-
-#+begin_example
-$ sygaldry config show
-
-[Tier 1: Essential]
-SYGALDRY_PROJECT_ID = my-project
-SYGALDRY_IMAGE      = sygaldry/zephyr:spack-20260212
-
-[Spack Owned Packages] (from /opt/container_config/spack_owned_packages.conf)
-torch==2.9.0  torchvision==0.24.0  numpy==2.3.4  scipy==1.16.3  ...
-
-[NVIDIA Overrides] (from /opt/container_config/nvidia_overrides.txt)
-nvidia-cublas-cu12: BLOCKED   nvidia-cudnn-cu12: BLOCKED   ...
-
-[Active MLSys Env]
-Name: vllm   Venv: /opt/mlsys-envs/vllm   Overrides: llm_serving_overrides.txt
-#+end_example
-
-**** Phase 3: Config file deduplication
-
-=tools/spack_src.yaml= is a 228-line copy of =pkg/zephyr/spack_src.yaml= kept
-in sync by contract checks.  Replace with a symlink.
-
-*** Acceptance Criteria
-
-- [ ] All config files live under =container/config/= (or its baked image path)
-- [ ] =sygaldry config show= works inside any container
-- [ ] =tools/spack_src.yaml= is a symlink to =pkg/zephyr/spack_src.yaml=
-- [ ] The number of directories a user must search for config drops from 4 to 1
-
-** R5: Actionable Error Messages [COMPLETE: 2026-03-06]
-:PROPERTIES:
-:CUSTOM_ID: r5-errors
-:END:
-
-*** Problem
-
-Of 26 error messages across entrypoints and build scripts, only 3 include
-remediation hints.  When a user sees "ERROR: Torch/JAX unavailable and
-/opt/spack_store/view not found" they have no idea what to do next.
-=default.sh= does not use =set -euo pipefail=, meaning failures can be silently
-swallowed.
-
-*** Design
-
-**** Phase 1: Error helper library
-
-Create =container/lib/errors.sh=:
-
-#+begin_example
-# error_with_hint <message> <hint>
-# Outputs:
-#   ERROR: <message>
-#   HINT:  <hint>
-#   See:   https://docs.sygaldry.dev/troubleshooting#<auto-slug>
-
-error_with_hint() {
-    local msg="$1" hint="$2"
-    echo "ERROR: ${msg}" >&2
-    echo "HINT:  ${hint}" >&2
-}
-#+end_example
-
-**** Phase 2: Retrofit all error messages
-
-| Current Error                                   | Added Hint                                                          |
-|-------------------------------------------------+---------------------------------------------------------------------|
-| Spack setup script not found at /opt/spack_src  | Are you inside the container? Use =sygaldry= or =launch_container.sh= |
-| Torch/JAX unavailable, view not found           | Build with =spack-build.sh= or use a snapshot image                  |
-| spack install is restricted to builder role     | Set =SYGALDRY_BUILD_ROLE=builder= /(already good)/                   |
-| uv not found in PATH                            | uv is installed in the container image; ensure you are inside        |
-| No GPU detected                                 | Check =nvidia-smi= on host; run =container/diagnose_nvidia.sh=       |
-| Forbidden core guard triggered (exit 10)        | Your change requires rebuilding torch/jax; use full build with staging |
-| spack concretize failed                         | Check =concretize_report.json= for conflicts; try =--allow-deprecated= |
-
-**** Phase 3: Strict error handling
-
-Standardize all entrypoints on =set -euo pipefail=.  =default.sh= currently
-omits =set -e=; this must change, with explicit trap handlers for the
-interactive shell case.
-
-*** Acceptance Criteria
-
-- [ ] All entrypoints use =set -euo pipefail= (or explicit =trap= for interactive)
-- [ ] Every error message includes a remediation hint
-- [ ] Error output consistently goes to stderr
-- [ ] =error_with_hint= function used in all entrypoints and build scripts
-
-** R6: Snapshot Pipeline Simplification [COMPLETE: 2026-03-06]
-:PROPERTIES:
-:CUSTOM_ID: r6-snapshot
-:END:
-
-*** Problem
-
-=snapshot_spack.sh= (353 lines) and =snapshot_mlsys.sh= (389 lines) duplicate
-~120 lines of argument parsing and push logic.  No orchestration script chains
-the three build stages (base → spack → mlsys).  Users must manually build
-prerequisites and run =docker login= before pushing.
-
-*** Design
-
-**** Phase 1: Shared snapshot library
-
-Extract into =container/lib/snapshot_common.sh=:
-
-#+begin_example
-parse_snapshot_args()    # --dry-run, --verify, --no-verify, --push, --registry
-snapshot_push()          # Tag + push with date stamp, retry on failure
-snapshot_log() / snapshot_error()  # Consistent logging
-#+end_example
-
-Both snapshot scripts reduce by ~120 lines each.
-
-**** Phase 2: End-to-end =snapshot_all.sh=
-
-#+begin_example
-container/snapshot_all.sh [--push] [--registry <url>] [targets...]
-
-# Chains:
-# 1. Build/verify base image (if needed)
-# 2. Build/verify spack snapshot
-# 3. Build/verify each MLSys image (parallel or sequential)
-# 4. Push all (if --push)
-# 5. Summary table with image sizes and push status
-
-# Examples:
-container/snapshot_all.sh                       # Build everything, no push
-container/snapshot_all.sh --push vllm sglang    # Build + push specific images
-container/snapshot_all.sh --push all            # Build + push everything
-#+end_example
-
-**** Phase 3: Automated push with retry
-
-Replace the one-off =tools/push_mlsys_ghcr.sh= and =push_mlsys_ghcr_resume.sh=
-(hardcoded date tags) with the parameterized push logic in =snapshot_all.sh=.
-Remove the one-off scripts.
-
-*** Acceptance Criteria
-
-- [ ] Shared library eliminates ~120 lines of duplication
-- [ ] =snapshot_all.sh= chains the full pipeline with a single command
-- [ ] One-off push scripts deleted
-- [ ] Push logic handles retries (3 attempts) and reports per-image status
-
-** R7: Eliminate Dead Code and Reduce Wrapper Depth [COMPLETE: 2026-03-06]
-:PROPERTIES:
-:CUSTOM_ID: r7-dead-code
-:END:
-
-*** Problem
-
-=setup_user_environment.sh= is 479 lines of dead code (commented out in the
-Dockerfile).  The tools wrapper chain is 4 levels deep:
-=autoretry_tmux → autoretry → autobuild → zephyr_job → launch_container.sh=.
-=tools/container_job= is a 7-line redirect.  =tools/build.sh= is a 19-line
-redirect.  Duplicate skills (=zephyr-container-exec= and =container-infra-exec=)
-describe nearly identical workflows.
-
-*** Design
-
-| Item                               | Action                                           |
-|------------------------------------+--------------------------------------------------|
-| =setup_user_environment.sh=          | Archive to =docs/archive/= or delete.              |
-|                                    | Rescue =configure_uv_spack()= into shared lib      |
-| =tools/container_job=                | Delete (7-line redirect to =zephyr_job=)           |
-| =tools/build.sh=                     | Delete (19-line redirect to =pkg/zephyr/build.sh=) |
-| =tools/push_mlsys_ghcr*.sh=          | Delete (superseded by R6 =snapshot_all.sh=)        |
-| =skills/container-infra-exec=        | Merge into =zephyr-container-exec=, delete         |
-| =tools/spack_src.yaml=               | Replace with symlink (R4)                        |
-| =tools/spack.yaml=, =tools/spack.lock= | Delete (empty/stale)                             |
-
-Wrapper chain simplification:
-
-#+begin_example
-# Before: 4 levels
-autoretry_tmux → autoretry → autobuild → zephyr_job → launch_container.sh
-
-# After: 2 levels (R8 replaces autoretry with Temporal)
-zephyr_job → launch_container.sh
-#+end_example
-
-*** Acceptance Criteria
-
-- [ ] No commented-out code in Dockerfiles
-- [ ] No wrapper scripts that only =exec= another script
-- [ ] Maximum wrapper depth: 2 levels
-- [ ] Zero stale/empty config files in =tools/=
-
-*** Estimated Impact
-
-| Metric             | Before | After |
-|--------------------+--------+-------|
-| Dead code lines    |    479 | 0     |
-| Redirect wrappers  |      3 | 0     |
-| Duplicate skills   |      2 | 1     |
-| Wrapper depth      |      4 | 2     |
-
-** R8: Temporal-Driven Spack Builds [COMPLETE: 2026-03-06]
-:PROPERTIES:
-:CUSTOM_ID: r8-temporal-builds
-:END:
-
-*** Problem
-
-The most failure-prone operation (Spack builds, 3-8 hours) uses a hand-written
-retry loop (=zephyr_autoretry.sh=) with no error classification, no adaptive
-remediation, and no monitoring beyond =tmux attach=.  Meanwhile, the Temporal
-orchestration system exists in the same repo with native retry, monitoring,
-history, and UI support -- but is not used for builds.
-
-*** Design
-
-Create a Temporal pipeline =spack-build-pipeline.yaml= that replaces the
-=autobuild/autoretry= shell scripts:
-
-#+begin_example
-steps:
-  - id: preflight
-    type: command
-    command: container/verify_preflight.sh --smoke
-
-  - id: spack-build
-    type: container_job
-    depends_on: [preflight]
-    container_job:
-      project_id: sygaldry
-      entrypoint: spack-build.sh
-      gpu: true
-    timeout_seconds: 28800    # 8 hours
-    retry:
-      max_attempts: 3
-      backoff_seconds: 600
-
-  - id: gpu-verify
-    type: container_job
-    depends_on: [spack-build]
-    container_job:
-      project_id: sygaldry
-      entrypoint: verify-gpu.sh
-      gpu: true
-
-  - id: snapshot
-    type: command
-    depends_on: [gpu-verify]
-    command: container/snapshot_spack.sh --no-push
-
-  - id: snapshot-verify
-    type: command
-    depends_on: [snapshot]
-    command: container/verify_snapshot.sh ${{ steps.snapshot.outputs.tag }}
-#+end_example
-
-Benefits over the shell scripts:
-- *Error classification*: Temporal activities can parse build logs for known
-  failure patterns and choose remediation (clear build cache, relax constraints,
-  notify human).
-- *Monitoring*: Temporal UI at =localhost:8233= shows live step progress, duration,
-  retry attempts, and full history.
-- *Persistence*: Build history survives process restarts.
-- *Extensibility*: Adding steps (MLSys build, push, notification) is a YAML edit.
-
-*** Acceptance Criteria
-
-- [ ] Spack build pipeline runs end-to-end via Temporal
-- [ ] Retry logic distinguishes transient (network, OOM) from permanent (spec conflict) failures
-- [ ] Build progress visible in Temporal UI
-- [ ] =zephyr_autoretry.sh= and =zephyr_autoretry_tmux.sh= deprecated
-
-** R9: Documentation Consolidation [COMPLETE: 2026-03-05]
-:PROPERTIES:
-:CUSTOM_ID: r9-docs
-:END:
-
-*** Problem
-
-35 markdown files totaling 8,328 lines.  7 architecture docs in =container/=
-alone with significant overlap: =ZEPHYR_SYSTEM_DESIGN.md= vs =SYSTEM_DESIGN.md=;
-=ZEPHYR_INFRA_REVIEW_AND_IMPROVEMENT_PLAN.md= vs =REVIEW_ROADMAP.md=;
-=PRODUCTION_READINESS.md= vs =ZEPHYR_CONTAINER_INFRA_REQUIREMENTS.md=.
-Historical artifacts (=LLM_FAILURE_REVIEW.md=, =SPACK_FEATURES_ZEPHYR_BLOG.md=)
-sit alongside active documentation.
-
-*** Design
-
-**** Target document hierarchy (sole authoritative source)
-
-#+begin_example
-foundation.org               # Engineering design (this file, sole authoritative source)
-CLAUDE.md                    # Agent + developer quick reference (not a design doc)
-#+end_example
-
-**** Retired documents (stubs pointing to foundation.org)
-
-| File | Retired |
-|------+---------|
-| =SYSTEM_DESIGN.md= | 2026-03-05 |
-| =container/ZEPHYR_SYSTEM_DESIGN.md= | 2026-03-05 |
-| =temporal/TEMPORAL_DESIGN.md= | 2026-03-05 |
-| =temporal/TEMPORAL_ONBOARDING_GUIDE.md= | 2026-03-05 |
-| =skills/zephyr/SKILL.md= | 2026-03-05 |
-| =skills/zephyr/VALIDATION.md= | 2026-03-05 |
-| =skills/zephyr/portable/README.md= | 2026-03-05 |
-
-*** Acceptance Criteria
-
-- [x] =foundation.org= is the sole design source
-- [x] Retired docs exist as stubs with pointer to =foundation.org=
-- [x] Pillar 7 (Temporal) added to =foundation.org=
-- [x] Skill Distribution section added to =foundation.org=
-- [x] No design content requiring =SYSTEM_DESIGN.md= or =ZEPHYR_SYSTEM_DESIGN.md=
-
-** R10: Librosa Policy Removal [COMPLETE: 2026-03-06]
-:PROPERTIES:
-:CUSTOM_ID: r10-librosa
-:END:
-
-*** Problem
-
-The librosa policy in =build.sh= adds 40+ lines of complexity and 3 extra code
-paths for a single optional audio library.  The =SYGALDRY_LIBROSA_POLICY= env
-var (=guarded/remove/keep=) with dry-run guards exists because librosa's
-transitive dependencies sometimes conflict with torch/jax.  This is a workaround
-for a package-level problem, not a systemic solution.
-
-*** Design
-
-Move librosa out of the Spack foundation layer entirely:
-
-1. Remove =py-librosa= from =pkg/zephyr/spack_src.yaml= root specs.
-2. Remove the librosa policy code from =build.sh= (lines ~140-215).
-3. If librosa is needed, install it via UV with the existing =uv-install.sh=
-   constraint mechanism (Pillar 5 already handles this correctly).
-4. =py-soundfile= remains in Spack (it's a build-time dependency for audio
-   processing that benefits from native compilation).
-
-*** Acceptance Criteria
-
-- [ ] =build.sh= has 2 code paths (locked/unlocked), not 5
-- [ ] =SYGALDRY_LIBROSA_POLICY= env var removed
-- [ ] =build.sh= drops from 215 to ~140 lines
-- [ ] Librosa installable via UV if needed
-
-** R11: MLSys YAML Parser Simplification [COMPLETE: 2026-03-06]
-:PROPERTIES:
-:CUSTOM_ID: r11-yaml-parser
-:END:
-
-*** Problem
-
-=parse-env-yaml.py= is 475 lines, of which 300 are a hand-written recursive
-descent YAML parser as a fallback for when PyYAML is unavailable.  The fallback
-has duplicated code blocks within itself (~100 lines of near-identical nested
-conditional logic).  The shell-variable bridge pattern (=eval "$(python3
-parse-env-yaml.py ...)"=) is fragile and could inject arbitrary shell commands
-on malformed input.
-
-*** Design
-
-1. *Require PyYAML*: It is available in the Spack view (=py-pyyaml= is a
-   transitive dependency of multiple Spack packages).  Delete the 300-line
-   fallback parser.
-2. *Replace eval bridge*: Output JSON instead of shell variable assignments.
-   Build scripts parse JSON with =python3 -c "import json; ..."= or =jq=.
-
-#+begin_example
-# Before (fragile):
-eval "$(python3 parse-env-yaml.py --output shell envs/vllm.yaml)"
-
-# After (safe):
-python3 parse-env-yaml.py --output json envs/vllm.yaml > /tmp/env-config.json
-PACKAGES=$(python3 -c "import json; print(' '.join(json.load(open('/tmp/env-config.json'))['packages']))")
-#+end_example
-
-*** Acceptance Criteria
-
-- [ ] =parse-env-yaml.py= drops from 475 to ~175 lines
-- [ ] No =eval= of Python output in any shell script
-- [ ] PyYAML is the only parser (fallback removed)
-- [ ] All 7 MLSys env YAMLs parse correctly
-
-** R12: CLI Subcommands (=sygaldry= as unified interface) [COMPLETE: 2026-03-06]
-:PROPERTIES:
-:CUSTOM_ID: r12-cli
-:END:
-
-*** Problem
-
-=bin/sygaldry= is a 33-line passthrough to =launch_container.sh=.  Users must
-know about separate tools: =zephyr_job= for jobs, =snapshot_spack.sh= for
-snapshots, =validate_all.sh= for validation.  There is no unified entry point
-for the system.
-
-*** Design
-
-Expand =bin/sygaldry= into a subcommand dispatcher:
-
-#+begin_example
-sygaldry                          # Interactive shell (default, existing behavior)
-sygaldry shell [--repo .]         # Explicit interactive shell
-sygaldry run -- <command>         # Run a command in container
-sygaldry job run <name> -- <cmd>  # Start a background job
-sygaldry job status <name>        # Check job status
-sygaldry job tail <name>          # Stream job logs
-sygaldry config show              # Show effective configuration (R4)
-sygaldry snapshot [target]        # Build snapshot image (R6)
-sygaldry validate [--flags]       # Run validation (R3)
-sygaldry version                  # Show versions (image, spack, torch, jax)
-#+end_example
-
-Implementation: thin shell dispatcher (~80 lines) that routes to existing
-scripts.  No new functionality -- only a unified discovery surface.
-
-*** Acceptance Criteria
-
-- [ ] =sygaldry --help= shows all subcommands with one-line descriptions
-- [ ] Existing =sygaldry= usage (no subcommand) still works (backward compatible)
-- [ ] Tab completion for subcommands (bash/zsh)
-- [ ] =sygaldry version= works outside and inside containers
-
-** Summary: Priority and Dependency Order
-:PROPERTIES:
-:CUSTOM_ID: roadmap-summary
-:END:
-
-#+begin_example
-Priority  ID   Title                              Dependencies  Est. Lines Saved
-────────────────────────────────────────────────────────────────────────────────
- P0[x]    R1   Shared entrypoint library [DONE]    None          ~400
- P0[x]    R5   Actionable error messages [DONE]     R1            ~0 (quality)
- P0[x]    R7   Dead code / wrapper cleanup [DONE]   None          ~500+
- P1[x]    R2   Launcher refactor [DONE]             None          ~120
- P1[x]    R4   Configuration consolidation [DONE]   None          ~0 (clarity)
- P1[x]    R10  Librosa policy removal [DONE]        None          ~75
- P1[x]    R11  YAML parser simplification [DONE]    None          ~300
- P2[x]    R3   Verification consolidation [DONE]    R1            ~1,200
- P2[x]    R6   Snapshot pipeline simplification [DONE] R7         ~240
- P2[x]    R9   Documentation consolidation [DONE]   All P0/P1     ~4,000+ (docs)
- P3[x]    R8   Temporal-driven Spack builds [DONE]  R7            ~100
- P3[x]    R12  CLI subcommands [DONE]               R4, R6        ~0 (UX)
-────────────────────────────────────────────────────────────────────────────────
-Total estimated reduction: ~2,800 lines of shell, ~4,000 lines of docs
-#+end_example
-
-*** Execution phases
-
-*Phase A (Foundation):* R1 + R5 + R7 + R10.  These are independent, low-risk
-changes that improve every subsequent phase.  Can be done in parallel.
-
-*Phase B (Consolidation):* R2 + R4 + R11 + R3.  These restructure the system
-internals.  R3 depends on R1 (shared test primitives need the shared spack_init
-library to exist).  As of 2026-03-06: R2, R4, R11 complete; R3 all phases complete
-(TAP adoption + orchestrator merge done, verify_all.sh deleted).
-
-*Phase C (Polish):* R6 + R9 + R8 + R12.  These improve the user-facing
-surface.  R9 (doc consolidation) should happen last because earlier phases
-change what the docs describe.  As of 2026-03-06: all Phase C items complete;
-R3 TAP adoption + orchestrator merge also complete.
-
 * Pillar 8: SAIL — Sygaldry Agentic Improvement Loop
 :PROPERTIES:
 :CUSTOM_ID: sail
@@ -3295,3 +2052,491 @@ falling into an unbounded loop.
 | =temporal/internal/activities/git_op.go= | =GitOp= activity implementation |
 | =temporal/internal/workflows/pipeline.go= | Workflow engine that executes the declarative step graph |
 | =skills/agentic-improvement/SKILL.md= | Full operator reference |
+
+* Verification Infrastructure
+:PROPERTIES:
+:CUSTOM_ID: verification
+:END:
+
+** Layered Test Architecture
+
+Tests are organized by cost (time, prerequisites) into 9 layers:
+
+| Layer | Script(s)                | Prerequisites        | Time   | Coverage                                |
+|-------+--------------------------+----------------------+--------+-----------------------------------------|
+| L0    | =bash -n=, =shellcheck=      | None                 | ~5s    | Shell syntax, linting                   |
+| L1    | =launch_container_test.sh= | None                 | ~3s    | Launcher arg parsing, config resolution |
+| L2    | =go test ./...=            | Go                   | ~10s   | Temporal orchestration (89 tests)       |
+| L3    | =ruff=, =black=, =pytest=      | =.venv-lint=           | ~5s    | Python style, formatting, unit tests    |
+| L4    | =verify_multi_repo.sh=     | Docker               | ~30s   | Mount layout, env vars, store integrity |
+| L5    | =verify_snapshot.sh=       | Docker + snapshot    | ~60s   | Baked image (T1-T7)                     |
+| L6    | =verify_uv_layering.sh=    | Docker + snapshot    | ~120s  | UV+Spack layering (T8.1-T8.8)           |
+| L7    | =verify_multi_repo_e2e.sh= | Docker + GPU         | ~120s  | GPU from external repo                  |
+| L8    | =--infra-full= flag        | Docker + GPU + Spack | ~30min | Full infra: build, install, validate    |
+
+** CI Orchestrator (=validate_all.sh=)
+
+Selectively runs layers based on flags:
+
+| Flag                 | Layers         | Typical Use                        |
+|----------------------+----------------+------------------------------------|
+| (none)               | L0 + L2 + L3   | Developer pre-commit               |
+| =--quick=              | L2 + L3        | Fast lint, skip shellcheck         |
+| =--multi-repo-unit=    | L1             | Launcher unit tests only           |
+| =--multi-repo=         | L1 + L4 + L7   | Full multi-repo integration        |
+| =--snapshot=           | L5             | After building snapshot image      |
+| =--snapshot-no-gpu=    | L5 (T1-T4,T7)  | CI without GPU hardware            |
+| =--uv-layering=        | L6             | After UV layering changes          |
+| =--uv-layering-no-gpu= | L6 (T8.1-T8.4) | CI without GPU                     |
+| =--infra=              | L8 (smoke)     | Preflight + image verify           |
+| =--infra-full=         | L8 (full)      | Everything: build + install + test |
+
+** Release Gates
+
+| Image Type       | Required Tests              | Blocking |
+|------------------+-----------------------------+----------|
+| Spack snapshot   | T1-T5, T7                   | All      |
+| Spack (no GPU CI) | T1-T4, T7                  | All      |
+| UV layering base | T8.1-T8.5                   | All      |
+| Serving profile  | T8.6 (vLLM), T8.8 (sglang) | Serving  |
+| datasets         | T8.7                        | Non-block |
+
+** Infra Verification Pipeline (=--infra= / =--infra-full= flags)
+
+The full infra pipeline is orchestrated by =validate_all.sh= and chains four sequential stage scripts:
+
+| Step | Script                  | What it does                                                       |
+|------+-------------------------+--------------------------------------------------------------------|
+|    0 | =verify_preflight.sh=   | Docker check, storage layout, host GPU (=diagnose_nvidia.sh=),    |
+|      |                         | container GPU check (=verify-gpu.sh= entrypoint)                   |
+|    1 | =verify_image_build.sh= | Build/verify base Docker image (auto/always/never policy)         |
+|    2 | =verify_build.sh=       | Run Spack build job and wait for completion                       |
+|    3 | =verify_epilogue.sh=    | ML validation (torch/jax), uv install test, UV-Spack provenance   |
+|      |                         | (=verify_uv_spack.py=), job status/log checks                     |
+
+=--infra= runs steps 0-1 (smoke).  =--infra-full= runs all four steps.
+
+Note: =container/verify_all.sh= was deleted in R3 (2026-03-06); stages are now
+invoked directly by =validate_all.sh=.
+
+** Anti-Drift Contract Checks
+
+=tools/check_zephyr_contracts.sh= validates that runtime behavior matches documented
+contracts.  Invoked automatically by =validate_all.sh=.
+
+** Validation Runbook
+
+*** Developer pre-commit (fast, no Docker)
+
+#+begin_example
+./validate_all.sh --quick           # Go + Python lint (~15s)
+./validate_all.sh --multi-repo-unit # Launcher unit tests (~5s)
+#+end_example
+
+*** Post image change (Docker, no GPU)
+
+#+begin_example
+./validate_all.sh --snapshot-no-gpu    # T1-T4, T7
+./validate_all.sh --uv-layering-no-gpu # T8.1-T8.4
+#+end_example
+
+*** Full GPU validation
+
+#+begin_example
+./validate_all.sh --snapshot         # T1-T7 (snapshot image, GPU)
+./validate_all.sh --uv-layering      # T8.1-T8.5 (UV layering, GPU)
+./validate_all.sh --multi-repo       # Multi-repo unit + integration + E2E
+#+end_example
+
+*** Full infrastructure validation (Spack build + ML + uv)
+
+#+begin_example
+./validate_all.sh --infra            # Preflight + image only (~smoke)
+./validate_all.sh --infra-full       # All stages: build + install + GPU + uv (30+ min)
+#+end_example
+
+* Cross-cutting concerns
+:PROPERTIES:
+:CUSTOM_ID: cross-cutting
+:END:
+
+** Security
+
+*** Container Security
+
+- *Dynamic user mapping*: Container user =kvothe= matches exact host UID/GID.
+  Automatic conflict resolution if UID/GID already exists in image.
+- *Minimal attack surface*: Ubuntu 24.04 LTS base, headless, no GUI components.
+- *Network*: Host network access only when required (=--net=host=).
+- *Resource limits*: CPU/memory constraints available via Docker.
+- *Non-root execution*: =sudo= available for development convenience only.
+
+*** Dependency Security
+
+- *Trusted sources*: Official Spack packages and verified repositories.
+- *Isolation*: Sandboxed builds prevent supply chain attacks.
+- *Reproducible builds*: Lockfile-pinned installs (=spack.lock=) for cryptographic verification.
+
+*** Access Control
+
+- *Volume mounts*: Read-only mounts where possible (e.g., =/opt/sygaldry= in multi-repo mode).
+- *Secrets management*: Environment variables and mounted files; never baked into images.
+- *GPU access*: Controlled NVIDIA runtime exposure; no CPU-only mode.
+- *Builder role gate*: Only =SYGALDRY_BUILD_ROLE=builder= can mutate Spack store.
+
+** Operational
+
+*** Prerequisites
+
+| Resource | Minimum                 | Recommended  |
+|----------+-------------------------+--------------|
+| CPU      | 4 cores                 | 8+ cores     |
+| RAM      | 16 GB                   | 32 GB        |
+| Storage  | 50 GB                   | 100 GB+      |
+| GPU      | NVIDIA (any)            | NVIDIA (any) |
+| Software | Docker + NVIDIA runtime | Same         |
+
+*** Timing Expectations
+
+| Operation              | Duration                            |
+|------------------------+-------------------------------------|
+| Initial image build    | 15–25 min                           |
+| Spack env from scratch | 30–60 min (3-8 hr for full rebuild) |
+| Subsequent launch      | <10 s                               |
+| Image rebuild          | 5–15 min                            |
+| Cold CI build          | 60–120 min                          |
+| Warm CI build          | 5–15 min                            |
+| Incremental build      | 10 s – 5 min                        |
+
+*** Performance Targets
+
+- Cache hit ratio target: >80% for incremental builds.
+- Container launch: <10 seconds.
+- Spack unified concretization prevents host contamination and version conflicts.
+
+** Human and agent ergonomics
+
+- *Human*: One-line commands (Spack build, uv install, HF download); clear defaults; minimal env vars to start.
+- *Agent*: Structured JSONL logs and status files for low-token monitoring; deterministic paths for introspection.
+- *Job runner*: =tools/zephyr_job=; status under =outputs/.run-metadata/<run_id>/=; logs =<job>-<timestamp>.jsonl=.
+
+** Container image
+
+=dev_container.dockerfile=: Ubuntu 24.04, CUDA 12.9.1+cuDNN, dynamic user (host UID/GID), Python 3.13, Rust, Go, Bazel 6.4.0.  Conflict resolution for existing UID/GID; non-root execution with sudo for development.
+
+* Host Storage Layout
+:PROPERTIES:
+:CUSTOM_ID: storage
+:END:
+
+** Zephyr Unified Layout
+
+#+begin_example
+/mnt/data_infra/zephyr_container_infra/              ($ZEPHYR_CACHE_ROOT)
+├── shared/                                           ($ZEPHYR_SHARED_ROOT)
+│   ├── hf_cache/           → /opt/hf_cache          HuggingFace models/datasets
+│   ├── uv_cache/           → /opt/uv_cache          UV download cache
+│   ├── bazel_cache/        → /opt/bazel_cache        Bazel build cache
+│   ├── torch_cache/        → /opt/torch_cache        torch.hub downloads
+│   ├── triton_cache/       → /opt/triton_cache       Triton kernel cache
+│   ├── nv_compute_cache/   → /opt/nv_compute_cache   NVIDIA compute cache
+│   └── jax_cache/          → /opt/jax_cache          JAX compilation cache
+├── sygaldry/                                         ($ZEPHYR_BUILD_ROOT)
+│   └── spack_store/        → /opt/spack_store        42 GB, builder-only mount
+├── projects/                                         ($ZEPHYR_PROJECTS_ROOT)
+│   └── <project_id>/                                 ($ZEPHYR_PROJECT_ROOT)
+│       ├── home/             → /home/kvothe          User home (bash history, etc.)
+│       ├── config/           → /home/kvothe/.config  XDG config
+│       ├── local_share/      → /home/kvothe/.local/share  XDG data
+│       ├── outputs/          → /workspace/outputs    Job outputs, staging results
+│       ├── workspace/        → /workspace            Persistent workspace (multi-repo)
+│       ├── runs/                                     Per-run raw logs
+│       ├── leases/                                   GPU advisory leases
+│       └── logs/                                     Per-project logs
+└── meta/
+    └── layout_version.json                           {"layout_version":2,...}
+#+end_example
+
+** Cache Sharing vs Isolation
+
+| Cache       | Scope        | Why shared/isolated                                 |
+|-------------+--------------+-----------------------------------------------------|
+| =hf_cache=    | All projects | Models are large; avoid duplicate downloads         |
+| =uv_cache=    | All projects | Package wheels are identical across projects        |
+| =spack_store= | Builder only | Consumers use baked images                          |
+| =torch_cache= | All projects | Pre-trained model weights                           |
+| =home/=       | Per-project  | Bash history, SSH keys, git config vary per project |
+| =outputs/=    | Per-project  | Job results should not cross-contaminate            |
+
+** Concurrency: Lease Model
+
+The launcher writes advisory GPU leases to prevent concurrent GPU-intensive
+operations from interfering with each other:
+
+#+begin_example
+# Lease file: leases/gpu-all.lease
+resource=gpu-all
+owner=sygaldry
+run_id=run-20260216-143022-12345
+pid=12345
+created_epoch=1739712622
+expires_epoch=1739734222    # 6-hour TTL
+#+end_example
+
+Lease behavior controlled by =--lease-mode=:
+- =off=: ignore leases
+- =warn=: print warning if lease exists, continue
+- =enforce=: fail if active lease exists
+
+* Launcher Contract
+:PROPERTIES:
+:CUSTOM_ID: launcher
+:END:
+
+=container/launch_container.sh= is the single entry point for all container
+operations.  It handles image building, volume mounting, environment injection,
+entrypoint resolution, and lease management.
+
+** Host-Side Configuration Knobs
+
+These environment variables configure the launcher itself (set on the host before
+invocation):
+
+| Variable             | Default                                    | Purpose                               |
+|----------------------+--------------------------------------------+---------------------------------------|
+| =ZEPHYR_CACHE_ROOT=    | =/mnt/data_infra/zephyr_container_infra=     | Top-level storage root                |
+| =ZEPHYR_SHARED_ROOT=   | =$ZEPHYR_CACHE_ROOT/shared=                  | Shared caches (HF, UV, etc.)          |
+| =ZEPHYR_BUILD_ROOT=    | =$ZEPHYR_CACHE_ROOT/sygaldry=                | Builder Spack store root              |
+| =ZEPHYR_PROJECTS_ROOT= | =$ZEPHYR_CACHE_ROOT/projects=                | Per-project roots                     |
+| =ZEPHYR_PROJECT_ROOT=  | =$ZEPHYR_PROJECTS_ROOT/$SYGALDRY_PROJECT_ID= | Current project root                  |
+| =SYGALDRY_RUN_ID=      | Auto-generated =run-YYYYMMDD-HHMMSS-PID=     | Per-run identifier                    |
+| =ZEPHYR_LEASE_MODE=    | =warn=                                       | GPU lease: =off/warn/enforce=           |
+| =ZEPHYR_CACHE_PROFILE= | =shared=                                     | Cache sharing: =shared/isolated/hybrid= |
+
+*** Backward Compatibility
+
+Legacy overrides are still honored with deprecation warnings:
+- =SYGALDRY_SPACK_STORE= → overrides Spack store mount
+- =SYGALDRY_HF_CACHE= → overrides HF cache mount
+- =SYGALDRY_UV_CACHE= → overrides UV cache mount
+
+** CLI Flags
+
+| Flag                                   | Purpose                                 |
+|----------------------------------------+-----------------------------------------|
+| =--repo <path>=                          | Enable multi-repo mode                  |
+| =--entrypoint <name>=                    | Select entrypoint (default: =default.sh=) |
+| =--run-id <id>=                          | Set explicit run ID                     |
+| =--lease-mode off/warn/enforce=          | Override lease behavior                 |
+| =--cache-profile shared/isolated/hybrid= | Override cache sharing mode             |
+| =--print-effective-config=               | Print resolved config and exit          |
+
+** Control Flow
+
+#+begin_example
+1. Parse arguments (--repo, --entrypoint, --run-id, --lease-mode, etc.)
+2. Determine mode: legacy (no --repo) or multi-repo (--repo <path>)
+3. Warn on deprecated env vars (SYGALDRY_SPACK_STORE, etc.)
+4. Check requirements: Docker daemon, NVIDIA runtime
+5. Setup host directories: create all directories in the storage layout
+6. Build container image (auto/always/never policy)
+7. Detect baked Spack (docker inspect for sygaldry.spack.baked label)
+8. Resolve mount paths (realpath all host directories)
+9. Resolve entrypoint path (baked vs host-mounted)
+10. Acquire GPU lease (if lease mode != off)
+11. Build docker run args:
+    ├── --rm --init [--interactive --tty]
+    ├── --net=host --ipc=host
+    ├── --user=<host-uid>:<host-gid>
+    ├── Volume mounts (home, spack, caches, etc.)
+    ├── --runtime=nvidia --gpus=all
+    ├── Environment variables (30+ injected)
+    └── --entrypoint=<resolved-path>
+12. docker run $ARGS $IMAGE $PASSTHROUGH_ARGS
+13. Release GPU lease
+14. Exit with container's exit code
+#+end_example
+
+** Environment Variables Injected into Container
+
+| Variable                  | Value                           | Purpose                     |
+|---------------------------+---------------------------------+-----------------------------|
+| =SYGALDRY_IN_CONTAINER=     | =1=                               | Container detection flag    |
+| =SYGALDRY_PROJECT_ID=       | Project name                    | Project isolation namespace |
+| =SYGALDRY_RUN_ID=           | =run-YYYYMMDD-HHMMSS-PID=         | Per-run identifier          |
+| =SYGALDRY_ROOT=             | =/workspace= or =/workspace/<name>= | Sygaldry repo root          |
+| =ZEPHYR_LEASE_MODE=         | =off/warn/enforce=                | Lease behavior              |
+| =ZEPHYR_CACHE_PROFILE=      | =shared/isolated/hybrid=          | Cache sharing mode          |
+| =HF_HOME=                   | =/opt/hf_cache=                   | HuggingFace cache           |
+| =UV_CACHE_DIR=              | =/opt/uv_cache=                   | UV download cache           |
+| =TORCH_HOME=                | =/opt/torch_cache=                | PyTorch hub cache           |
+| =TRITON_CACHE_DIR=          | =/opt/triton_cache=               | Triton kernel cache         |
+| =CUDA_CACHE_PATH=           | =/opt/nv_compute_cache=           | NVIDIA compute cache        |
+| =JAX_COMPILATION_CACHE_DIR= | =/opt/jax_cache=                  | JAX compilation cache       |
+| =XDG_CONFIG_HOME=           | =/home/kvothe/.config=            | XDG config directory        |
+| =XDG_DATA_HOME=             | =/home/kvothe/.local/share=       | XDG data directory          |
+| =XDG_CACHE_HOME=            | =/opt/uv_cache=                   | XDG cache directory         |
+
+** GPU Validation
+
+The launcher performs two GPU checks:
+
+1. =docker info | grep nvidia= -- confirms NVIDIA runtime is installed
+2. Host CUDA version >= =SYGALDRY_REQUIRED_CUDA_VERSION= (default 12.9)
+
+If either fails, the launcher exits with an error.  There is no CPU-only mode.
+
+** Concurrency Model
+
+Run isolation is =project_id + run_id=.
+
+- Per-run metadata and logs are stored under project outputs:
+  =projects/<id>/outputs/.run-metadata/<run_id>/=
+- The launcher creates an advisory GPU lease (=leases/gpu-all.lease=) with TTL.
+- Lease behavior is controlled by =ZEPHYR_LEASE_MODE= (see Host-Side Configuration Knobs).
+
+** Job Runner (=tools/zephyr_job=)
+
+The host-side job runner manages container jobs with structured logging:
+
+#+begin_example
+tools/zephyr_job run    --project-id <id> --job <name> -- <command>
+tools/zephyr_job status --project-id <id> --job <name>
+tools/zephyr_job tail   --project-id <id> --job <name> [--lines N]
+tools/zephyr_job stop   --project-id <id> --job <name>
+tools/zephyr_job health --project-id <id> --job <name>
+#+end_example
+
+Storage paths:
+- Raw logs: =projects/<id>/runs/<run_id>/raw/=
+- JSONL + status: =projects/<id>/outputs/.run-metadata/<run_id>/<job>.status=
+- JSONL logs: =projects/<id>/outputs/.run-metadata/<run_id>/<job>-<timestamp>.jsonl=
+
+The job runner forwards =SYGALDRY_RUN_ID= and =ZEPHYR_LEASE_MODE= to the launcher.
+This enables frequent, low-cost status polling without streaming full logs.
+
+* Skill Distribution and Vendoring
+:PROPERTIES:
+:CUSTOM_ID: skill-distribution
+:END:
+
+Sygaldry exposes its container infrastructure to external repositories through a
+vendored skill kit.  The skill kit is small (~5 files), self-contained, and
+versioned independently of the Sygaldry monorepo.  Target repos never need a
+Sygaldry clone.
+
+** SD.1 Install into Target Repo
+
+#+begin_example
+# Infrastructure vendoring (required for jobctl, repoctl, container launch)
+zephyr_vendor_infra.sh install \
+    --target-repo <path> --snapshot-ref <digest-ref> [--force]
+
+# MLSys overlay (optional; adds HF/vLLM/sglang profile launch)
+skills/zephyr/scripts/zephyr_mlsys_vendor.sh install \
+    --target-repo <path> --snapshot-ref <digest-ref> [--force]
+#+end_example
+
+The install script:
+- Creates =.zephyr-mlsys/= (or updates it) in the target repo
+- Writes =.zephyr-mlsys/bin/= with the portable launcher and job runner
+- Records the pinned =snapshot-ref= for hermetic validation
+- Migrates =.codex-zephyr-mlsys/= to =.zephyr-mlsys/= if the legacy directory exists
+
+** SD.2 Validation Commands
+
+#+begin_example
+# Show effective configuration for a repo
+repoctl config show --repo <path>
+
+# Verify the pinned snapshot image is reachable and passes smoke tests
+repoctl verify image --repo <path> [--skip-spack]
+
+# Verify Spack view integrity inside the image
+repoctl verify spack --repo <path>
+
+# Verify UV+Spack layering (T8.1-T8.5)
+repoctl verify uv-layering --repo <path>
+#+end_example
+
+** SD.3 Job Execution
+
+The =jobctl= CLI manages container jobs from the host:
+
+#+begin_example
+jobctl run    --project-id <id> --job <name> -- <command>
+jobctl status --project-id <id> --job <name>
+jobctl health --project-id <id> --job <name>
+jobctl tail   --project-id <id> --job <name> [--lines N]
+jobctl stop   --project-id <id> --job <name>
+#+end_example
+
+Jobs produce JSONL logs and status files under:
+=projects/<id>/outputs/.run-metadata/<run_id>/=
+
+** SD.4 MLSys Overlay Launch
+
+The portable kit in =.zephyr-mlsys/= provides profile-based container launch:
+
+#+begin_example
+# HuggingFace Transformers profile
+.zephyr-mlsys/bin/launch-mlsys.sh hf-transformers [--no-validate]
+
+# vLLM serving profile
+.zephyr-mlsys/bin/launch-mlsys.sh vllm [--no-validate]
+
+# HuggingFace Datasets profile (CPU-only test)
+MLSYS_DISABLE_GPU=1 .zephyr-mlsys/bin/launch-mlsys.sh hf-datasets --no-validate
+#+end_example
+
+Each profile activates the corresponding UV venv and sets =HF_HOME=, =UV_CACHE_DIR=,
+and related env vars.
+
+** SD.5 Hermetic Burn-In Suite
+
+The burn-in suite validates concurrent isolation, GPU utilization, and
+framework correctness at a given snapshot reference:
+
+#+begin_example
+skills/zephyr/scripts/validate_hermetic_runtime_suite.sh \
+    --snapshot-ref <digest> --mode burnin --burnin-iterations 5
+#+end_example
+
+Expected outcomes per iteration:
+- Concurrent run isolation (no cross-contamination of outputs)
+- PyTorch NCCL multi-GPU DDP
+- JAX =pmap= across GPUs
+- LLVM/Numba JIT compilation and execution
+- CUDA kernel launch
+
+** SD.6 Packaging Gates
+
+Skill packages are deterministic archives with provenance:
+
+#+begin_example
+# Package infrastructure skill
+skills/zephyr/scripts/package_infra.sh \
+    --version <ver> --out-dir <dir> --snapshot-ref <ref> [--smoke-mode full|skip]
+
+# Package MLSys overlay skill
+skills/zephyr/scripts/package_mlsys.sh \
+    --version <ver> --out-dir <dir> --snapshot-ref <ref> [--smoke-mode full|skip]
+#+end_example
+
+Outputs per package:
+- =<name>-<ver>.tar.gz= — deterministic archive
+- =<name>-<ver>.SHA256SUMS= — SHA-256 checksum
+- =<name>-<ver>.provenance.json= — build metadata (timestamp, git ref, snapshot digest)
+
+** SD.7 Validation Snapshot Reference
+
+Current pinned snapshot digest (update when image is rebuilt and validated):
+
+#+begin_example
+ghcr.io/phi9t/sygaldry/zephyr:spack@sha256:8c9507aea53995f29a5712c0cbdb99deb3d571fb9631b3d42352b3d6d6fb668c
+#+end_example
+
+This digest is the reference for all =--snapshot-ref= flags in burn-in and
+packaging commands.  When updating, run the full T1-T8.5 test suite and update
+this section.
+
