@@ -27,7 +27,7 @@ The eight foundational pillars, in dependency order:
 5. *Spack+UV Package Synergy* -- strict ownership boundary between Spack core and UV application packages.
 6. *MLSys Application Images* -- HF, vLLM, sglang, TorchTitan, Megatron-LM, and beyond.
 7. *Temporal Pipeline Orchestration* -- durable, resumable, observable multi-step ML pipelines.
-8. *SAIL: Sygaldry Agentic Improvement Loop* -- autonomous issue discovery, planning, implementation, and PR creation.
+8. *SAIL: Sygaldry Agentic Improvement Loop* -- autonomous issue discovery, planning, implementation, validation, landing, and self-analysis.
 
 #+begin_quote
 "Build heavy dependencies once with Spack; bake the validated environment into
@@ -3060,14 +3060,27 @@ R3 TAP adoption + orchestrator merge also complete.
 
 ** Overview
 
-SAIL is an autonomous code-quality improvement loop that discovers issues in the
-repository, plans fixes with a high-capability LLM (planner), implements them
-with a cost-effective LLM (implementer), validates with the standard quality gate,
-and opens pull requests — all without human intervention.  It is built on top of
-Pillar 7 (Temporal) and adds two new Temporal step types: =agent_task= and =git_op=.
+SAIL is an autonomous repository-improvement loop built on top of Pillar 7
+(Temporal).  It discovers actionable issues, deterministically generates a
+focused fix plan, asks an agent to implement the change, validates the result,
+and lands the fix when the quality gate passes.  The default landing mode is
+=direct=: successful runs commit on =main= and push =origin/main=.  A
+=pull_request= mode still exists, but it is optional rather than the default.
 
-Entry point: =sygaldry sail= (or =just sail=).
-Skill reference: =skills/agentic-improvement/SKILL.md=.
+The outer loop lives in =tools/agentic/run_improvement_loop.sh=.  It discovers
+issues, filters and deduplicates them, runs one Temporal workflow per issue,
+records durable run artifacts, and can retry bounded failures with failure
+context from the previous attempt.  The unattended wrapper in
+=tools/agentic/sail_cron.sh= adds clean-checkout enforcement, worker management,
+run analysis, and one bounded self-improvement pass for SAIL itself.
+
+Primary entry points:
+- =sygaldry sail= or =just sail= — run one interactive/manual SAIL pass.
+- =sygaldry sail cron= or =just sail-cron= — run the unattended wrapper once.
+- =sygaldry sail discover= — preview discovered issues only.
+- =sygaldry sail analyze-run --run-dir ...= — analyze one persisted run.
+
+Operator reference: =skills/agentic-improvement/SKILL.md=.
 
 ** P8.1 Architecture
 
@@ -3075,42 +3088,54 @@ Skill reference: =skills/agentic-improvement/SKILL.md=.
 sygaldry sail
   ├─ preflight: nc -z $TEMPORAL_HOST $TEMPORAL_PORT
   ├─ discover_issues.py  →  JSON[]{id, priority, type, title, description, files}
-  └─ for each issue (sequential or parallel up to max_parallel):
-       dedup: skip if .agentic/attempted.jsonl has status=pr_created|skipped
-       dedup: skip if origin/agentic/*-<slug> already exists
-       for attempt in 0..max_retries:
+  ├─ filter: min_priority, max_tasks_per_run
+  └─ for each issue (sequential; max_parallel=1 on one checkout):
+       dedup: skip if .agentic/attempted.jsonl already records it as handled
+       dedup: in PR mode, also skip if a matching remote branch already exists
+       choose branch_name:
+         direct mode      → main
+         pull_request mode → agentic/<timestamp>-<slug>
+       for attempt in 1..max_retries:
          go run ./cmd/orchestrate -plan improvement_loop.yaml -set key=value ...
-           Step 1: plan        agent_task  planner_engine/model
-           Step 2: branch      git_op      op=branch
-           Step 3: implement   agent_task  implementer_engine/model
-           Step 4: validate    command     ./validate_all.sh --quick
-           Step 5a: commit_pr  git_op      op=commit        (on success)
-           Step 5b: push_branch git_op     op=push          (on success)
-           Step 5c: create_pr  git_op      op=create-pr     (on success)
-           Step 5d: rollback   git_op      op=reset         (on failure)
-         on failure: capture validate stderr → pass as failure_context_file to retry
-       append result to .agentic/attempted.jsonl
+           1. plan           command   generate_plan.py
+           2. branch         git_op    op=branch
+           3. implement      agent_task implementer_engine/model
+           4. verify_changes command   fail fast if agent changed nothing
+           5. validate       command   ./validate_all.sh --quick
+           6. commit_pr      git_op    op=commit      (only on validate success)
+           7. push_branch    git_op    op=push        (only on validate success)
+           8. create_pr      git_op    op=create-pr   (PR mode only; direct mode
+                                                       treats this as landed)
+           9. rollback       git_op    op=reset       (on validate failure)
+         persist: run.json, discovery_stats.json, issue_attempts.jsonl, logs
+         retry: pass prior validate failure context into the next plan
+       append terminal result to .agentic/attempted.jsonl
+
+sygaldry sail cron
+  ├─ require clean main checkout, fast-forward origin/main
+  ├─ ensure Temporal server + managed worker
+  ├─ run primary SAIL pass
+  ├─ analyze persisted artifacts with analyze_sail_run.py
+  └─ if synthetic SAIL issues were emitted: run exactly one self-fix pass
 #+end_example
 
-** P8.2 Temporal Step Types
+** P8.2 Workflow Step Types
+
+The per-issue Temporal workflow uses three step families:
+
+| Step type | Used for | Notes |
+|-----------+----------+-------|
+| =command= | planning, no-change detection, validation | Runs local commands such as =generate_plan.py= and =./validate_all.sh --quick=. |
+| =agent_task= | implementation | Dispatches an agent CLI subprocess and captures stdout/stderr plus structured logs. |
+| =git_op= | branch, commit, push, PR, rollback | Wraps =tools/agentic/git_ops.sh= for repository mutations. |
 
 *** =agent_task=
 
-Dispatches to an LLM CLI subprocess and collects stdout/stderr as Temporal activity
-output.  Supported engines: =claude= (=claude -p=), =codex= (=codex exec=),
-=cursor= (=cursor --exec=), =echo= (no-op for testing).
-
-Prompt files use =${{ params.KEY }}= templates that are expanded inside the
-activity after file read (the Temporal template engine only expands struct fields;
-file contents require a second-pass =strings.NewReplacer= substitution).  Params
-are also injected as =SAIL_PARAM_<KEY>= environment variables into the subprocess.
-
-Key fields in =AgentTaskInput=:
-- =Engine=, =Model= — agent selection
-- =PromptFile= — path to prompt template
-- =WorkingDir= — subprocess working directory
-- =Params map[string]string= — key→value for template substitution and env vars
-- =Sandbox= — sandbox mode (codex only: =workspace-write=)
+Dispatches to an agent CLI subprocess and collects stdout/stderr as Temporal
+activity output.  Supported engines today are =claude=, =codex=, =cursor=, and
+=echo= for testing.  Prompt files use =${{ params.KEY }}= templates, and params
+are also injected as =SAIL_PARAM_<KEY>= environment variables into the
+subprocess.
 
 *** =git_op=
 
@@ -3118,77 +3143,155 @@ Wraps =tools/agentic/git_ops.sh=, which implements six operations:
 
 | Operation | Effect |
 |-----------|--------|
-| =branch= | =git checkout -b <branch> origin/<base>= |
+| =branch= | Prepare the target branch for the workflow (=main= in direct mode, =agentic/...= in PR mode) |
 | =commit= | =git add -A; git commit= (exits 1 if nothing staged) |
 | =push= | =git push origin <branch>= |
-| =create-pr= | =gh pr create --head <branch> --base <base>= |
+| =create-pr= | Open a PR in PR mode, or report a landed change in direct mode |
 | =reset= | Save diff patch to =/tmp/=, then =git reset --hard HEAD; git clean -fd= |
 | =delete-branch= | =git push origin --delete <branch>= |
 
 ** P8.3 Issue Discovery
 
-=discover_issues.py= aggregates seven sources:
+=discover_issues.py= aggregates seven issue sources:
 
 | Source | Priority | Tool |
 |--------|----------|------|
 | Go test failures | 1 (critical) | =go test ./... -json= |
 | Go vet warnings | 2 (high) | =go vet ./...= |
-| shellcheck errors | 2 (high) | =shellcheck -f json= |
-| TODO/FIXME/HACK | 2–3 | =git grep= |
-| shellcheck warnings | 3 (normal) | =shellcheck -f json= |
+| shellcheck findings | 2-3 | =shellcheck -f json= |
+| TODO/FIXME/HACK comments | 2-3 | =git grep= |
 | ruff lint findings | 3 (normal) | =ruff check --output-format json= |
 | foundation.org drift | 3 (normal) | file-existence check |
 | Uncovered Go functions | 3 (normal) | =go test -coverprofile + go tool cover -func= |
 
 Issues are sorted by priority then ID.  Deduplication hash: SHA-1 of
-=<file>:<line>:<content>=.  Filter via =--min-priority= (default 3 = all).
+=<type-specific payload>=.  Filter via =--min-priority=, cap each source with
+=--max-per-type=, and persist per-source timing in =discovery_stats.json= during
+run-loop execution.
 
-** P8.4 Two-LLM Design
+** P8.4 Planning and Implementation Roles
 
-Planning uses a high-capability model (default: =claude-opus-4-6=) to produce a
-structured task plan and write it to =/tmp/sail-<workflow_id>-plan.yaml=, emitting
-a =::set-output name=plan_file::= line so the pipeline captures it as a step output.
+Planning is local and deterministic by default.  The =plan= step runs
+=tools/agentic/generate_plan.py=, which turns one discovered issue plus optional
+failure context into:
+- a focused plan file for the implementer step
+- a normalized =task_title= that is safe to use in commit subjects
+- a narrow, issue-type-specific remediation strategy
 
-Implementation uses a cost-effective model (default: =claude-sonnet-4-6=) that reads
-the plan file via =${{ steps.plan.outputs.plan_file }}= (passed as a param),
-applies the changes, and produces a passing validation run.
+Implementation remains agent-driven.  The =implement= step reads the plan file
+from the planner output and executes the change in the repository working tree.
+The default implementer engine is configured in =tools/agentic/config.yaml=, but
+it can be overridden per run with environment variables such as
+=SAIL_IMPLEMENTER_ENGINE= and =SAIL_IMPLEMENTER_MODEL=.
 
-On retry, the failure context (last 100 lines of validate stderr) is passed via
-=failure_context_file= param to a separate retry prompt that guides the second attempt.
+On retry, the previous validation failure excerpt is passed back into the next
+planning attempt through =failure_context_file=.  This keeps retries bounded and
+focused on the last observed failure rather than re-running a blind first attempt.
 
-** P8.5 Safety Guarantees
+Commit and PR titles are normalized through the planner output, yielding subjects
+such as =agentic(todo): resolve fixme in path/to/file=.
 
-1. *No auto-merge* — SAIL opens PRs; a human reviews and merges.
-2. *Validation gate* — =validate_all.sh --quick= must exit 0 before any commit.
-3. *Empty-commit guard* — =git_ops.sh commit= exits 1 when nothing is staged,
-   aborting the pipeline before a ghost PR can be created.
-4. *Rollback* — on validate failure, working tree is reset to HEAD; a diff patch
-   is saved to =/tmp/= for post-mortem.
-5. *Deduplication* — =.agentic/attempted.jsonl= and remote branch check prevent
-   duplicate work across invocations.
-6. *Temporal preflight* — if the Temporal server is unreachable, the outer loop
-   aborts immediately with a clear error message.
-7. *Bounded compute* — =max_tasks_per_run= and =max_retries_per_task= cap the
-   number of LLM calls per invocation.
-8. *Isolated branches* — all changes land on =agentic/<timestamp>-<slug>=;
-   main is never touched directly.
+** P8.5 Operating SAIL
 
-** P8.6 Key Files
+#+begin_example
+# Manual run
+sygaldry sail
+just sail
+
+# Preview only
+sygaldry sail discover
+sygaldry sail --dry-run
+just sail-discover
+just sail-dry
+
+# Unattended wrapper
+sygaldry sail cron
+just sail-cron
+just sail-initial MAX_TASKS=1
+
+# Services and analysis
+sygaldry sail worker
+sygaldry sail validate-plan
+sygaldry sail analyze-run --run-dir /path/to/run
+just sail-analyze RUN_DIR=/path/to/run
+#+end_example
+
+Current defaults in =tools/agentic/config.yaml=:
+- planner engine: =local=
+- implementer engine/model: =claude= / =claude-sonnet-4-6=
+- landing mode: =direct=
+- max tasks per run: =3=
+- max retries per task: =2=
+- min priority: =2=
+
+** P8.6 Artifacts and Self-Improvement
+
+SAIL keeps two layers of durable state:
+
+1. =.agentic/attempted.jsonl= in the repo root records issue-level terminal
+   outcomes such as =landed=, =pr_created=, or =skipped=.  This prevents the
+   outer loop from repeating already handled work.
+2. Persisted run artifacts capture everything about one invocation.  The cron
+   wrapper writes these under its runtime root (default:
+   =/mnt/data_infra/zephyr_container_infra/sygaldry/logs/sail=), with one run
+   directory per invocation containing files such as:
+   - =run.json=
+   - =discovered_issues.json=
+   - =discovery_stats.json=
+   - =issue_attempts.jsonl=
+   - per-attempt workflow logs and structured agent-session logs
+
+=tools/agentic/analyze_sail_run.py= turns those artifacts into:
+- normalized =agent_sessions.jsonl=
+- normalized =workflow_events.jsonl=
+- =summary.json= and =summary.md=
+- synthetic SAIL-only issues when the loop itself needs work
+
+Synthetic self-improvement issues currently cover categories such as:
+=discovery_slow=, =planner_failure=, =implementer_failure=, =empty_commit=,
+=pr_creation_failure=, and =retry_loop=.
+
+The cron wrapper uses that analyzer to optionally launch exactly one follow-on
+self-fix pass after the primary pass.  That makes SAIL recursive in a bounded
+way: it can improve its own prompts, orchestration, or runtime behavior without
+falling into an unbounded loop.
+
+** P8.7 Safety Guarantees
+
+1. *Validation gate* — =./validate_all.sh --quick= must exit 0 before commit and push.
+2. *Meaningful commit titles* — the planner emits a normalized =task_title=, and the
+   pipeline uses =agentic(<issue_type>): <task_title>= for landed commits.
+3. *Empty-commit guard* — =git_op commit= exits non-zero when nothing is staged,
+   preventing false-success workflows.
+4. *Rollback with patch capture* — failed validation triggers a reset, and the
+   discarded diff is preserved for post-mortem analysis.
+5. *Deduplication* — =.agentic/attempted.jsonl= prevents repeated handling of
+   issues already landed, skipped, or otherwise marked terminal.
+6. *Clean unattended execution* — =sail_cron.sh= refuses dirty or off-=main=
+   execution and fast-forwards =main= before starting a run.
+7. *Bounded compute* — =max_tasks_per_run=, =max_retries_per_task=, and a single
+   self-fix pass cap unattended cost and churn.
+8. *Selectable landing mode* — SAIL can operate either in direct-land mode
+   (=main=) or PR mode (=agentic/...= branches), with direct landing as the
+   current default.
+
+** P8.8 Key Files
 
 | File | Role |
 |------|------|
-| =bin/sygaldry= | =sail= subcommand (discover / worker / validate-plan / run) |
-| =justfile= | =just sail=, =just sail-dry=, =just sail-discover=, =just sail-echo= |
-| =tools/agentic/config.yaml= | Model selection, loop parameters, parallelism |
-| =tools/agentic/improvement_loop.yaml= | Temporal YAML pipeline (8 steps) |
-| =tools/agentic/run_improvement_loop.sh= | Outer loop (discover + dedup + orchestrate) |
-| =tools/agentic/discover_issues.py= | Multi-source issue scanner (7 sources) |
+| =bin/sygaldry= | CLI entrypoints for =sail=, =discover=, =worker=, =cron=, =analyze-run=, and =validate-plan= |
+| =justfile= | Convenience wrappers such as =just sail=, =just sail-cron=, and =just sail-initial= |
+| =tools/agentic/config.yaml= | Planner/implementer selection, loop limits, repo landing mode |
+| =tools/agentic/improvement_loop.yaml= | Temporal YAML pipeline for one issue workflow (9 logical steps) |
+| =tools/agentic/run_improvement_loop.sh= | Outer loop: discovery, dedup, retries, orchestration, artifact persistence |
+| =tools/agentic/generate_plan.py= | Deterministic planner that emits =plan_file= and =task_title= |
+| =tools/agentic/discover_issues.py= | Multi-source issue scanner with discovery timing telemetry |
+| =tools/agentic/sail_cron.sh= | Unattended wrapper: clean checkout, worker management, primary + self-fix runs |
+| =tools/agentic/analyze_sail_run.py= | Run analyzer that emits summaries, normalized logs, and synthetic SAIL issues |
 | =tools/agentic/git_ops.sh= | Git operations backend for =git_op= activity |
-| =tools/agentic/prompts/planner.md= | Planner system prompt |
 | =tools/agentic/prompts/implementer.md= | Implementer system prompt |
 | =tools/agentic/prompts/retry.md= | Retry system prompt |
 | =temporal/internal/activities/agent_task.go= | =AgentTask= activity implementation |
-| =temporal/internal/activities/agent_task_test.go= | Unit tests (echo engine, params, env vars) |
 | =temporal/internal/activities/git_op.go= | =GitOp= activity implementation |
-| =temporal/internal/workflows/pipeline.go= | =AgentTaskSpec.Params= field |
+| =temporal/internal/workflows/pipeline.go= | Workflow engine that executes the declarative step graph |
 | =skills/agentic-improvement/SKILL.md= | Full operator reference |
