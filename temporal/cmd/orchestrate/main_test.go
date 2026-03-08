@@ -421,6 +421,81 @@ func TestValidateCommandValidPlan(t *testing.T) {
 	}
 }
 
+func TestMergeGitOpSpec(t *testing.T) {
+	t.Run("nil base gets override fields", func(t *testing.T) {
+		result := mergeGitOpSpec(nil, &workflows.GitOpSpec{
+			Op:            "commit",
+			RepoDir:       "/repo",
+			Branch:        "feature",
+			BaseBranch:    "main",
+			CommitMessage: "msg",
+			PRTitle:       "title",
+			PRBody:        "body",
+			GitOpsScript:  "script.sh",
+		})
+		if result.Op != "commit" {
+			t.Errorf("op = %q, want %q", result.Op, "commit")
+		}
+		if result.RepoDir != "/repo" {
+			t.Errorf("repo_dir = %q, want %q", result.RepoDir, "/repo")
+		}
+		if result.Branch != "feature" {
+			t.Errorf("branch = %q, want %q", result.Branch, "feature")
+		}
+		if result.BaseBranch != "main" {
+			t.Errorf("base_branch = %q, want %q", result.BaseBranch, "main")
+		}
+		if result.CommitMessage != "msg" {
+			t.Errorf("commit_message = %q, want %q", result.CommitMessage, "msg")
+		}
+		if result.PRTitle != "title" {
+			t.Errorf("pr_title = %q, want %q", result.PRTitle, "title")
+		}
+		if result.PRBody != "body" {
+			t.Errorf("pr_body = %q, want %q", result.PRBody, "body")
+		}
+		if result.GitOpsScript != "script.sh" {
+			t.Errorf("git_ops_script = %q, want %q", result.GitOpsScript, "script.sh")
+		}
+	})
+
+	t.Run("base fields preserved when override empty", func(t *testing.T) {
+		base := &workflows.GitOpSpec{Op: "push", Branch: "dev"}
+		result := mergeGitOpSpec(base, &workflows.GitOpSpec{})
+		if result.Op != "push" {
+			t.Errorf("op = %q, want %q", result.Op, "push")
+		}
+		if result.Branch != "dev" {
+			t.Errorf("branch = %q, want %q", result.Branch, "dev")
+		}
+	})
+
+	t.Run("override fields replace base", func(t *testing.T) {
+		base := &workflows.GitOpSpec{Op: "push", Branch: "dev", CommitMessage: "old"}
+		result := mergeGitOpSpec(base, &workflows.GitOpSpec{Op: "commit", CommitMessage: "new"})
+		if result.Op != "commit" {
+			t.Errorf("op = %q, want %q", result.Op, "commit")
+		}
+		if result.Branch != "dev" {
+			t.Errorf("branch = %q, want %q", result.Branch, "dev")
+		}
+		if result.CommitMessage != "new" {
+			t.Errorf("commit_message = %q, want %q", result.CommitMessage, "new")
+		}
+	})
+
+	t.Run("override env merges with base env", func(t *testing.T) {
+		base := &workflows.GitOpSpec{Op: "push", Env: map[string]string{"A": "1"}}
+		result := mergeGitOpSpec(base, &workflows.GitOpSpec{Env: map[string]string{"B": "2"}})
+		if result.Env["A"] != "1" {
+			t.Errorf("env[A] = %q, want %q", result.Env["A"], "1")
+		}
+		if result.Env["B"] != "2" {
+			t.Errorf("env[B] = %q, want %q", result.Env["B"], "2")
+		}
+	})
+}
+
 func TestMergeDockerPushSpec(t *testing.T) {
 	t.Run("nil base gets override image", func(t *testing.T) {
 		result := mergeDockerPushSpec(nil, &workflows.DockerPushSpec{Image: "myrepo/img:latest"})
