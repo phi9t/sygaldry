@@ -5,7 +5,6 @@ import json
 import sys
 from pathlib import Path
 
-
 REPO_ROOT = Path(__file__).resolve().parents[3]
 ANALYZE_PATH = REPO_ROOT / "tools" / "agentic" / "analyze_sail_run.py"
 
@@ -48,7 +47,9 @@ def test_analyzer_emits_synthetic_sail_issues(monkeypatch, tmp_path):
     }
     (run_dir / "run.json").parent.mkdir(parents=True, exist_ok=True)
     (run_dir / "run.json").write_text(json.dumps(run_meta), encoding="utf-8")
-    (run_dir / "discovery_stats.json").write_text(json.dumps(discovery_stats), encoding="utf-8")
+    (run_dir / "discovery_stats.json").write_text(
+        json.dumps(discovery_stats), encoding="utf-8"
+    )
 
     attempt_records = []
     for attempt in (1, 2):
@@ -150,13 +151,20 @@ def test_analyzer_emits_synthetic_sail_issues(monkeypatch, tmp_path):
     )
     module.main()
 
-    issues = json.loads((analysis_dir / "self_improvement_issues.json").read_text(encoding="utf-8"))
+    issues = json.loads(
+        (analysis_dir / "self_improvement_issues.json").read_text(encoding="utf-8")
+    )
     issue_types = {issue["type"] for issue in issues}
     assert "discovery_slow" in issue_types
     assert "retry_loop" in issue_types
     assert "pr_creation_failure" in issue_types
 
-    agent_sessions = (analysis_dir / "agent_sessions.jsonl").read_text(encoding="utf-8").strip().splitlines()
+    agent_sessions = (
+        (analysis_dir / "agent_sessions.jsonl")
+        .read_text(encoding="utf-8")
+        .strip()
+        .splitlines()
+    )
     assert len(agent_sessions) == 4
 
     summary = json.loads((analysis_dir / "summary.json").read_text(encoding="utf-8"))

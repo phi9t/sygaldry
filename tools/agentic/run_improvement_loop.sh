@@ -372,6 +372,32 @@ _capture_validate_failure() {
     fi
 }
 
+_attempt_plan_file() {
+    local attempt="$1" attempt_dir="$2"
+    if [[ "${attempt}" -eq 0 ]]; then
+        echo "${PLAN_FILE}"
+        return 0
+    fi
+
+    local retry_plan="${attempt_dir}/improvement_loop.retry.yaml"
+    sed 's|prompt_file: tools/agentic/prompts/implementer.md|prompt_file: tools/agentic/prompts/retry.md|' \
+        "${PLAN_FILE}" > "${retry_plan}"
+    grep -q 'prompt_file: tools/agentic/prompts/retry.md' "${retry_plan}" \
+        || die "retry plan generation failed for ${retry_plan}"
+    echo "${retry_plan}"
+}
+
+_append_retry_patch_context() {
+    local failure_context_file="$1" patch_file="$2"
+    if [[ -z "${patch_file}" ]]; then
+        return 0
+    fi
+    {
+        echo
+        echo "Review rollback patch from the previous attempt: ${patch_file}"
+    } >> "${failure_context_file}"
+}
+
 _restore_repo_state() {
     local branch="$1"
     if [[ ! -d "${REPO_DIR}/.git" ]]; then
@@ -502,6 +528,8 @@ _run_issue() {
         log "   attempt ${attempt_number}/$((MAX_RETRIES + 1))"
 
         local prompt_file="${SCRIPT_DIR}/generate_plan.py"
+        local plan_to_run
+        plan_to_run="$(_attempt_plan_file "${attempt}" "${attempt_dir}")"
 
         local failure_ctx_flag=""
         if [[ ${attempt} -gt 0 && -f "${failure_context_file}" ]]; then
@@ -512,7 +540,7 @@ _run_issue() {
         (
             cd "${TEMPORAL_DIR}"
             go run ./cmd/orchestrate run \
-                -plan "${PLAN_FILE}" \
+                -plan "${plan_to_run}" \
                 -log-dir "${log_dir}" \
                 -address "${TEMPORAL_ADDRESS}" \
                 -namespace "${TEMPORAL_NAMESPACE}" \
@@ -561,6 +589,7 @@ _run_issue() {
 
         log "   attempt ${attempt_number} failed (exit=${exit_code}, disposition=${workflow_disposition})"
         _capture_validate_failure "${log_dir}" "${failure_context_file}" "${parsed_workflow_id:-${workflow_id}-a${attempt}}"
+        _append_retry_patch_context "${failure_context_file}" "${patch_file}"
         _record_issue_attempt "${issue_json}" "failed_attempt" "${branch_name}" "${attempt_number}" \
             "${parsed_workflow_id}" "${parsed_run_id}" "${log_dir}" "${prompt_file}" "${exit_code}" \
             "${pr_url}" "${patch_file}" "${failure_context_file}" \

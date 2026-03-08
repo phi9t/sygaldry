@@ -5,7 +5,6 @@ import json
 import sys
 from pathlib import Path
 
-
 REPO_ROOT = Path(__file__).resolve().parents[3]
 DISCOVER_PATH = REPO_ROOT / "tools" / "agentic" / "discover_issues.py"
 
@@ -34,13 +33,29 @@ def test_stats_file_is_written(monkeypatch, tmp_path, capsys):
     module = load_module()
     stats_path = tmp_path / "stats.json"
 
-    monkeypatch.setattr(module, "discover_go_test_failures", lambda repo_dir, max_per_type: [issue("go-test", 1, "go_test")])
+    monkeypatch.setattr(
+        module,
+        "discover_go_test_failures",
+        lambda repo_dir, max_per_type: [issue("go-test", 1, "go_test")],
+    )
     monkeypatch.setattr(module, "discover_go_vet", lambda repo_dir, max_per_type: [])
-    monkeypatch.setattr(module, "discover_shellcheck", lambda repo_dir, max_per_type: [issue("shellcheck", 3, "shellcheck")])
-    monkeypatch.setattr(module, "discover_todos", lambda repo_dir, max_per_type: [issue("todo", 2, "todo")])
+    monkeypatch.setattr(
+        module,
+        "discover_shellcheck",
+        lambda repo_dir, max_per_type: [issue("shellcheck", 3, "shellcheck")],
+    )
+    monkeypatch.setattr(
+        module,
+        "discover_todos",
+        lambda repo_dir, max_per_type: [issue("todo", 2, "todo")],
+    )
     monkeypatch.setattr(module, "discover_ruff", lambda repo_dir, max_per_type: [])
-    monkeypatch.setattr(module, "discover_foundation_drift", lambda repo_dir, max_per_type: [])
-    monkeypatch.setattr(module, "discover_uncovered_functions", lambda repo_dir, max_per_type: [])
+    monkeypatch.setattr(
+        module, "discover_foundation_drift", lambda repo_dir, max_per_type: []
+    )
+    monkeypatch.setattr(
+        module, "discover_uncovered_functions", lambda repo_dir, max_per_type: []
+    )
     monkeypatch.setattr(
         sys,
         "argv",

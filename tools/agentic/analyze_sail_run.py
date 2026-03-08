@@ -45,7 +45,9 @@ def read_jsonl(path: Path) -> list[dict[str, Any]]:
 
 def write_json(path: Path, payload: Any) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    path.write_text(
+        json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
 
 
 def write_jsonl(path: Path, payloads: list[dict[str, Any]]) -> None:
@@ -154,7 +156,9 @@ def aggregate_run(
         log_dir = Path(log_dir_value)
         events = read_jsonl(log_dir / "events.jsonl")
         statuses = step_statuses(events)
-        step_summaries[f"{record.get('issueId','')}#{record.get('attempt', 0)}"] = statuses
+        step_summaries[f"{record.get('issueId','')}#{record.get('attempt', 0)}"] = (
+            statuses
+        )
 
         for event in events:
             enriched = dict(event)
@@ -255,7 +259,10 @@ def detect_issues(
         plan = statuses.get("plan")
         if plan and plan.get("status") == "failed":
             planner_files = ["tools/agentic/generate_plan.py"]
-            if run_meta.get("config", {}).get("planner", {}).get("engine", "") != "local":
+            if (
+                run_meta.get("config", {}).get("planner", {}).get("engine", "")
+                != "local"
+            ):
                 planner_files.extend(
                     [
                         "temporal/internal/activities/agent_task.go",
@@ -303,7 +310,9 @@ def detect_issues(
 
         commit_step = statuses.get("commit_pr")
         if commit_step and commit_step.get("status") == "failed":
-            commit_excerpt = sanitize_text(read_excerpt(commit_step.get("stderrPath", "")))
+            commit_excerpt = sanitize_text(
+                read_excerpt(commit_step.get("stderrPath", ""))
+            )
             if "nothing to commit" in commit_excerpt.lower():
                 issue = synthetic_issue(
                     issue_type="empty_commit",
@@ -376,7 +385,9 @@ def build_summary(
     agent_sessions: list[dict[str, Any]],
     workflow_events: list[dict[str, Any]],
 ) -> dict[str, Any]:
-    attempt_status_counts = Counter(record.get("status", "") for record in attempt_records)
+    attempt_status_counts = Counter(
+        record.get("status", "") for record in attempt_records
+    )
     step_event_counts = Counter(event.get("status", "") for event in workflow_events)
     return {
         "runId": run_meta.get("runId", ""),
@@ -397,7 +408,9 @@ def build_summary(
     }
 
 
-def build_summary_markdown(summary: dict[str, Any], synthetic_issues: list[dict[str, Any]]) -> str:
+def build_summary_markdown(
+    summary: dict[str, Any], synthetic_issues: list[dict[str, Any]]
+) -> str:
     lines = [
         f"# SAIL Run Analysis: {summary.get('runId', '')}",
         "",
@@ -424,20 +437,30 @@ def build_summary_markdown(summary: dict[str, Any], synthetic_issues: list[dict[
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Analyze a persisted SAIL run")
-    parser.add_argument("--run-dir", required=True, help="SAIL artifact directory to analyze")
-    parser.add_argument("--output-dir", help="Output directory (default: <run-dir>/analysis)")
+    parser.add_argument(
+        "--run-dir", required=True, help="SAIL artifact directory to analyze"
+    )
+    parser.add_argument(
+        "--output-dir", help="Output directory (default: <run-dir>/analysis)"
+    )
     args = parser.parse_args()
 
     run_dir = Path(args.run_dir).resolve()
-    output_dir = Path(args.output_dir).resolve() if args.output_dir else run_dir / "analysis"
+    output_dir = (
+        Path(args.output_dir).resolve() if args.output_dir else run_dir / "analysis"
+    )
     output_dir.mkdir(parents=True, exist_ok=True)
 
     run_meta = read_json(run_dir / "run.json", {})
     discovery_stats = read_json(run_dir / "discovery_stats.json", {})
     attempt_records = read_jsonl(run_dir / "issue_attempts.jsonl")
 
-    workflow_events, agent_sessions, step_summaries = aggregate_run(run_dir, attempt_records, run_meta)
-    synthetic_issues = detect_issues(run_meta, discovery_stats, attempt_records, step_summaries)
+    workflow_events, agent_sessions, step_summaries = aggregate_run(
+        run_dir, attempt_records, run_meta
+    )
+    synthetic_issues = detect_issues(
+        run_meta, discovery_stats, attempt_records, step_summaries
+    )
     summary = build_summary(
         run_meta=run_meta,
         discovery_stats=discovery_stats,

@@ -6,7 +6,6 @@ import stat
 import subprocess
 from pathlib import Path
 
-
 REPO_ROOT = Path(__file__).resolve().parents[3]
 RUN_LOOP = REPO_ROOT / "tools" / "agentic" / "run_improvement_loop.sh"
 
@@ -23,8 +22,12 @@ def test_run_loop_writes_artifacts_with_fake_temporal(tmp_path):
     (repo_dir / "README.md").write_text("hello\n", encoding="utf-8")
 
     subprocess.run(["git", "init", "-b", "main"], cwd=repo_dir, check=True)
-    subprocess.run(["git", "config", "user.name", "Test User"], cwd=repo_dir, check=True)
-    subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=repo_dir, check=True)
+    subprocess.run(
+        ["git", "config", "user.name", "Test User"], cwd=repo_dir, check=True
+    )
+    subprocess.run(
+        ["git", "config", "user.email", "test@example.com"], cwd=repo_dir, check=True
+    )
     subprocess.run(["git", "add", "README.md"], cwd=repo_dir, check=True)
     subprocess.run(["git", "commit", "-m", "init"], cwd=repo_dir, check=True)
 
@@ -126,13 +129,25 @@ JSON
     run_meta = json.loads((artifacts_dir / "run.json").read_text(encoding="utf-8"))
     assert run_meta["counts"]["processed"] == 1
     assert run_meta["counts"]["succeeded"] == 1
-    assert json.loads((artifacts_dir / "discovered_issues.json").read_text(encoding="utf-8"))[0]["id"] == "issue-shellcheck-1"
+    assert (
+        json.loads(
+            (artifacts_dir / "discovered_issues.json").read_text(encoding="utf-8")
+        )[0]["id"]
+        == "issue-shellcheck-1"
+    )
 
     attempt_rows = [
         json.loads(line)
-        for line in (artifacts_dir / "issue_attempts.jsonl").read_text(encoding="utf-8").splitlines()
+        for line in (artifacts_dir / "issue_attempts.jsonl")
+        .read_text(encoding="utf-8")
+        .splitlines()
         if line.strip()
     ]
     assert attempt_rows[0]["status"] == "success"
     assert attempt_rows[0]["prUrl"] == "https://example.test/pr/1"
-    assert subprocess.check_output(["git", "branch", "--show-current"], cwd=repo_dir, text=True).strip() == "main"
+    assert (
+        subprocess.check_output(
+            ["git", "branch", "--show-current"], cwd=repo_dir, text=True
+        ).strip()
+        == "main"
+    )

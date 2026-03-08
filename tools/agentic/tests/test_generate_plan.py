@@ -4,12 +4,13 @@ import json
 import subprocess
 from pathlib import Path
 
-
 REPO_ROOT = Path(__file__).resolve().parents[3]
 GENERATE_PLAN = REPO_ROOT / "tools" / "agentic" / "generate_plan.py"
 
 
-def run_generate_plan(tmp_path: Path, issue: dict[str, object], failure_context: str = "") -> tuple[str, Path]:
+def run_generate_plan(
+    tmp_path: Path, issue: dict[str, object], failure_context: str = ""
+) -> tuple[str, Path]:
     repo_dir = tmp_path / "repo"
     repo_dir.mkdir()
     workflow_id = "wf-123"
@@ -53,10 +54,16 @@ def test_generate_plan_emits_outputs_and_meaningful_todo_title(tmp_path: Path) -
     )
 
     assert "::set-output name=plan_file::/tmp/sail-wf-123-plan.yaml" in stdout
-    assert "::set-output name=task_title::avoid todo false positives in tools/agentic/discover_issues.py" in stdout
+    assert (
+        "::set-output name=task_title::avoid todo false positives in tools/agentic/discover_issues.py"
+        in stdout
+    )
 
     plan_text = plan_path.read_text(encoding="utf-8")
-    assert 'title: "avoid todo false positives in tools/agentic/discover_issues.py"' in plan_text
+    assert (
+        'title: "avoid todo false positives in tools/agentic/discover_issues.py"'
+        in plan_text
+    )
     assert "Tighten TODO discovery" in plan_text
     assert "Legitimate TODO/FIXME/HACK comments elsewhere" in plan_text
 
@@ -77,5 +84,8 @@ def test_generate_plan_includes_retry_failure_context(tmp_path: Path) -> None:
     )
 
     plan_text = plan_path.read_text(encoding="utf-8")
-    assert "Address the previously observed failure context during this retry:" in plan_text
+    assert (
+        "Address the previously observed failure context during this retry:"
+        in plan_text
+    )
     assert "missing quote" in plan_text

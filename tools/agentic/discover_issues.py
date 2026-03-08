@@ -134,20 +134,32 @@ def discover_todos(repo_dir: Path, max_per_type: int) -> list[Issue]:
 # Source 2: shellcheck warnings
 # ---------------------------------------------------------------------------
 
+
 def discover_shellcheck(repo_dir: Path, max_per_type: int) -> list[Issue]:
     sh_files = list(repo_dir.rglob("*.sh"))
     # Exclude vendor/node_modules/hidden dirs
     sh_files = [
-        f for f in sh_files
-        if not any(part.startswith(".") or part in ("node_modules", "vendor")
-                   for part in f.parts)
+        f
+        for f in sh_files
+        if not any(
+            part.startswith(".") or part in ("node_modules", "vendor")
+            for part in f.parts
+        )
     ]
     if not sh_files:
         return []
 
     try:
         result = subprocess.run(
-            ["shellcheck", "-f", "json", "-S", "warning", "--", *[str(f) for f in sh_files]],
+            [
+                "shellcheck",
+                "-f",
+                "json",
+                "-S",
+                "warning",
+                "--",
+                *[str(f) for f in sh_files],
+            ],
             cwd=repo_dir,
             capture_output=True,
             text=True,
@@ -186,6 +198,7 @@ def discover_shellcheck(repo_dir: Path, max_per_type: int) -> list[Issue]:
 # ---------------------------------------------------------------------------
 # Source 3: go test failures
 # ---------------------------------------------------------------------------
+
 
 def discover_go_test_failures(repo_dir: Path, max_per_type: int) -> list[Issue]:
     temporal_dir = repo_dir / "temporal"
@@ -233,6 +246,7 @@ def discover_go_test_failures(repo_dir: Path, max_per_type: int) -> list[Issue]:
 # ---------------------------------------------------------------------------
 # Source 4: ruff lint
 # ---------------------------------------------------------------------------
+
 
 def discover_ruff(repo_dir: Path, max_per_type: int) -> list[Issue]:
     try:
@@ -288,7 +302,7 @@ def discover_foundation_drift(repo_dir: Path, max_per_type: int) -> list[Issue]:
     referenced_files: list[str] = _FILE_RE.findall(text)
 
     issues: list[Issue] = []
-    for rel_path in referenced_files[:max_per_type * 4]:
+    for rel_path in referenced_files[: max_per_type * 4]:
         full_path = repo_dir / rel_path
         if not full_path.exists():
             issues.append(
@@ -313,6 +327,7 @@ def discover_foundation_drift(repo_dir: Path, max_per_type: int) -> list[Issue]:
 # ---------------------------------------------------------------------------
 # Source 6: go vet warnings
 # ---------------------------------------------------------------------------
+
 
 def discover_go_vet(repo_dir: Path, max_per_type: int) -> list[Issue]:
     temporal_dir = repo_dir / "temporal"
@@ -434,14 +449,29 @@ def discover_uncovered_functions(repo_dir: Path, max_per_type: int) -> list[Issu
 # Main
 # ---------------------------------------------------------------------------
 
+
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Discover actionable issues in sygaldry repo")
-    parser.add_argument("--repo-dir", default=".", help="Repository root (default: $PWD)")
-    parser.add_argument("--max-per-type", type=int, default=10,
-                        help="Max issues per source type (default: 10)")
-    parser.add_argument("--min-priority", type=int, default=3,
-                        help="Only emit issues with priority <= this (default: 3 = all)")
-    parser.add_argument("--stats-file", help="Write discovery timing/count metadata to this JSON file")
+    parser = argparse.ArgumentParser(
+        description="Discover actionable issues in sygaldry repo"
+    )
+    parser.add_argument(
+        "--repo-dir", default=".", help="Repository root (default: $PWD)"
+    )
+    parser.add_argument(
+        "--max-per-type",
+        type=int,
+        default=10,
+        help="Max issues per source type (default: 10)",
+    )
+    parser.add_argument(
+        "--min-priority",
+        type=int,
+        default=3,
+        help="Only emit issues with priority <= this (default: 3 = all)",
+    )
+    parser.add_argument(
+        "--stats-file", help="Write discovery timing/count metadata to this JSON file"
+    )
     args = parser.parse_args()
 
     repo_dir = Path(args.repo_dir).resolve()

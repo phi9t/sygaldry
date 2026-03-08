@@ -14,7 +14,6 @@ import json
 from pathlib import Path
 from typing import Any
 
-
 Issue = dict[str, Any]
 
 
@@ -55,7 +54,10 @@ def read_failure_context(path_value: str) -> str:
     if not path.exists():
         return ""
     try:
-        lines = [line.rstrip() for line in path.read_text(encoding="utf-8", errors="replace").splitlines()]
+        lines = [
+            line.rstrip()
+            for line in path.read_text(encoding="utf-8", errors="replace").splitlines()
+        ]
     except OSError:
         return ""
     excerpt = [line for line in lines if line.strip()][-12:]
@@ -90,7 +92,9 @@ def issue_tag(issue: Issue) -> str:
 
 
 def shellcheck_code(issue: Issue) -> str:
-    text = " ".join(str(issue.get(key, "")) for key in ("title", "description", "context"))
+    text = " ".join(
+        str(issue.get(key, "")) for key in ("title", "description", "context")
+    )
     for token in text.split():
         if token.upper().startswith("SC") and token[2:].isdigit():
             return token.upper().rstrip(":")
@@ -140,7 +144,9 @@ def build_title(issue: Issue, files: list[str]) -> str:
     if issue_type == "foundation_drift":
         return trim_title(f"fix foundation reference to {Path(display_path).name}")
     if issue_type == "go_coverage":
-        return trim_title(f"add test coverage for {coverage_target(issue, display_path)}")
+        return trim_title(
+            f"add test coverage for {coverage_target(issue, display_path)}"
+        )
     return trim_title(f"resolve {issue_type} issue {issue.get('id', 'unknown')}")
 
 
@@ -193,7 +199,9 @@ def build_approach(issue: Issue, files: list[str], failure_context: str) -> str:
         ]
 
     if failure_context:
-        lines.append("Address the previously observed failure context during this retry:")
+        lines.append(
+            "Address the previously observed failure context during this retry:"
+        )
         lines.extend(failure_context.splitlines())
 
     return "\n".join(lines)
@@ -274,13 +282,21 @@ def build_acceptance(issue: Issue, files: list[str]) -> list[str]:
 def build_risks(issue: Issue) -> list[str]:
     issue_type = str(issue.get("type", "issue"))
     if issue_type == "todo":
-        return ["Narrowing TODO detection too aggressively could hide legitimate repository annotations."]
+        return [
+            "Narrowing TODO detection too aggressively could hide legitimate repository annotations."
+        ]
     if issue_type in {"shellcheck", "ruff", "go_vet"}:
-        return ["A minimal lint fix can still change behavior if quoting, control flow, or types are adjusted incorrectly."]
+        return [
+            "A minimal lint fix can still change behavior if quoting, control flow, or types are adjusted incorrectly."
+        ]
     if issue_type == "go_test":
-        return ["Patching only the test without understanding the failure could mask a real runtime bug."]
+        return [
+            "Patching only the test without understanding the failure could mask a real runtime bug."
+        ]
     if issue_type == "go_coverage":
-        return ["Coverage-only tests can become brittle if they overspecify internal implementation details."]
+        return [
+            "Coverage-only tests can become brittle if they overspecify internal implementation details."
+        ]
     return ["Keep the fix tightly scoped so unrelated behavior does not change."]
 
 
@@ -311,7 +327,9 @@ def render_yaml(plan: dict[str, Any]) -> str:
     return "\n".join(lines) + "\n"
 
 
-def build_plan(repo_dir: Path, workflow_id: str, issue: Issue, failure_context: str) -> tuple[Path, dict[str, Any]]:
+def build_plan(
+    repo_dir: Path, workflow_id: str, issue: Issue, failure_context: str
+) -> tuple[Path, dict[str, Any]]:
     files = actionable_files(repo_dir, issue)
     title = build_title(issue, files)
     plan = {
@@ -332,9 +350,15 @@ def build_plan(repo_dir: Path, workflow_id: str, issue: Issue, failure_context: 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Generate a deterministic SAIL plan")
     parser.add_argument("--repo-dir", required=True, help="Repository root")
-    parser.add_argument("--workflow-id", required=True, help="Workflow id used to name the plan file")
-    parser.add_argument("--issue-json", required=True, help="JSON-encoded issue payload")
-    parser.add_argument("--failure-context-file", default="", help="Optional retry failure context file")
+    parser.add_argument(
+        "--workflow-id", required=True, help="Workflow id used to name the plan file"
+    )
+    parser.add_argument(
+        "--issue-json", required=True, help="JSON-encoded issue payload"
+    )
+    parser.add_argument(
+        "--failure-context-file", default="", help="Optional retry failure context file"
+    )
     args = parser.parse_args()
 
     repo_dir = Path(args.repo_dir).resolve()

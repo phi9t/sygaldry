@@ -8,21 +8,23 @@ A previous attempt to fix this issue failed the validation gate (`./validate_all
 
 Issue: **${{ params.issue_title }}**
 
-## Validation Failure
-
-Read the captured validation output from: `${{ params.failure_context_file }}`
-
-This file contains the stderr from the failed `validate_all.sh --quick` run.
-
 ## Your Task
 
 1. Read `CLAUDE.md` for repository conventions.
-2. Read the validation failure output from `${{ params.failure_context_file }}`.
-3. Review the changes made in the previous attempt (`git diff HEAD`).
-4. Diagnose why validation failed and apply a corrected fix.
-5. Reset any broken intermediate state with `git checkout -- <files>` before re-editing.
-6. Keep changes minimal — fix only what the validator complains about.
-7. Do **not** commit or push — the pipeline handles that.
+2. Read the planner's task plan from `${{ params.plan_file }}`.
+3. Use the plan's `approach` section to understand the previously observed validation failure context for this retry.
+4. If the plan's `approach` starts with `SKIP:`, do nothing and exit 0.
+5. Otherwise implement each file change listed in `files_to_change`:
+   - Keep the edits minimal and focused on the validation failure path.
+   - If the plan mentions a rollback patch artifact from the failed attempt, inspect that patch instead of relying on `git diff HEAD`.
+   - Do **not** use `git checkout -- <files>` or otherwise discard unrelated working tree state.
+6. After editing, verify the fix logically satisfies the `acceptance_criteria`.
+7. Do **not** run `validate_all.sh` yourself — the pipeline will do that next.
+8. Do **not** create a commit — the pipeline handles that after validation.
+
+## Repository Root
+
+Working directory: `${{ params.repo_dir }}`
 
 ## Issue Context
 
