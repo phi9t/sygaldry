@@ -351,3 +351,29 @@ func TestStringMapFlag(t *testing.T) {
 		t.Fatal("expected parse failure")
 	}
 }
+
+func TestRunCommandMissingPlan(t *testing.T) {
+	err := runCommand([]string{})
+	if err == nil || err.Error() != "-plan is required" {
+		t.Fatalf("expected '-plan is required', got: %v", err)
+	}
+}
+
+func TestRunCommandPlanFileNotFound(t *testing.T) {
+	err := runCommand([]string{"-plan", "/nonexistent/path/plan.yaml"})
+	if err == nil || !strings.Contains(err.Error(), "unable to read plan file") {
+		t.Fatalf("expected 'unable to read plan file', got: %v", err)
+	}
+}
+
+func TestRunCommandInvalidPlan(t *testing.T) {
+	dir := t.TempDir()
+	planPath := filepath.Join(dir, "bad.yaml")
+	if err := os.WriteFile(planPath, []byte("steps: []\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	err := runCommand([]string{"-plan", planPath})
+	if err == nil || !strings.Contains(err.Error(), "plan validation failed") {
+		t.Fatalf("expected 'plan validation failed', got: %v", err)
+	}
+}
