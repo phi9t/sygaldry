@@ -4,10 +4,10 @@
 # Usage: git_ops.sh <op> [options]
 #
 # Operations:
-#   branch          Create a new branch from base-branch (default: main)
+#   branch          Create a new branch from base-branch, or sync base-branch for direct landing
 #   commit          Stage all changes and create a commit
 #   push            Push the branch to origin
-#   create-pr       Create a GitHub pull request via gh CLI
+#   create-pr       Create a GitHub pull request via gh CLI, or no-op for direct landing
 #   reset           Hard-reset the branch to HEAD (discard working-tree changes)
 #   delete-branch   Delete a local branch (and attempt remote deletion)
 #
@@ -74,6 +74,18 @@ case "${OP}" in
 
     branch)
         [[ -n "${BRANCH}" ]] || die "branch: --branch is required"
+        if [[ "${BRANCH}" == "${BASE_BRANCH}" ]]; then
+            log "syncing base branch '${BASE_BRANCH}' for direct landing"
+            git fetch origin "${BASE_BRANCH}" 2>/dev/null || true
+            git checkout "${BASE_BRANCH}" 2>/dev/null \
+                || git checkout -B "${BASE_BRANCH}" "${BASE_BRANCH}"
+            if git rev-parse --verify "origin/${BASE_BRANCH}" >/dev/null 2>&1; then
+                git reset --hard "origin/${BASE_BRANCH}"
+            fi
+            echo "::set-output name=branch::${BASE_BRANCH}"
+            log "base branch '${BASE_BRANCH}' ready"
+            exit 0
+        fi
         log "creating branch '${BRANCH}' from '${BASE_BRANCH}'"
         git fetch origin "${BASE_BRANCH}" 2>/dev/null || true
         git checkout -B "${BRANCH}" "origin/${BASE_BRANCH}" 2>/dev/null \
@@ -113,6 +125,11 @@ case "${OP}" in
 
     create-pr)
         [[ -n "${BRANCH}" ]] || BRANCH="$(git rev-parse --abbrev-ref HEAD)"
+        if [[ "${BRANCH}" == "${BASE_BRANCH}" ]]; then
+            log "direct landing complete on '${BRANCH}'; skipping PR creation"
+            echo "::set-output name=landed_branch::${BRANCH}"
+            exit 0
+        fi
         [[ -n "${PR_TITLE}" ]] || die "create-pr: --pr-title is required"
         command -v gh >/dev/null 2>&1 || die "create-pr: gh CLI not found; install GitHub CLI"
         log "creating PR from '${BRANCH}' → '${BASE_BRANCH}'"

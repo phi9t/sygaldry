@@ -6,7 +6,7 @@
 #   issue_json         JSON string describing the issue (from discover_issues.py)
 #   issue_title        Short title used in commit and PR (e.g. "fix SC2155 in git_ops.sh")
 #   issue_type         Issue classification (e.g. shellcheck|go_vet|todo)
-#   branch_name        Branch to create (e.g. "agentic/20260307-120000-fix-sc2155")
+#   branch_name        Target branch (e.g. "agentic/..." or "main" for direct landing)
 #   repo_dir           Absolute path to the repo root
 #   workflow_id        Workflow ID (used to name the plan temp file)
 #   implementer_engine Engine for the implement step (claude|codex|cursor|echo)
@@ -31,9 +31,9 @@ steps:
     working_dir: ${{ params.repo_dir }}
     timeout_seconds: 600
 
-  # ── 2. Create branch ──────────────────────────────────────────────────────
+  # ── 2. Prepare target branch ──────────────────────────────────────────────
   - id: branch
-    name: Create agentic branch
+    name: Prepare target branch
     type: git_op
     depends_on: [plan]
     git_op:

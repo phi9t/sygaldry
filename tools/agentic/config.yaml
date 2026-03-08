@@ -20,3 +20,4 @@ loop:
 repo:
   dir: /mnt/data_infra/workspace/sygaldry  # absolute path to the sygaldry repo
   base_branch: main
+  landing_mode: direct                     # direct | pull_request

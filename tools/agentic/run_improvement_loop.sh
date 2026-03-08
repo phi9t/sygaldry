@@ -41,6 +41,7 @@ RUN_ID="${SAIL_RUN_ID:-}"
 ARTIFACTS_DIR="${SAIL_ARTIFACTS_DIR:-}"
 ISSUES_FILE="${SAIL_ISSUES_FILE:-}"
 RUN_KIND="${SAIL_RUN_KIND:-primary}"
+LANDING_MODE=""
 
 RUN_FILE=""
 DISCOVERED_ISSUES_FILE=""
@@ -184,7 +185,7 @@ _write_run_metadata() {
         "$SUCCEEDED" "$FAILED" "$TOTAL" "$PLANNER_ENGINE" "$PLANNER_MODEL" \
         "$IMPLEMENTER_ENGINE" "$IMPLEMENTER_MODEL" "$MAX_TASKS" "$MAX_RETRIES" \
         "$MIN_PRIORITY" "$MAX_PARALLEL" "$TEMPORAL_ADDRESS" "$TEMPORAL_NAMESPACE" \
-        "$TEMPORAL_TASK_QUEUE" <<'PY'
+        "$TEMPORAL_TASK_QUEUE" "$LANDING_MODE" <<'PY'
 import json
 import subprocess
 import sys
@@ -217,7 +218,8 @@ from pathlib import Path
     temporal_address,
     temporal_namespace,
     temporal_task_queue,
-) = sys.argv[1:27]
+    landing_mode,
+) = sys.argv[1:28]
 
 repo = Path(repo_dir)
 
@@ -265,6 +267,10 @@ payload = {
             "namespace": temporal_namespace,
             "taskQueue": temporal_task_queue,
         },
+        "repo": {
+            "baseBranch": base_branch,
+            "landingMode": landing_mode,
+        },
     },
 }
 Path(path).write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
@@ -304,11 +310,13 @@ print(payload.get("workflowId", ""))
 print(payload.get("runId", ""))
 steps = payload.get("result", {}).get("steps", []) if isinstance(payload.get("result"), dict) else []
 pr_url = ""
+landed_branch = ""
 patch_file = ""
 validate_failed = False
 for step in steps:
     if step.get("id") == "create_pr":
         pr_url = step.get("result", {}).get("outputs", {}).get("pr_url", "")
+        landed_branch = step.get("result", {}).get("outputs", {}).get("landed_branch", "")
     if step.get("id") == "validate" and step.get("state") == "failed":
         validate_failed = True
     if step.get("id") == "rollback":
@@ -316,6 +324,8 @@ for step in steps:
 disposition = "workflow_failed"
 if pr_url:
     disposition = "pr_created"
+elif landed_branch:
+    disposition = "landed"
 elif validate_failed or patch_file:
     disposition = "rolled_back"
 elif payload.get("result") is None:
@@ -323,6 +333,7 @@ elif payload.get("result") is None:
 else:
     disposition = "completed_without_pr"
 print(pr_url)
+print(landed_branch)
 print(patch_file)
 print(disposition)
 PY
@@ -417,7 +428,7 @@ _is_already_handled() {
             grep "\"${issue_id}\"" "${ATTEMPTED_FILE}" \
                 | python3 -c "import json,sys; entries=list(map(json.loads,sys.stdin)); print(entries[-1].get('status',''))" 2>/dev/null || true
         )"
-        if [[ "${last_status}" == "pr_created" || "${last_status}" == "skipped" ]]; then
+        if [[ "${last_status}" == "pr_created" || "${last_status}" == "landed" || "${last_status}" == "skipped" ]]; then
             return 0
         fi
     fi
@@ -477,7 +488,11 @@ _run_issue() {
     issue_priority="$(_json_get_issue_field "${issue_json}" priority)"
     timestamp="$(date +'%Y%m%d-%H%M%S')"
     slug="$(echo "${issue_id}" | tr '/' '-' | tr '[:upper:]' '[:lower:]')"
-    branch_name="agentic/${timestamp}-${slug}"
+    if [[ "${LANDING_MODE}" == "direct" ]]; then
+        branch_name="${BASE_BRANCH}"
+    else
+        branch_name="agentic/${timestamp}-${slug}"
+    fi
     workflow_id="sail-${timestamp}-${slug}"
 
     local issue_dir="${ARTIFACTS_DIR}/issues/${slug}"
@@ -494,7 +509,8 @@ _run_issue() {
         return 0
     fi
 
-    if git -C "${REPO_DIR}" ls-remote --heads origin "agentic/*-${slug}" 2>/dev/null | grep -q .; then
+    if [[ "${LANDING_MODE}" != "direct" ]] && \
+        git -C "${REPO_DIR}" ls-remote --heads origin "agentic/*-${slug}" 2>/dev/null | grep -q .; then
         log "   skipping ${issue_id}: branch agentic/*-${slug} already exists on origin"
         _record_attempt_registry "${issue_id}" "skipped" "${branch_name}" "" "" ""
         _record_issue_attempt "${issue_json}" "skipped_remote_branch" "${branch_name}" 0 "" "" "" "" 0 "" "" "" \
@@ -502,7 +518,7 @@ _run_issue() {
         return 0
     fi
 
-    local attempt=0 success=false pr_url="" patch_file="" temporal_run_id="" final_workflow_id=""
+    local attempt=0 success=false pr_url="" landed_branch="" patch_file="" temporal_run_id="" final_workflow_id=""
     while [[ ${attempt} -le ${MAX_RETRIES} ]]; do
         local attempt_number=$((attempt + 1))
         local attempt_started_at
@@ -573,12 +589,13 @@ _run_issue() {
         parsed_workflow_id="$(echo "${run_result}" | sed -n '1p')"
         parsed_run_id="$(echo "${run_result}" | sed -n '2p')"
         pr_url="$(echo "${run_result}" | sed -n '3p')"
-        patch_file="$(echo "${run_result}" | sed -n '4p')"
-        workflow_disposition="$(echo "${run_result}" | sed -n '5p')"
+        landed_branch="$(echo "${run_result}" | sed -n '4p')"
+        patch_file="$(echo "${run_result}" | sed -n '5p')"
+        workflow_disposition="$(echo "${run_result}" | sed -n '6p')"
         final_workflow_id="${parsed_workflow_id}"
         temporal_run_id="${parsed_run_id}"
 
-        if [[ ${exit_code} -eq 0 && "${workflow_disposition}" == "pr_created" ]]; then
+        if [[ ${exit_code} -eq 0 && ("${workflow_disposition}" == "pr_created" || "${workflow_disposition}" == "landed") ]]; then
             _record_issue_attempt "${issue_json}" "success" "${branch_name}" "${attempt_number}" \
                 "${parsed_workflow_id}" "${parsed_run_id}" "${log_dir}" "${prompt_file}" "${exit_code}" \
                 "${pr_url}" "${patch_file}" "${failure_ctx_flag}" \
@@ -601,7 +618,7 @@ _run_issue() {
 
     if [[ "${success}" == "true" ]]; then
         log "   ✓ issue ${issue_id} handled"
-        _record_attempt_registry "${issue_id}" "pr_created" "${branch_name}" "${pr_url}" "${final_workflow_id}" "${temporal_run_id}"
+        _record_attempt_registry "${issue_id}" "${workflow_disposition}" "${branch_name}" "${pr_url}" "${final_workflow_id}" "${temporal_run_id}"
         return 0
     fi
 
@@ -634,6 +651,7 @@ MAX_RETRIES="${SAIL_MAX_RETRIES:-$(_cfg_section loop max_retries_per_task 2)}"
 MIN_PRIORITY="${SAIL_MIN_PRIORITY:-$(_cfg_section loop min_priority 2)}"
 MAX_PARALLEL="${SAIL_MAX_PARALLEL:-$(_cfg_section loop max_parallel 1)}"
 BASE_BRANCH="${SAIL_BASE_BRANCH:-$(_cfg_section repo base_branch main)}"
+LANDING_MODE="${SAIL_LANDING_MODE:-$(_cfg_section repo landing_mode direct)}"
 
 TEMPORAL_ADDRESS="${TEMPORAL_ADDRESS:-localhost:7233}"
 TEMPORAL_NAMESPACE="${TEMPORAL_NAMESPACE:-default}"
@@ -641,6 +659,9 @@ TEMPORAL_TASK_QUEUE="${TEMPORAL_TASK_QUEUE:-orchestration}"
 
 if [[ "${MAX_PARALLEL}" -gt 1 ]]; then
     die "SAIL_MAX_PARALLEL > 1 is not supported on a single checkout"
+fi
+if [[ "${LANDING_MODE}" != "direct" && "${LANDING_MODE}" != "pull_request" ]]; then
+    die "SAIL landing mode must be 'direct' or 'pull_request' (got: ${LANDING_MODE})"
 fi
 
 if [[ -z "${RUN_ID}" ]]; then
@@ -667,6 +688,7 @@ trap '_write_run_metadata "${FINAL_STATUS}"' EXIT
 log "SAIL starting (run_id=${RUN_ID}, run_kind=${RUN_KIND}, dry_run=${DRY_RUN}, max_tasks=${MAX_TASKS}, max_retries=${MAX_RETRIES})"
 log "planner: engine=${PLANNER_ENGINE} model=${PLANNER_MODEL}"
 log "implementer: engine=${IMPLEMENTER_ENGINE} model=${IMPLEMENTER_MODEL}"
+log "landing: mode=${LANDING_MODE} base_branch=${BASE_BRANCH}"
 log "artifacts: ${ARTIFACTS_DIR}"
 
 if [[ "${DRY_RUN}" != "true" ]]; then
