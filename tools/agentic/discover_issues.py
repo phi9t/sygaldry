@@ -93,7 +93,16 @@ _TODO_RE = re.compile(r"(TODO|FIXME|HACK)\b[:\s]*(.*)", re.IGNORECASE)
 def discover_todos(repo_dir: Path, max_per_type: int) -> list[Issue]:
     try:
         result = subprocess.run(
-            ["git", "grep", "-n", "-E", r"TODO|FIXME|HACK"],
+            [
+                "git",
+                "grep",
+                "-n",
+                "-E",
+                r"TODO|FIXME|HACK",
+                "--",
+                ".",
+                ":(exclude)tools/agentic/discover_issues.py",
+            ],
             cwd=repo_dir,
             capture_output=True,
             text=True,
