@@ -377,3 +377,28 @@ func TestRunCommandInvalidPlan(t *testing.T) {
 		t.Fatalf("expected 'plan validation failed', got: %v", err)
 	}
 }
+
+func TestMergeDockerPushSpec(t *testing.T) {
+	t.Run("nil base gets override image", func(t *testing.T) {
+		result := mergeDockerPushSpec(nil, &workflows.DockerPushSpec{Image: "myrepo/img:latest"})
+		if result.Image != "myrepo/img:latest" {
+			t.Errorf("image = %q, want %q", result.Image, "myrepo/img:latest")
+		}
+	})
+
+	t.Run("base image preserved when override empty", func(t *testing.T) {
+		base := &workflows.DockerPushSpec{Image: "base/img:v1"}
+		result := mergeDockerPushSpec(base, &workflows.DockerPushSpec{})
+		if result.Image != "base/img:v1" {
+			t.Errorf("image = %q, want %q", result.Image, "base/img:v1")
+		}
+	})
+
+	t.Run("override image replaces base", func(t *testing.T) {
+		base := &workflows.DockerPushSpec{Image: "base/img:v1"}
+		result := mergeDockerPushSpec(base, &workflows.DockerPushSpec{Image: "override/img:v2"})
+		if result.Image != "override/img:v2" {
+			t.Errorf("image = %q, want %q", result.Image, "override/img:v2")
+		}
+	})
+}
