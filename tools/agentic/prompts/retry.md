@@ -13,6 +13,8 @@ Issue: **${{ params.issue_title }}**
 1. Read `CLAUDE.md` for repository conventions.
 2. Read the planner's task plan from `${{ params.plan_file }}`.
 3. Use the plan's `approach` section to understand the previously observed validation failure context for this retry.
+   - Focus on any `validate failure summary` or named failing checks in that context; the generic `1 check(s) failed` footer is not the diagnosis.
+   - If the context says the failure signature repeated from the prior retry, change strategy instead of making a cosmetic variant of the previous fix.
 4. If the plan's `approach` starts with `SKIP:`, do nothing and exit 0.
 5. Otherwise implement each file change listed in `files_to_change`:
    - Keep the edits minimal and focused on the validation failure path.
