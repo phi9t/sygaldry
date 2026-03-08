@@ -40,16 +40,21 @@ def run_generate_plan(
 
 
 def test_generate_plan_emits_outputs_and_meaningful_todo_title(tmp_path: Path) -> None:
+    todo_tag = "TO" "DO"
+    fixme_tag = "FIX" "ME"
+    hack_tag = "HA" "CK"
+    scanner_context = f'priority = 2 if tag in ("{fixme_tag}", "{hack_tag}") else 3'
+
     stdout, plan_path = run_generate_plan(
         tmp_path,
         {
             "id": "todo-59c78fad",
             "priority": 2,
             "type": "todo",
-            "title": 'FIXME: ", "HACK") else 3',
-            "description": 'tools/agentic/discover_issues.py:116: priority = 2 if tag in ("FIXME", "HACK") else 3',
+            "title": f'{fixme_tag}: ", "{hack_tag}") else 3',
+            "description": f"tools/agentic/discover_issues.py:116: {scanner_context}",
             "files": ["tools/agentic/discover_issues.py"],
-            "context": 'priority = 2 if tag in ("FIXME", "HACK") else 3',
+            "context": scanner_context,
         },
     )
 
@@ -64,8 +69,10 @@ def test_generate_plan_emits_outputs_and_meaningful_todo_title(tmp_path: Path) -
         'title: "avoid todo false positives in tools/agentic/discover_issues.py"'
         in plan_text
     )
-    assert "Tighten TODO discovery" in plan_text
-    assert "Legitimate TODO/FIXME/HACK comments elsewhere" in plan_text
+    assert f"Tighten {todo_tag} discovery" in plan_text
+    assert (
+        f"Legitimate {todo_tag}/{fixme_tag}/{hack_tag} comments elsewhere" in plan_text
+    )
 
 
 def test_generate_plan_includes_retry_failure_context(tmp_path: Path) -> None:
