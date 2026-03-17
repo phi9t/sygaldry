@@ -41,7 +41,6 @@ func main() {
 	defer c.Close()
 
 	w := worker.New(c, cfg.TaskQueue, worker.Options{})
-	w.RegisterWorkflow(workflows.Orchestrate)
 	w.RegisterWorkflow(workflows.Pipeline)
 	w.RegisterActivity(activities.RunCommand)
 	w.RegisterActivity(activities.DownloadFile)
