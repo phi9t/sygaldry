@@ -37,6 +37,11 @@ import re
 import subprocess
 import sys
 import time
+from concurrent.futures import (
+    ThreadPoolExecutor,
+    as_completed,
+    TimeoutError as FuturesTimeoutError,
+)
 from pathlib import Path
 from typing import Any, Callable
 
@@ -46,6 +51,8 @@ from typing import Any, Callable
 
 Issue = dict[str, Any]
 SourceFunc = Callable[[Path, int], list[Issue]]
+
+SOURCE_TIMEOUT_SECS = 120
 
 
 def _issue_id(issue_type: str, data: str) -> str:
@@ -545,17 +552,58 @@ def main() -> None:
     overall_start = time.perf_counter()
     all_issues: list[Issue] = []
     source_stats: list[dict[str, Any]] = []
-    for name, func in (
+
+    sources = [
         ("go_tests_and_coverage", discover_go_tests_and_coverage),
         ("go_vet", discover_go_vet),
         ("shellcheck", discover_shellcheck),
         ("todo", discover_todos),
         ("ruff", discover_ruff),
         ("foundation_drift", discover_foundation_drift),
-    ):
-        issues, stats = _run_source(name, func, repo_dir, max_per)
-        all_issues.extend(issues)
-        source_stats.append(stats)
+    ]
+
+    with ThreadPoolExecutor(max_workers=len(sources)) as executor:
+        future_to_name = {
+            executor.submit(_run_source, name, func, repo_dir, max_per): name
+            for name, func in sources
+        }
+
+        for future in as_completed(future_to_name):
+            name = future_to_name[future]
+            try:
+                issues, stats = future.result(timeout=SOURCE_TIMEOUT_SECS)
+                all_issues.extend(issues)
+                source_stats.append(stats)
+            except FuturesTimeoutError:
+                print(
+                    f"Warning: source {name!r} timed out after {SOURCE_TIMEOUT_SECS}s",
+                    file=sys.stderr,
+                )
+                source_stats.append(
+                    {
+                        "name": name,
+                        "startedAt": _utc_now(),
+                        "finishedAt": _utc_now(),
+                        "durationSec": float(SOURCE_TIMEOUT_SECS),
+                        "count": 0,
+                        "error": f"FuturesTimeoutError: exceeded {SOURCE_TIMEOUT_SECS}s",
+                    }
+                )
+            except Exception as exc:  # pragma: no cover
+                print(
+                    f"Error: source {name!r} failed with unexpected error: {exc}",
+                    file=sys.stderr,
+                )
+                source_stats.append(
+                    {
+                        "name": name,
+                        "startedAt": _utc_now(),
+                        "finishedAt": _utc_now(),
+                        "durationSec": 0.0,
+                        "count": 0,
+                        "error": f"UnexpectedError: {exc}",
+                    }
+                )
 
     filtered = [i for i in all_issues if i["priority"] <= args.min_priority]
     filtered.sort(key=lambda i: (i["priority"], i["id"]))
