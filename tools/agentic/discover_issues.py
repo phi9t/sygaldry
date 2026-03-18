@@ -24,7 +24,7 @@ Output: JSON array of issues sorted by priority (1=critical, 2=high, 3=normal),
         }
 
 Usage:
-  python3 tools/agentic/discover_issues.py [--repo-dir <path>] [--max-per-type N]
+  python3 tools/agentic/discover_issues.py [--repo-dir <path>] [--max-per-type N] [--sources <name,name,...>]
 """
 
 from __future__ import annotations
@@ -554,6 +554,10 @@ def main() -> None:
     parser.add_argument(
         "--stats-file", help="Write discovery timing/count metadata to this JSON file"
     )
+    parser.add_argument(
+        "--sources",
+        help="Comma-separated list of source names to run (e.g. shellcheck,ruff)",
+    )
     args = parser.parse_args()
 
     repo_dir = Path(args.repo_dir).resolve()
@@ -573,7 +577,11 @@ def main() -> None:
         ("foundation_drift", discover_foundation_drift),
     ]
 
-    with ThreadPoolExecutor(max_workers=len(sources)) as executor:
+    if args.sources:
+        names = {s.strip() for s in args.sources.split(",")}
+        sources = [(n, f) for n, f in sources if n in names]
+
+    with ThreadPoolExecutor(max_workers=len(sources) or 1) as executor:
         future_to_name = {
             executor.submit(_run_source, name, func, repo_dir, max_per): name
             for name, func in sources
