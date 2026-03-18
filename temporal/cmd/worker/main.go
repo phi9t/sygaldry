@@ -1,8 +1,9 @@
 package main
 
 import (
-	"log"
+	"log/slog"
 	"os"
+	"time"
 
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/worker"
@@ -35,13 +36,18 @@ func main() {
 		Namespace: cfg.Namespace,
 	})
 	if err != nil {
-		log.Fatalf("unable to create Temporal client (address=%s): %v",
-			cfg.Address, err)
+		slog.Error("unable to create Temporal client", "address", cfg.Address, "error", err)
+		os.Exit(1)
 	}
 	defer c.Close()
 
-	w := worker.New(c, cfg.TaskQueue, worker.Options{})
+	w := worker.New(c, cfg.TaskQueue, worker.Options{
+		DeadlockDetectionTimeout: 5 * time.Second,
+		WorkerStopTimeout:        30 * time.Second,
+	})
 	w.RegisterWorkflow(workflows.Pipeline)
+	w.RegisterWorkflow(workflows.RFCImpl)
+	w.RegisterWorkflow(workflows.RFCTaskWorkflow)
 	w.RegisterActivity(activities.RunCommand)
 	w.RegisterActivity(activities.DownloadFile)
 	w.RegisterActivity(activities.DockerBuild)
@@ -53,11 +59,13 @@ func main() {
 	w.RegisterActivity(activities.K8sJob)
 	w.RegisterActivity(activities.AgentTask)
 	w.RegisterActivity(activities.GitOp)
+	w.RegisterActivity(activities.MultiEngineAgentTask)
+	w.RegisterActivity(activities.ReadJSONFile)
 
-	log.Printf("worker started on task queue %s (address=%s, namespace=%s)",
-		cfg.TaskQueue, cfg.Address, cfg.Namespace)
+	slog.Info("worker started", "taskQueue", cfg.TaskQueue, "address", cfg.Address, "namespace", cfg.Namespace)
 	if err := w.Run(worker.InterruptCh()); err != nil {
-		log.Fatalf("worker failed: %v", err)
+		slog.Error("worker failed", "error", err)
+		os.Exit(1)
 	}
 }
 

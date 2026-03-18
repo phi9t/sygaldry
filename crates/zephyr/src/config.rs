@@ -161,6 +161,7 @@ impl ZephyrConfig {
             lease_mode,
             cache_profile,
             launch_mode,
+            // Keep in sync with container/launch_container.sh PYTHON_VERSION default.
             python_version: env_or("PYTHON_VERSION", "3.13"),
             rust_version: env_or("RUST_VERSION", "1.79.0"),
             go_version: env_or("GO_VERSION", "1.21.5"),

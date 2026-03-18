@@ -1,0 +1,262 @@
+
+ ▐▛███▜▌   Claude Code v2.1.58
+▝▜█████▛▘  Sonnet 4.6 · Claude Pro
+  ▘▘ ▝▝    /mnt/data_infra/workspace/sygaldry
+
+╭──────────────────────────────────────────────────────────────────────────────╮
+│ Plan to implement                                                            │
+│                                                                              │
+│ SAIL Supervisor — Non-Stop Self-Healing Loop                                 │
+│                                                                              │
+│ Context                                                                      │
+│                                                                              │
+│ SAIL (sail_cron.sh + run_improvement_loop.sh) already runs autonomously, but │
+│  currently requires                                                          │
+│ a human to notice when it stalls (dead worker, Temporal down, stuck issue,   │
+│ etc.). The user wants a                                                      │
+│ lightweight supervisor that:                                                 │
+│                                                                              │
+│ 1. Programmatically polls health (no LLM) — Temporal reachability, worker    │
+│ liveness, heartbeat                                                          │
+│ freshness, cron lock state                                                   │
+│ 2. LLM-heals when a problem is detected — launches claude -p with a          │
+│ diagnostic prompt                                                            │
+│ 3. Reports status when healthy — logs are append-only JSONL for easy         │
+│ tail/watch                                                                   │
+│ 4. Exposes enough data for agentsview (auto-discovery — no adapter needed;   │
+│ claude -p sessions                                                           │
+│ already appear under ~/.claude/projects/-mnt-data-infra-workspace-sygaldry/) │
+│                                                                              │
+│ ---                                                                          │
+│ Files to Create / Modify                                                     │
+│                                                                              │
+│ ┌─────────────────────────────────────────┬────────┬───────────────────────┐ │
+│ │                  File                   │ Action │         Lines         │ │
+│ ├─────────────────────────────────────────┼────────┼───────────────────────┤ │
+│ │ tools/agentic/sail_supervisor.py        │ Create │ ~300                  │ │
+│ ├─────────────────────────────────────────┼────────┼───────────────────────┤ │
+│ │ tools/agentic/prompts/supervisor_fix.md │ Create │ ~60                   │ │
+│ ├─────────────────────────────────────────┼────────┼───────────────────────┤ │
+│ │ tools/agentic/run_improvement_loop.sh   │ Modify │ +3 lines (heartbeat)  │ │
+│ ├─────────────────────────────────────────┼────────┼───────────────────────┤ │
+│ │ tools/agentic/sail_cron.sh              │ Modify │ +2 lines (export      │ │
+│ │                                         │        │ heartbeat path)       │ │
+│ ├─────────────────────────────────────────┼────────┼───────────────────────┤ │
+│ │ bin/sygaldry                            │ Modify │ +4 lines (supervisor  │ │
+│ │                                         │        │ subcommand)           │ │
+│ ├─────────────────────────────────────────┼────────┼───────────────────────┤ │
+│ │                                         │        │ +8 lines              │ │
+│ │ justfile                                │ Modify │ (sail-supervisor      │ │
+│ │                                         │        │ recipes)              │ │
+│ └─────────────────────────────────────────┴────────┴───────────────────────┘ │
+│                                                                              │
+│ ---                                                                          │
+│ 1 — Heartbeat Wiring (run_improvement_loop.sh + sail_cron.sh)                │
+│                                                                              │
+│ sail_cron.sh — export fixed heartbeat path                                   │
+│                                                                              │
+│ Add after the mkdir -p line (line 67):                                       │
+│ HEARTBEAT_FILE="${RUNTIME_ROOT}/heartbeat"                                   │
+│ export SAIL_HEARTBEAT_FILE="${HEARTBEAT_FILE}"                               │
+│                                                                              │
+│ run_improvement_loop.sh — touch heartbeat at two points                      │
+│                                                                              │
+│ Point A — inside _run_issue(), after mkdir -p "${log_dir}" (line 613):       │
+│ [[ -n "${SAIL_HEARTBEAT_FILE:-}" ]] && touch "${SAIL_HEARTBEAT_FILE}"        │
+│                                                                              │
+│ Point B — main issue loop, after PROCESSED=$((PROCESSED + 1)) (line 801):    │
+│ [[ -n "${SAIL_HEARTBEAT_FILE:-}" ]] && touch "${SAIL_HEARTBEAT_FILE}"        │
+│                                                                              │
+│ ---                                                                          │
+│ 2 — sail_supervisor.py (stdlib only, ~300 lines)                             │
+│                                                                              │
+│ Location: tools/agentic/sail_supervisor.py                                   │
+│                                                                              │
+│ Configuration (env vars / CLI flags)                                         │
+│                                                                              │
+│ SAIL_RUNTIME_ROOT    default:                                                │
+│ /mnt/data_infra/zephyr_container_infra/sygaldry/logs/sail                    │
+│ SAIL_STALL_SECS      default: 600  (10 min with no heartbeat = stalled)      │
+│ SAIL_POLL_SECS       default: 30   (check interval)                          │
+│ SAIL_FIX_COOLDOWN    default: 300  (5 min between LLM fix attempts)          │
+│ SAIL_FIX_TIMEOUT     default: 300  (max seconds to wait for LLM fix)         │
+│ SAIL_MAX_FIX_TRIES   default: 10   (give up after N consecutive fix          │
+│ failures)                                                                    │
+│ TEMPORAL_ADDRESS     default: localhost:7233                                 │
+│                                                                              │
+│ Output files                                                                 │
+│                                                                              │
+│ ${RUNTIME_ROOT}/supervisor_status.json    # latest state snapshot            │
+│ (overwritten each poll)                                                      │
+│ ${RUNTIME_ROOT}/supervisor_events.jsonl   # append-only event log            │
+│                                                                              │
+│ Health check functions (pure Python, no LLM)                                 │
+│                                                                              │
+│ ┌──────────────────────┬───────────────────────────────────────────────────┐ │
+│ │       Function       │                     Mechanism                     │ │
+│ ├──────────────────────┼───────────────────────────────────────────────────┤ │
+│ │ check_temporal()     │ socket.create_connection((host, port), timeout=3) │ │
+│ ├──────────────────────┼───────────────────────────────────────────────────┤ │
+│ │ check_worker()       │ os.kill(int(worker.pid.read_text()), 0)           │ │
+│ ├──────────────────────┼───────────────────────────────────────────────────┤ │
+│ │ check_cron_running() │ fcntl.flock(fd, LOCK_EX | LOCK_NB) →              │ │
+│ │                      │ BlockingIOError = running                         │ │
+│ ├──────────────────────┼───────────────────────────────────────────────────┤ │
+│ │ check_heartbeat()    │ os.stat(heartbeat).st_mtime vs time.time()        │ │
+│ ├──────────────────────┼───────────────────────────────────────────────────┤ │
+│ │ check_last_status()  │ Read last_status.json                             │ │
+│ └──────────────────────┴───────────────────────────────────────────────────┘ │
+│                                                                              │
+│ State machine                                                                │
+│                                                                              │
+│ States: idle | running | stalled | worker_dead | temporal_dead | fixing |    │
+│ error                                                                        │
+│                                                                              │
+│ Transitions:                                                                 │
+│   any        → temporal_dead  when Temporal TCP fails 3 consecutive polls    │
+│   any        → worker_dead    when worker.pid process dead while cron lock   │
+│ held                                                                         │
+│   running    → stalled        when heartbeat age > STALL_SECS                │
+│   bad_state  → fixing         when LLM fix launched (cooldown expired, tries │
+│  < max)                                                                      │
+│   fixing     → idle           when fix complete + re-checks pass             │
+│   fixing     → error          when consecutive fix failures >=               │
+│ SAIL_MAX_FIX_TRIES                                                           │
+│   cron_lock  → running        when flock check shows lock held               │
+│   no_lock    → idle           when flock check shows lock free               │
+│                                                                              │
+│ Main loop pseudocode                                                         │
+│                                                                              │
+│ while not shutdown_requested:                                                │
+│     state, issues = assess_health()                                          │
+│     write_status(state, issues)          # supervisor_status.json            │
+│     append_event("heartbeat", state)    # supervisor_events.jsonl            │
+│                                                                              │
+│     if state in ("stalled", "worker_dead", "temporal_dead"):                 │
+│         if cooldown_expired() and fix_tries < MAX_FIX_TRIES:                 │
+│             launch_llm_fix(state, issues)                                    │
+│     elif state == "running":                                                 │
+│         log(f"SAIL running — heartbeat age {heartbeat_age:.0f}s")            │
+│     elif state == "idle":                                                    │
+│         log("SAIL idle (cron not running)")                                  │
+│                                                                              │
+│     time.sleep(POLL_SECS)                                                    │
+│                                                                              │
+│ LLM fix invocation                                                           │
+│                                                                              │
+│ subprocess.run(                                                              │
+│     ["claude", "-p", prompt,                                                 │
+│      "--allowedTools", "Read,Bash,Edit,Write,Glob,Grep",                     │
+│      "--permission-mode", "acceptEdits"],                                    │
+│     cwd=REPO_DIR,                                                            │
+│     timeout=FIX_TIMEOUT,                                                     │
+│ )                                                                            │
+│ Context injected: state, heartbeat age, last 50 lines of worker.log,         │
+│ last_status.json, Temporal reachable.                                        │
+│                                                                              │
+│ CLI flags                                                                    │
+│                                                                              │
+│ --once          poll once and exit (for testing)                             │
+│ --poll-secs N   override interval                                            │
+│ --stall-secs N  override stall threshold                                     │
+│ --no-fix        disable LLM fix (monitor only)                               │
+│ --runtime-root  override SAIL_RUNTIME_ROOT                                   │
+│                                                                              │
+│ ---                                                                          │
+│ 3 — prompts/supervisor_fix.md                                                │
+│                                                                              │
+│ Template with {{context}} placeholder injected at runtime:                   │
+│                                                                              │
+│ # SAIL Supervisor — Self-Healing Fix                                         │
+│                                                                              │
+│ You are the SAIL supervisor's LLM fix agent. SAIL is broken. Diagnose and    │
+│ fix it.                                                                      │
+│                                                                              │
+│ ## Detected problem                                                          │
+│                                                                              │
+│ {{context}}                                                                  │
+│                                                                              │
+│ ## Key files to inspect                                                      │
+│ - Worker log: ${RUNTIME_ROOT}/infra/worker.log  (last 100 lines)             │
+│ - Last status: ${RUNTIME_ROOT}/last_status.json                              │
+│ - Heartbeat:   ${RUNTIME_ROOT}/heartbeat                                     │
+│                                                                              │
+│ ## Fix priorities                                                            │
+│ 1. Temporal down → `cd temporal && docker compose up -d`                     │
+│ 2. Worker dead   → restart `go run ./cmd/worker` (see sail_cron.sh           │
+│ restart_worker())                                                            │
+│ 3. Stalled issue → check `.agentic/attempted.jsonl`, remove stuck entry,     │
+│ `git checkout main`                                                          │
+│ 4. Dirty worktree → `git checkout main && git stash || git checkout -f main` │
+│                                                                              │
+│ Verify fix: nc -z localhost 7233 && kill -0 $(cat                            │
+│ ${RUNTIME_ROOT}/infra/worker.pid)                                            │
+│ Report what you did in 2-3 sentences.                                        │
+│                                                                              │
+│ ---                                                                          │
+│ 4 — bin/sygaldry — supervisor subcommand                                     │
+│                                                                              │
+│ In sail) case block, before the *) fallthrough (~line 162):                  │
+│ supervisor)                                                                  │
+│     shift                                                                    │
+│     exec python3 "${SYGALDRY_HOME}/tools/agentic/sail_supervisor.py" "$@"    │
+│     ;;                                                                       │
+│                                                                              │
+│ ---                                                                          │
+│ 5 — justfile additions                                                       │
+│                                                                              │
+│ sail-supervisor:                                                             │
+│     {{sygaldry_bin}} sail supervisor                                         │
+│                                                                              │
+│ sail-supervisor-once:                                                        │
+│     {{sygaldry_bin}} sail supervisor --once                                  │
+│                                                                              │
+│ sail-supervisor-status:                                                      │
+│     @python3 -c "import json,pathlib,os;                                     │
+│ p=pathlib.Path(os.environ.get('SAIL_RUNTIME_ROOT','/mnt/data_infra/zephyr_co │
+│ ntainer_infra/sygaldry/logs/sail')+'\/supervisor_status.json');              │
+│ print(json.dumps(json.loads(p.read_text()),indent=2)) if p.exists() else     │
+│ print('no status yet')"                                                      │
+│                                                                              │
+│ ---                                                                          │
+│ 6 — agentsview Integration                                                   │
+│                                                                              │
+│ No code changes required. agentsview auto-discovers                          │
+│ ~/.claude/projects/<escaped-cwd>/.                                           │
+│                                                                              │
+│ All claude -p calls in agent_task.go and supervisor fixes run with           │
+│ CWD=sygaldry repo,                                                           │
+│ so their sessions automatically appear in agentsview without any adapter.    │
+│                                                                              │
+│ To use agentsview: git clone https://github.com/wesm/agentsview && cd        │
+│ agentsview && npm run dev                                                    │
+│ then open http://localhost:5173.                                             │
+│                                                                              │
+│ ---                                                                          │
+│ Verification                                                                 │
+│                                                                              │
+│ # Validate plan file still parses                                            │
+│ sygaldry sail validate-plan                                                  │
+│                                                                              │
+│ # Test single poll (exits immediately)                                       │
+│ sygaldry sail supervisor --once                                              │
+│                                                                              │
+│ # Start continuous supervisor in background                                  │
+│ sygaldry sail supervisor &                                                   │
+│                                                                              │
+│ # Watch events stream                                                        │
+│ tail -f /mnt/data_infra/zephyr_container_infra/sygaldry/logs/sail/supervisor │
+│ _events.jsonl                                                                │
+│                                                                              │
+│ # Run a full cron cycle; confirm heartbeat is touched                        │
+│ sygaldry sail cron                                                           │
+│ stat /mnt/data_infra/zephyr_container_infra/sygaldry/logs/sail/heartbeat     │
+│                                                                              │
+│ # Check status summary                                                       │
+│ just sail-supervisor-status                                                  │
+│                                                                              │
+│ # Simulate worker failure: kill worker PID, wait >30s, observe fix launch in │
+│  events                                                                      │
+╰──────────────────────────────────────────────────────────────────────────────╯
+  ⎿  You've hit your limit · resets 8am (UTC)
+     /upgrade or /extra-usage to finish what you’re working on.

@@ -24,6 +24,7 @@ type GitOpInput struct {
 	PRTitle       string            `json:"prTitle"`       // used by create-pr op
 	PRBody        string            `json:"prBody"`        // used by create-pr op
 	GitOpsScript  string            `json:"gitOpsScript"`  // auto-resolved if empty
+	WorktreePath  string            `json:"worktreePath"`  // used by worktree-* ops
 	Env           map[string]string `json:"env"`
 	TimeoutSecs   int               `json:"timeoutSeconds"` // default 300
 }
@@ -36,16 +37,20 @@ func GitOp(ctx context.Context, input GitOpInput) (RunCommandResult, error) {
 	}
 
 	validOps := map[string]bool{
-		"branch":        true,
-		"commit":        true,
-		"push":          true,
-		"create-pr":     true,
-		"reset":         true,
-		"delete-branch": true,
+		"branch":          true,
+		"commit":          true,
+		"push":            true,
+		"create-pr":       true,
+		"reset":           true,
+		"delete-branch":   true,
+		"worktree-add":    true,
+		"worktree-commit": true,
+		"worktree-remove": true,
+		"worktree-land":   true,
 	}
 	if !validOps[input.Op] {
 		return RunCommandResult{ExitCode: -1}, fmt.Errorf(
-			"git_op: unsupported op %q (must be one of: branch, commit, push, create-pr, reset, delete-branch)",
+			"git_op: unsupported op %q (must be one of: branch, commit, push, create-pr, reset, delete-branch, worktree-add, worktree-commit, worktree-remove, worktree-land)",
 			input.Op,
 		)
 	}
@@ -78,6 +83,9 @@ func GitOp(ctx context.Context, input GitOpInput) (RunCommandResult, error) {
 	}
 	if input.PRBody != "" {
 		args = append(args, "--pr-body", input.PRBody)
+	}
+	if input.WorktreePath != "" {
+		args = append(args, "--worktree-path", input.WorktreePath)
 	}
 
 	return runCommand(ctx, RunCommandInput{

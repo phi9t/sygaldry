@@ -73,7 +73,8 @@ readonly CONTAINER_IMAGE="${SYGALDRY_IMAGE:-${DEFAULT_CONTAINER_IMAGE}}"
 readonly CONTAINER_USER="kvothe"
 
 readonly BAZEL_VERSION="${BAZEL_VERSION:-6.4.0}"
-readonly PYTHON_VERSION="${PYTHON_VERSION:-3.12}"
+# Keep in sync with crates/zephyr/src/config.rs PYTHON_VERSION default.
+readonly PYTHON_VERSION="${PYTHON_VERSION:-3.13}"
 readonly RUST_VERSION="${RUST_VERSION:-1.79.0}"
 readonly GO_VERSION="${GO_VERSION:-1.21.5}"
 

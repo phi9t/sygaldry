@@ -414,6 +414,7 @@ func activityOptionsForStep(base workflow.ActivityOptions, step PipelineStep) wo
 
 	return workflow.ActivityOptions{
 		StartToCloseTimeout: stepTimeout,
+		HeartbeatTimeout:    30 * time.Second,
 		RetryPolicy:         retryPolicy,
 		ActivityID:          step.ID,
 	}

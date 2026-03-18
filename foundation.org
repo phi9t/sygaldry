@@ -2540,3 +2540,108 @@ This digest is the reference for all =--snapshot-ref= flags in burn-in and
 packaging commands.  When updating, run the full T1-T8.5 test suite and update
 this section.
 
+* Future Evolution and Improvement Roadmap
+:PROPERTIES:
+:CUSTOM_ID: future-roadmap
+:END:
+
+This section outlines the planned architectural enhancements and system
+maturity improvements grounded in the current codebase state.
+
+** 1. Consolidation of "Glue" Logic into Rust (=zephyr-rs=)
+
+Transition complex orchestration from Bash to the type-safe Rust core to eliminate
+the fragility of large shell scripts and improve system reliability.
+
+- *Unified Binary: The "Two-Persona" Dispatch* :: Leverage the existing
+  =RuntimeContext= detection in =main.rs= to use a single =zephyr= binary for both
+  host-side launching and container-side initialization. This ensures identical
+  logic for configuration parsing (=ZephyrConfig=) across both environments.
+- *Async Docker API via Bollard* :: Replace the shell-out to =docker run= in
+  =launch_container.sh= with the =bollard= crate. This enables:
+  - *Signal Propagation* :: Graceful handling of =SIGINT= / =SIGTERM= using
+    =tokio= signals, ensuring container termination and lease release.
+  - *Structured Mapping* :: Validation of host paths and volume bindings using
+    strongly-typed structs in =host/docker_args.rs= before container start.
+- *Native Container Entrypoints* :: Eliminate the =container/entrypoints/=
+  directory by porting Bash scripts (e.g., =uv-install.sh=, =hf-download.sh=)
+  to native Rust modules (=src/container/*.rs=). This removes dependencies on
+  =sed=, =awk=, or specific shell versions inside the container.
+- *SAIL Orchestration in Rust* :: Port the "Outer Loop" logic from
+  =run_improvement_loop.sh= to a new =host::sail= module. Use =serde_json= for
+  atomic, thread-safe updates to =attempted.jsonl= and manage multiple
+  asynchronous Temporal workflow calls using =tokio=.
+- *Zero-Dependency Deployment* :: Distribute the =zephyr-rs= binary as a single,
+  statically linked artifact for the "vendor kit," replacing the need to
+  synchronize multiple shell scripts across external repositories.
+- *Status* :: Transitioning from =launcher.rs= and =job.rs= (host) to a unified
+  system orchestrator.
+
+** 2. Automation of Spack-UV Synergy Manifests
+
+Eliminate manual maintenance of ownership boundaries between Spack and UV.
+
+- *Dynamic Generation* :: Implement =zephyr internal gen-manifests= to be
+  executed during the =spack-build= entrypoint.
+- *Logic* :: Query the Spack environment via =spack find --json= to dynamically
+  generate =spack_owned_packages.conf= and detect CUDA versions to populate
+  =nvidia_overrides.txt= pins.
+- *Storage* :: Transition to a dynamically generated =/opt/sygaldry/synergy.json=
+  consumed by =uv_install.rs=.
+
+** 3. Temporal Activity Refactoring and Validation
+
+Improve maintainability and structural integrity of the Go-based orchestration
+engine.
+
+- *Modularization* :: Split the "god file" =steps.go= into domain-specific
+  activities: =docker_ops.go=, =ml_ops.go=, and =system_ops.go=.
+- *Schema Validation* :: Replace manual field checks in =cmd/orchestrate/validate.go=
+  with formal JSON Schema validation for =PipelineInput= (YAML plans).
+- *Log Hygiene* :: Implement an automated log retention and cleanup policy for
+  the artifacts in =$ZEPHYR_CACHE_ROOT/logs/=.
+
+** 4. SAIL Maturity: Semantic Discovery & State Tracking
+
+Enhance the autonomous improvement loop with deeper insights and robust state.
+
+- *AST-Based Discovery* :: Upgrade =discover_issues.py= from regex to AST-based
+  analysis (using Python's =ast= or =tree-sitter=) to detect architectural drift
+  and complex antipatterns.
+- *Challenge State Machine* :: Formalize =major_challenges.yaml= into a
+  first-class state machine with append-only journals for reasoning-path
+  reconstruction.
+- *Retry Context* :: Further refine the injection of previous failure context
+  into planner prompts to minimize cyclic agent failures.
+
+** 5. Developer Experience (DX) Subcommands
+
+Lower the barrier to entry for the host-side CLI and integrated UI.
+
+- *=zephyr setup=* :: Host-side command to automate cache root initialization,
+  NVIDIA diagnostics, and binary symlinking.
+- *=zephyr dashboard=* :: Integrated command to launch the Temporal server,
+  worker, and Node.js visualizer in a single session.
+- *Local Concretization* :: Mode to verify =spack_src.yaml= changes without
+  invoking Docker, shortening the foundation development loop.
+
+** 6. Resource Leasing and GPU Orchestration
+
+Extend advisory locks into a hardware-aware scheduling layer.
+
+- *VRAM-Aware Leases* :: Extend the =Lease= struct in =crates/zephyr/src/host/lease.rs=
+  to include VRAM requirements.
+- *GPU Pre-flight* :: Use =nvml-wrapper= (via =host/cuda.rs=) in the launcher to
+  block execution if requested VRAM exceeds available capacity, preventing
+  CUDA OOM errors in concurrent workloads.
+
+** 7. Documentation-as-Code Compliance
+
+Ensure the "Pillars" of this document remain synchronized with implementation.
+
+- *Compliance Checker* :: Add =tools/quality/check_compliance.py= to
+  =validate_all.sh= to verify that current Spack specs, arch targets, and
+  layering rules match the mandates in =foundation.org=.
+- *Pillar Assertions* :: Treat design pillars as testable assertions within the
+  CI suite to prevent architectural regression.
+

@@ -38,6 +38,7 @@ BASE_BRANCH="main"
 COMMIT_MESSAGE=""
 PR_TITLE=""
 PR_BODY=""
+WORKTREE_PATH=""
 
 # ── Argument parsing ──────────────────────────────────────────────────────────
 
@@ -55,6 +56,7 @@ while [[ $# -gt 0 ]]; do
         --commit-message) COMMIT_MESSAGE="$2"; shift 2 ;;
         --pr-title)       PR_TITLE="$2";       shift 2 ;;
         --pr-body)        PR_BODY="$2";        shift 2 ;;
+        --worktree-path)  WORKTREE_PATH="$2";  shift 2 ;;
         *) die "unknown option: $1" ;;
     esac
 done
@@ -104,6 +106,12 @@ case "${OP}" in
             git checkout "${BRANCH}" || die "commit: cannot checkout branch '${BRANCH}'"
         fi
         git add -A
+        # Unstage sensitive files that should never enter the repository.
+        sensitive_staged="$(git diff --cached --name-only | grep -Ei '(^|/)\.env($|\.|[^/]*$)|credentials|secrets?|tokens?' 2>/dev/null || true)"
+        if [[ -n "${sensitive_staged}" ]]; then
+            log "WARNING: sensitive file(s) detected in staged changes — removing from stage"
+            echo "${sensitive_staged}" | xargs -r git reset HEAD --
+        fi
         if git diff --cached --quiet; then
             log "nothing to commit on branch '${BRANCH}' — implementer made no changes"
             echo "::set-output name=committed::false"
@@ -172,7 +180,78 @@ case "${OP}" in
         log "delete-branch complete"
         ;;
 
+    worktree-add)
+        [[ -n "${BRANCH}" ]]        || die "worktree-add: --branch is required"
+        [[ -n "${WORKTREE_PATH}" ]] || die "worktree-add: --worktree-path is required"
+        log "adding worktree '${WORKTREE_PATH}' on branch '${BRANCH}' from '${BASE_BRANCH}'"
+        git fetch origin "${BASE_BRANCH}" 2>/dev/null || true
+        mkdir -p "$(dirname "${WORKTREE_PATH}")"
+        if git worktree add -b "${BRANCH}" "${WORKTREE_PATH}" "origin/${BASE_BRANCH}" 2>/dev/null; then
+            :
+        else
+            git worktree add -b "${BRANCH}" "${WORKTREE_PATH}" "${BASE_BRANCH}"
+        fi
+        echo "::set-output name=worktree_path::${WORKTREE_PATH}"
+        log "worktree added at ${WORKTREE_PATH}"
+        ;;
+
+    worktree-commit)
+        [[ -n "${WORKTREE_PATH}" ]] || die "worktree-commit: --worktree-path is required"
+        [[ -n "${COMMIT_MESSAGE}" ]] || die "worktree-commit: --commit-message is required"
+        log "committing in worktree '${WORKTREE_PATH}'"
+        cd "${WORKTREE_PATH}" || die "cannot cd to worktree: ${WORKTREE_PATH}"
+        git add -A
+        # Unstage sensitive files that should never enter the repository.
+        sensitive_staged="$(git diff --cached --name-only | grep -Ei '(^|/)\.env($|\.|[^/]*$)|credentials|secrets?|tokens?' 2>/dev/null || true)"
+        if [[ -n "${sensitive_staged}" ]]; then
+            log "WARNING: sensitive file(s) detected in staged changes — removing from stage"
+            echo "${sensitive_staged}" | xargs -r git reset HEAD --
+        fi
+        if git diff --cached --quiet; then
+            log "nothing to commit in worktree"
+            echo "::set-output name=committed::false"
+            exit 1
+        fi
+        git commit -m "${COMMIT_MESSAGE}"
+        COMMIT_SHA="$(git rev-parse HEAD)"
+        echo "::set-output name=committed::true"
+        echo "::set-output name=commit_sha::${COMMIT_SHA}"
+        log "committed ${COMMIT_SHA} in worktree"
+        ;;
+
+    worktree-remove)
+        [[ -n "${WORKTREE_PATH}" ]] || die "worktree-remove: --worktree-path is required"
+        [[ -n "${BRANCH}" ]]        || die "worktree-remove: --branch is required"
+        log "removing worktree '${WORKTREE_PATH}'"
+        git worktree remove --force "${WORKTREE_PATH}" 2>/dev/null || true
+        git branch -D "${BRANCH}" 2>/dev/null || true
+        log "worktree removed"
+        ;;
+
+    worktree-land)
+        [[ -n "${WORKTREE_PATH}" ]] || die "worktree-land: --worktree-path is required"
+        log "landing worktree commit onto '${BASE_BRANCH}' via temp worktree"
+        SHA="$(cd "${WORKTREE_PATH}" && git rev-parse HEAD)"
+        # Fetch latest origin so the temp worktree starts from the current remote tip.
+        git fetch origin "${BASE_BRANCH}" 2>/dev/null || true
+        # Create a clean temporary worktree at origin/BASE_BRANCH (detached HEAD) to
+        # avoid disturbing local staged/unstaged changes in the main worktree.
+        LAND_WT="$(mktemp -d /tmp/rfc-land-XXXXXX)"
+        rmdir "${LAND_WT}"  # worktree add requires the target to not exist
+        git worktree add --detach --quiet "${LAND_WT}" "origin/${BASE_BRANCH}"
+        cd "${LAND_WT}"
+        git cherry-pick "${SHA}" || { cd - > /dev/null; git worktree remove --force "${LAND_WT}" 2>/dev/null; die "cherry-pick failed"; }
+        git push origin "HEAD:refs/heads/${BASE_BRANCH}"
+        cd - > /dev/null
+        git worktree remove --force "${LAND_WT}" 2>/dev/null || true
+        # Sync local branch pointer to match origin.
+        git fetch origin "${BASE_BRANCH}:${BASE_BRANCH}" 2>/dev/null || true
+        echo "::set-output name=landed::true"
+        echo "::set-output name=commit_sha::${SHA}"
+        log "landed ${SHA} onto ${BASE_BRANCH}"
+        ;;
+
     *)
-        die "unknown op '${OP}' (must be: branch, commit, push, create-pr, reset, delete-branch)"
+        die "unknown op '${OP}' (must be: branch, commit, push, create-pr, reset, delete-branch, worktree-add, worktree-commit, worktree-remove, worktree-land)"
         ;;
 esac

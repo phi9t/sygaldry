@@ -788,99 +788,108 @@ func validatePlan(input *workflows.PipelineInput) error {
 		return fmt.Errorf("plan must have at least one step")
 	}
 
+	var errs []error
 	ids := map[string]bool{}
 	for i := range input.Steps {
 		step := &input.Steps[i]
 		if step.ID == "" {
-			return fmt.Errorf("step %d is missing id", i)
+			errs = append(errs, fmt.Errorf("step %d is missing id", i))
+			continue // cannot use step.ID below if it is empty
 		}
 		if ids[step.ID] {
-			return fmt.Errorf("duplicate step id: %s", step.ID)
+			errs = append(errs, fmt.Errorf("duplicate step id: %s", step.ID))
 		}
 		ids[step.ID] = true
 		if step.Type == "" {
-			return fmt.Errorf("step %s is missing type", step.ID)
-		}
-		if !allowedTypes[step.Type] {
-			return fmt.Errorf("step %s has unsupported type %s", step.ID, step.Type)
+			errs = append(errs, fmt.Errorf("step %s is missing type", step.ID))
+		} else if !allowedTypes[step.Type] {
+			errs = append(errs, fmt.Errorf("step %s has unsupported type %s", step.ID, step.Type))
+		} else {
+			switch step.Type {
+			case "command":
+				if step.Command == "" {
+					errs = append(errs, fmt.Errorf("step %s command is required", step.ID))
+				}
+			case "download":
+				if step.Download == nil || step.Download.URL == "" || step.Download.Output == "" {
+					errs = append(errs, fmt.Errorf("step %s download requires url and output", step.ID))
+				}
+			case "docker_build":
+				if step.DockerBuild == nil || step.DockerBuild.Image == "" {
+					errs = append(errs, fmt.Errorf("step %s docker_build requires image", step.ID))
+				}
+			case "docker_push":
+				if step.DockerPush == nil || step.DockerPush.Image == "" {
+					errs = append(errs, fmt.Errorf("step %s docker_push requires image", step.ID))
+				}
+			case "package_build":
+				if step.PackageBuild == nil || step.PackageBuild.Command == "" {
+					errs = append(errs, fmt.Errorf("step %s package_build requires command", step.ID))
+				}
+			case "container_job":
+				if step.ContainerJob == nil || step.ContainerJob.Command == "" {
+					errs = append(errs, fmt.Errorf("step %s container_job requires command", step.ID))
+				}
+			case "hf_download_dataset":
+				if step.HFDownloadDataset == nil || step.HFDownloadDataset.DatasetID == "" {
+					errs = append(errs, fmt.Errorf("step %s hf_download_dataset requires dataset_id", step.ID))
+				}
+			case "hf_download_model":
+				if step.HFDownloadModel == nil || step.HFDownloadModel.ModelID == "" {
+					errs = append(errs, fmt.Errorf("step %s hf_download_model requires model_id", step.ID))
+				}
+			case "k8s_job":
+				if step.K8sJob == nil || step.K8sJob.Command == "" {
+					errs = append(errs, fmt.Errorf("step %s k8s_job requires command", step.ID))
+				}
+			case "agent_task":
+				if step.AgentTask == nil {
+					errs = append(errs, fmt.Errorf("step %s agent_task requires agent_task config", step.ID))
+				} else {
+					if step.AgentTask.Engine == "" {
+						errs = append(errs, fmt.Errorf("step %s agent_task requires engine", step.ID))
+					}
+					if step.AgentTask.Prompt == "" && step.AgentTask.PromptFile == "" {
+						errs = append(errs, fmt.Errorf("step %s agent_task requires prompt or prompt_file", step.ID))
+					}
+				}
+			case "git_op":
+				if step.GitOp == nil || step.GitOp.Op == "" {
+					errs = append(errs, fmt.Errorf("step %s git_op requires op", step.ID))
+				}
+			}
 		}
 		if step.Name == "" {
 			step.Name = step.ID
 		}
-		switch step.Type {
-		case "command":
-			if step.Command == "" {
-				return fmt.Errorf("step %s command is required", step.ID)
+	}
+
+	// Only check dependencies when the per-step pass is clean; the ids map
+	// must be complete and correct for dependency checks to be reliable.
+	if len(errs) == 0 {
+		for _, step := range input.Steps {
+			for _, dep := range step.DependsOn {
+				if !ids[dep] {
+					errs = append(errs, fmt.Errorf("step %s depends on unknown step %s", step.ID, dep))
+				}
 			}
-		case "download":
-			if step.Download == nil || step.Download.URL == "" || step.Download.Output == "" {
-				return fmt.Errorf("step %s download requires url and output", step.ID)
+			if step.When != nil {
+				if step.When.Step == "" || (step.When.Status != "success" && step.When.Status != "failure") {
+					errs = append(errs, fmt.Errorf("step %s has invalid when condition", step.ID))
+				} else if !ids[step.When.Step] {
+					errs = append(errs, fmt.Errorf("step %s when references unknown step %s", step.ID, step.When.Step))
+				}
 			}
-		case "docker_build":
-			if step.DockerBuild == nil || step.DockerBuild.Image == "" {
-				return fmt.Errorf("step %s docker_build requires image", step.ID)
-			}
-		case "docker_push":
-			if step.DockerPush == nil || step.DockerPush.Image == "" {
-				return fmt.Errorf("step %s docker_push requires image", step.ID)
-			}
-		case "package_build":
-			if step.PackageBuild == nil || step.PackageBuild.Command == "" {
-				return fmt.Errorf("step %s package_build requires command", step.ID)
-			}
-		case "container_job":
-			if step.ContainerJob == nil || step.ContainerJob.Command == "" {
-				return fmt.Errorf("step %s container_job requires command", step.ID)
-			}
-		case "hf_download_dataset":
-			if step.HFDownloadDataset == nil || step.HFDownloadDataset.DatasetID == "" {
-				return fmt.Errorf("step %s hf_download_dataset requires dataset_id", step.ID)
-			}
-		case "hf_download_model":
-			if step.HFDownloadModel == nil || step.HFDownloadModel.ModelID == "" {
-				return fmt.Errorf("step %s hf_download_model requires model_id", step.ID)
-			}
-		case "k8s_job":
-			if step.K8sJob == nil || step.K8sJob.Command == "" {
-				return fmt.Errorf("step %s k8s_job requires command", step.ID)
-			}
-		case "agent_task":
-			if step.AgentTask == nil {
-				return fmt.Errorf("step %s agent_task requires agent_task config", step.ID)
-			}
-			if step.AgentTask.Engine == "" {
-				return fmt.Errorf("step %s agent_task requires engine", step.ID)
-			}
-			if step.AgentTask.Prompt == "" && step.AgentTask.PromptFile == "" {
-				return fmt.Errorf("step %s agent_task requires prompt or prompt_file", step.ID)
-			}
-		case "git_op":
-			if step.GitOp == nil || step.GitOp.Op == "" {
-				return fmt.Errorf("step %s git_op requires op", step.ID)
+		}
+
+		if len(errs) == 0 {
+			if cycle := detectDependencyCycle(input.Steps); cycle != "" {
+				errs = append(errs, fmt.Errorf("dependency cycle detected: %s", cycle))
 			}
 		}
 	}
 
-	for _, step := range input.Steps {
-		for _, dep := range step.DependsOn {
-			if !ids[dep] {
-				return fmt.Errorf("step %s depends on unknown step %s", step.ID, dep)
-			}
-		}
-		if step.When != nil {
-			if step.When.Step == "" || (step.When.Status != "success" && step.When.Status != "failure") {
-				return fmt.Errorf("step %s has invalid when condition", step.ID)
-			}
-			if !ids[step.When.Step] {
-				return fmt.Errorf("step %s when references unknown step %s", step.ID, step.When.Step)
-			}
-		}
-	}
-
-	if cycle := detectDependencyCycle(input.Steps); cycle != "" {
-		return fmt.Errorf("dependency cycle detected: %s", cycle)
-	}
-	return nil
+	return errors.Join(errs...)
 }
 
 func detectDependencyCycle(steps []workflows.PipelineStep) string {

@@ -39,7 +39,10 @@ func TestGitOpUnsupportedOp(t *testing.T) {
 }
 
 func TestGitOpValidOps(t *testing.T) {
-	validOps := []string{"branch", "commit", "push", "create-pr", "reset", "delete-branch"}
+	validOps := []string{
+		"branch", "commit", "push", "create-pr", "reset", "delete-branch",
+		"worktree-add", "worktree-commit", "worktree-remove", "worktree-land",
+	}
 	for _, op := range validOps {
 		input := GitOpInput{
 			Name:         "test",
@@ -153,5 +156,52 @@ func TestResolveGitOpsScriptPathRepoDir(t *testing.T) {
 	}
 	if path != script {
 		t.Errorf("expected %q, got %q", script, path)
+	}
+}
+
+func TestGitOpWorktreeOpsValid(t *testing.T) {
+	worktreeOps := []string{"worktree-add", "worktree-commit", "worktree-remove", "worktree-land"}
+	for _, op := range worktreeOps {
+		input := GitOpInput{
+			Name:         "test",
+			Op:           op,
+			GitOpsScript: "/nonexistent/git_ops.sh",
+		}
+		_, err := GitOp(context.Background(), input)
+		if err != nil && strings.Contains(err.Error(), "unsupported op") {
+			t.Errorf("op %q should be valid, got: %v", op, err)
+		}
+	}
+}
+
+func TestGitOpWorktreePathPassthrough(t *testing.T) {
+	dir := t.TempDir()
+	script := filepath.Join(dir, "git_ops.sh")
+	// Script echoes all args so we can verify --worktree-path is passed
+	content := "#!/bin/bash\necho \"args=$*\"\nexit 0\n"
+	if err := os.WriteFile(script, []byte(content), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	input := GitOpInput{
+		Name:         "test",
+		Op:           "worktree-add",
+		Branch:       "rfc-impl-task-1",
+		WorktreePath: "/tmp/my-worktree",
+		GitOpsScript: script,
+		LogDir:       dir,
+	}
+	result, err := GitOp(context.Background(), input)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Errorf("expected exit 0, got %d", result.ExitCode)
+	}
+	if !strings.Contains(result.Stdout, "--worktree-path") {
+		t.Errorf("expected --worktree-path in args, got: %q", result.Stdout)
+	}
+	if !strings.Contains(result.Stdout, "/tmp/my-worktree") {
+		t.Errorf("expected worktree path value in args, got: %q", result.Stdout)
 	}
 }

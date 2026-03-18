@@ -19,6 +19,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"go.temporal.io/sdk/activity"
 )
 
 type RunCommandInput struct {
@@ -839,6 +841,21 @@ func runCommand(ctx context.Context, input RunCommandInput) (RunCommandResult, e
 	cmd.Stdout = lw.stdoutWriter
 	cmd.Stderr = lw.stderrWriter
 
+	heartbeatCtx, cancelHeartbeat := context.WithCancel(ctx)
+	defer cancelHeartbeat()
+	go func() {
+		ticker := time.NewTicker(10 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-heartbeatCtx.Done():
+				return
+			case <-ticker.C:
+				activity.RecordHeartbeat(ctx, "running")
+			}
+		}
+	}()
+
 	start := time.Now()
 	emitEvent(lw.logDir, StepEvent{
 		Timestamp:      time.Now().UTC().Format(time.RFC3339Nano),
@@ -942,7 +959,11 @@ func mergedCommandEnv(overrides map[string]string) []string {
 		base[parts[0]] = parts[1]
 	}
 	for key, value := range overrides {
-		base[key] = value
+		if value == "" {
+			delete(base, key)
+		} else {
+			base[key] = value
+		}
 	}
 
 	keys := make([]string, 0, len(base))

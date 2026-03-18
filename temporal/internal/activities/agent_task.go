@@ -15,8 +15,10 @@ type AgentTaskEngine string
 const (
 	AgentEngineClaude AgentTaskEngine = "claude"
 	AgentEngineCodex  AgentTaskEngine = "codex"
-	AgentEngineCursor AgentTaskEngine = "cursor"
-	AgentEngineEcho   AgentTaskEngine = "echo" // no-op engine for dry-run/integration testing
+	AgentEngineCursor   AgentTaskEngine = "cursor"
+	AgentEngineEcho     AgentTaskEngine = "echo" // no-op engine for dry-run/integration testing
+	AgentEngineGemini   AgentTaskEngine = "gemini"
+	AgentEngineOpenCode AgentTaskEngine = "opencode"
 )
 
 // AgentTaskInput parameterises a single agent invocation.
@@ -93,6 +95,8 @@ func AgentTask(ctx context.Context, input AgentTaskInput) (RunCommandResult, err
 		// claude -p "<prompt>" --allowedTools "..." --permission-mode acceptEdits [--model <model>]
 		// --allowedTools grants file-editing access; --permission-mode acceptEdits auto-accepts
 		// file changes so the pipeline can run unattended.
+		// Unset CLAUDECODE so nested claude invocations from inside a Claude Code session succeed.
+		mergedEnv["CLAUDECODE"] = ""
 		command = "claude"
 		args = []string{
 			"-p", prompt,
@@ -133,9 +137,25 @@ func AgentTask(ctx context.Context, input AgentTaskInput) (RunCommandResult, err
 		command = "echo"
 		args = []string{prompt}
 
+	case AgentEngineGemini:
+		// gemini -p "<prompt>" --yolo [--model <model>]
+		command = "gemini"
+		args = []string{"-p", prompt, "--yolo"}
+		if input.Model != "" {
+			args = append(args, "--model", input.Model)
+		}
+
+	case AgentEngineOpenCode:
+		// opencode run "<prompt>" [--model <model>]
+		command = "opencode"
+		args = []string{"run", prompt}
+		if input.Model != "" {
+			args = append(args, "--model", input.Model)
+		}
+
 	default:
 		return RunCommandResult{ExitCode: -1}, fmt.Errorf(
-			"agent_task: unsupported engine %q (must be claude, codex, cursor, or echo)", engine,
+			"agent_task: unsupported engine %q (must be claude, codex, cursor, gemini, opencode, or echo)", engine,
 		)
 	}
 
