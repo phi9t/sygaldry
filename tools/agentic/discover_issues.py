@@ -266,27 +266,40 @@ def discover_shellcheck(repo_dir: Path, max_per_type: int) -> list[Issue]:
 
 
 # ---------------------------------------------------------------------------
-# Source 3: go test failures
+# Source 3: go test failures and coverage
 # ---------------------------------------------------------------------------
 
+_GO_FUNC_RE = re.compile(r"^(\S+)\s+(\S+)\s+(\d+\.\d+)%$")
 
-def discover_go_test_failures(repo_dir: Path, max_per_type: int) -> list[Issue]:
+
+def discover_go_tests_and_coverage(repo_dir: Path, max_per_type: int) -> list[Issue]:
     temporal_dir = repo_dir / "temporal"
     if not temporal_dir.is_dir():
         return []
 
+    cover_file = "/tmp/sail-coverage.out"
     try:
+        # Run go test with -json for failure detection AND -coverprofile for coverage analysis
         result = subprocess.run(
-            ["go", "test", "./...", "-json"],
+            [
+                "go",
+                "test",
+                "./...",
+                "-json",
+                f"-coverprofile={cover_file}",
+                "-covermode=set",
+            ],
             cwd=temporal_dir,
             capture_output=True,
             text=True,
-            timeout=120,
+            timeout=180,
         )
     except (subprocess.TimeoutExpired, FileNotFoundError):
         return []
 
+    # Part 1: Collect failures from JSON stream
     failures: list[dict[str, Any]] = []
+    # Note: go test might exit non-zero if tests fail, but we still want to parse stdout
     for line in result.stdout.splitlines():
         try:
             entry = json.loads(line)
@@ -310,6 +323,53 @@ def discover_go_test_failures(repo_dir: Path, max_per_type: int) -> list[Issue]:
                 "context": json.dumps(entry),
             }
         )
+
+    # Part 2: Collect zero-coverage functions
+    if not Path(cover_file).exists():
+        return issues
+
+    try:
+        func_result = subprocess.run(
+            ["go", "tool", "cover", f"-func={cover_file}"],
+            cwd=temporal_dir,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        return issues
+
+    coverage_count = 0
+    for line in func_result.stdout.splitlines():
+        m = _GO_FUNC_RE.match(line.strip())
+        if not m:
+            continue
+        file_func, func_name, pct_str = m.group(1), m.group(2), m.group(3)
+        if func_name in ("total:", "init"):
+            continue
+        if float(pct_str) > 0:
+            continue
+
+        # file_func is like "temporal-orchestration/internal/activities/command.go:RunCommand"
+        file_path = file_func.rsplit(":", 1)[0] if ":" in file_func else file_func
+        issues.append(
+            {
+                "id": _issue_id("go_coverage", f"{file_func}"),
+                "priority": 3,
+                "type": "go_coverage",
+                "title": f"Uncovered function: {func_name} in {Path(file_path).name}",
+                "description": (
+                    f"{file_path}: function {func_name!r} has 0% test coverage. "
+                    "Consider adding a unit test."
+                ),
+                "files": [file_path],
+                "context": line.strip(),
+            }
+        )
+        coverage_count += 1
+        if coverage_count >= max_per_type:
+            break
+
     return issues
 
 
@@ -450,72 +510,6 @@ def discover_go_vet(repo_dir: Path, max_per_type: int) -> list[Issue]:
 
 
 # ---------------------------------------------------------------------------
-# Source 7: Go functions with 0% test coverage
-# ---------------------------------------------------------------------------
-
-_GO_FUNC_RE = re.compile(r"^(\S+)\s+(\S+)\s+(\d+\.\d+)%$")
-
-
-def discover_uncovered_functions(repo_dir: Path, max_per_type: int) -> list[Issue]:
-    temporal_dir = repo_dir / "temporal"
-    if not temporal_dir.is_dir():
-        return []
-
-    cover_file = "/tmp/sail-coverage.out"
-    try:
-        subprocess.run(
-            ["go", "test", "./...", f"-coverprofile={cover_file}", "-covermode=set"],
-            cwd=temporal_dir,
-            capture_output=True,
-            text=True,
-            timeout=120,
-        )
-    except (subprocess.TimeoutExpired, FileNotFoundError):
-        return []
-
-    try:
-        func_result = subprocess.run(
-            ["go", "tool", "cover", f"-func={cover_file}"],
-            cwd=temporal_dir,
-            capture_output=True,
-            text=True,
-            timeout=30,
-        )
-    except (subprocess.TimeoutExpired, FileNotFoundError):
-        return []
-
-    issues: list[Issue] = []
-    for line in func_result.stdout.splitlines():
-        m = _GO_FUNC_RE.match(line.strip())
-        if not m:
-            continue
-        file_func, func_name, pct_str = m.group(1), m.group(2), m.group(3)
-        if func_name in ("total:", "init"):
-            continue
-        if float(pct_str) > 0:
-            continue
-        # file_func is like "temporal-orchestration/internal/activities/command.go:RunCommand"
-        file_path = file_func.rsplit(":", 1)[0] if ":" in file_func else file_func
-        issues.append(
-            {
-                "id": _issue_id("go_coverage", f"{file_func}"),
-                "priority": 3,
-                "type": "go_coverage",
-                "title": f"Uncovered function: {func_name} in {Path(file_path).name}",
-                "description": (
-                    f"{file_path}: function {func_name!r} has 0% test coverage. "
-                    "Consider adding a unit test."
-                ),
-                "files": [file_path],
-                "context": line.strip(),
-            }
-        )
-        if len(issues) >= max_per_type:
-            break
-    return issues
-
-
-# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
@@ -552,13 +546,12 @@ def main() -> None:
     all_issues: list[Issue] = []
     source_stats: list[dict[str, Any]] = []
     for name, func in (
-        ("go_test", discover_go_test_failures),
+        ("go_tests_and_coverage", discover_go_tests_and_coverage),
         ("go_vet", discover_go_vet),
         ("shellcheck", discover_shellcheck),
         ("todo", discover_todos),
         ("ruff", discover_ruff),
         ("foundation_drift", discover_foundation_drift),
-        ("go_coverage", discover_uncovered_functions),
     ):
         issues, stats = _run_source(name, func, repo_dir, max_per)
         all_issues.extend(issues)

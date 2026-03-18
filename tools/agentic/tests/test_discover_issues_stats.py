@@ -35,7 +35,7 @@ def test_stats_file_is_written(monkeypatch, tmp_path, capsys):
 
     monkeypatch.setattr(
         module,
-        "discover_go_test_failures",
+        "discover_go_tests_and_coverage",
         lambda repo_dir, max_per_type: [issue("go-test", 1, "go_test")],
     )
     monkeypatch.setattr(module, "discover_go_vet", lambda repo_dir, max_per_type: [])
@@ -52,9 +52,6 @@ def test_stats_file_is_written(monkeypatch, tmp_path, capsys):
     monkeypatch.setattr(module, "discover_ruff", lambda repo_dir, max_per_type: [])
     monkeypatch.setattr(
         module, "discover_foundation_drift", lambda repo_dir, max_per_type: []
-    )
-    monkeypatch.setattr(
-        module, "discover_uncovered_functions", lambda repo_dir, max_per_type: []
     )
     monkeypatch.setattr(
         sys,
@@ -80,11 +77,10 @@ def test_stats_file_is_written(monkeypatch, tmp_path, capsys):
     assert stats["selectedCount"] == 2
     assert stats["discoveredCount"] == 3
     assert {source["name"] for source in stats["sources"]} == {
-        "go_test",
+        "go_tests_and_coverage",
         "go_vet",
         "shellcheck",
         "todo",
         "ruff",
         "foundation_drift",
-        "go_coverage",
     }
