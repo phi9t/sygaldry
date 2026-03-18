@@ -90,6 +90,17 @@ def _run_source(
     return issues, stats
 
 
+def _dedup(issues: list[Issue]) -> list[Issue]:
+    seen: set[str] = set()
+    deduped: list[Issue] = []
+    for issue in issues:
+        issue_id = issue["id"]
+        if issue_id not in seen:
+            seen.add(issue_id)
+            deduped.append(issue)
+    return deduped
+
+
 # ---------------------------------------------------------------------------
 # Source 1: TODO/FIXME/HACK comments
 # ---------------------------------------------------------------------------
@@ -605,6 +616,7 @@ def main() -> None:
                     }
                 )
 
+    all_issues = _dedup(all_issues)
     filtered = [i for i in all_issues if i["priority"] <= args.min_priority]
     filtered.sort(key=lambda i: (i["priority"], i["id"]))
 
