@@ -269,6 +269,58 @@ pub fn build(
     Ok(args)
 }
 
+/// Build the `docker run` argument list for Rust-native entrypoints.
+pub(crate) fn build_rust_mode(
+    config: &ZephyrConfig,
+    _entrypoint_name: &str,
+    spack_baked: bool,
+) -> crate::error::Result<Vec<String>> {
+    let mut args: Vec<String> = Vec::with_capacity(64);
+
+    // Basic flags
+    args.extend(["--rm".into(), "--init".into()]);
+
+    // Interactive if stdin is a TTY
+    if atty_stdin() {
+        args.extend(["--interactive".into(), "--tty".into()]);
+    }
+
+    // Network and IPC
+    args.push(format!("--net={}", config.net));
+    args.push(format!("--ipc={}", config.ipc));
+
+    // User mapping
+    let user_spec = detect_user_spec();
+    args.push(format!("--user={user_spec}"));
+
+    // Host identity mount (optional)
+    if std::env::var("SYGALDRY_MOUNT_HOST_IDENTITY").as_deref() == Ok("1") {
+        args.push("--volume=/etc/passwd:/etc/passwd:ro".into());
+        args.push("--volume=/etc/group:/etc/group:ro".into());
+    }
+
+    // Volume mounts (per-project + shared caches)
+    build_volume_mounts(&mut args, config, spack_baked)?;
+
+    // Mode-specific mounts and workdir
+    let sygaldry_root_in_container = build_mode_mounts(&mut args, config, None)?;
+
+    // Entrypoint: zephyr binary itself
+    args.push("--entrypoint".into());
+    args.push("zephyr".into());
+
+    // GPU flags
+    args.extend(["--runtime=nvidia".into(), "--gpus=all".into()]);
+
+    // Environment variables
+    args.extend(build_env_args(config, &sygaldry_root_in_container));
+
+    // Extra docker args from env
+    args.extend(config.extra_docker_args.iter().cloned());
+
+    Ok(args)
+}
+
 /// Detect user spec for --user flag.
 fn detect_user_spec() -> String {
     let uid = unsafe { libc::getuid() };
@@ -596,5 +648,37 @@ mod tests {
             args.iter().any(|a| a.contains(container_paths::HOME) && a.starts_with("--volume=")),
             "should mount HOME"
         );
+    }
+
+    #[test]
+    fn build_rust_mode_has_entrypoint_zephyr() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut config = test_config_in(tmp.path());
+        config.layout.ensure_dirs().unwrap();
+        config.sygaldry_home = tmp.path().join("sygaldry");
+        std::fs::create_dir_all(&config.sygaldry_home).unwrap();
+
+        let args = build_rust_mode(&config, "run-job", false).unwrap();
+
+        // Find --entrypoint
+        let ep_idx = args
+            .iter()
+            .position(|a| a == "--entrypoint")
+            .expect("missing --entrypoint");
+        assert_eq!(args[ep_idx + 1], "zephyr");
+    }
+
+    #[test]
+    fn build_rust_mode_no_sh_suffix() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut config = test_config_in(tmp.path());
+        config.layout.ensure_dirs().unwrap();
+        config.sygaldry_home = tmp.path().join("sygaldry");
+        std::fs::create_dir_all(&config.sygaldry_home).unwrap();
+
+        let args = build_rust_mode(&config, "run-job", false).unwrap();
+        for arg in &args {
+            assert!(!arg.ends_with(".sh"), "arg {} should not end with .sh", arg);
+        }
     }
 }
