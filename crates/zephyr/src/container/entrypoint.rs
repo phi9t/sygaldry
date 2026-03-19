@@ -509,6 +509,35 @@ mod tests {
         assert!(err_msg.contains("nonexistent-entrypoint"));
     }
 
+    #[test]
+    #[serial]
+    fn run_accepts_all_known_entrypoints_names() {
+        let entrypoints = [
+            "default",
+            "run-job",
+            "verify-gpu",
+            "verify-spack",
+            "spack-build",
+            "spack-install",
+            "uv-install",
+            "hf-lora-setup",
+            "hf-download",
+        ];
+
+        for name in entrypoints {
+            let result = run(name, &[]);
+            match result {
+                Err(ZephyrError::EntrypointNotFound(n)) => {
+                    panic!("Entrypoint '{n}' not found in dispatch table");
+                }
+                _ => {
+                    // Other errors (like missing args, init failures) are acceptable
+                    // as they indicate the entrypoint was reached.
+                }
+            }
+        }
+    }
+
     // -- entrypoint_hf_download validation --
 
     #[test]
