@@ -41,6 +41,7 @@ var quotaPatterns = []string{
 	"out of credits", "insufficient credits", "quota exceeded",
 	"rate limit", "too many requests", "unauthorized",
 	"payment required", "billing", "context length exceeded",
+	"exhausted your capacity", "exhausted capacity",
 }
 
 // detectQuotaPattern returns the matched pattern (empty string if none).
