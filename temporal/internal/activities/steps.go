@@ -400,6 +400,21 @@ func DownloadFile(ctx context.Context, input DownloadInput) (DownloadResult, err
 		return DownloadResult{ExitCode: -1}, err
 	}
 
+	heartbeatCtx, cancelHeartbeat := context.WithCancel(ctx)
+	defer cancelHeartbeat()
+	go func() {
+		ticker := time.NewTicker(10 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-heartbeatCtx.Done():
+				return
+			case <-ticker.C:
+				activity.RecordHeartbeat(ctx, "downloading")
+			}
+		}
+	}()
+
 	start := time.Now()
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {

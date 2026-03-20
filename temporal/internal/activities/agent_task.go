@@ -124,9 +124,9 @@ func AgentTask(ctx context.Context, input AgentTaskInput) (RunCommandResult, err
 		args = append(args, prompt)
 
 	case AgentEngineCursor:
-		// cursor --exec [--model <model>] "<prompt>"
+		// cursor agent [--model <model>] "<prompt>"
 		command = "cursor"
-		args = []string{"--exec"}
+		args = []string{"agent"}
 		if input.Model != "" {
 			args = append(args, "--model", input.Model)
 		}

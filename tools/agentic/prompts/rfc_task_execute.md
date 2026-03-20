@@ -10,6 +10,8 @@ Read the plan file at `${{ params.plan_file }}` and implement all changes descri
 ## Context
 
 - **Task**: `${{ params.task_title }}`
+- **Task description**: `${{ params.task_description }}`
+- **RFC**: `${{ params.rfc_path }}` (read this for full background if needed)
 - **Working directory (worktree root)**: `${{ params.worktree_path }}`
 - **Plan file**: `${{ params.plan_file }}`
 

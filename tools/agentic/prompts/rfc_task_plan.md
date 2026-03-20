@@ -8,8 +8,6 @@ Read the following context and produce a structured implementation plan:
 - `CLAUDE.md` — coding conventions
 - Files listed in the task's `filesHint`
 - The RFC at `${{ params.rfc_path }}` (for full context)
-- If `${{ params.attempt_number }}` > 0: understand why the previous attempt failed:
-  `${{ params.previous_review_failure }}`
 
 ## Task Details
 
@@ -18,6 +16,13 @@ Read the following context and produce a structured implementation plan:
 - **Description**: `${{ params.task_description }}`
 - **Files hint**: `${{ params.files_hint }}`
 - **Attempt**: `${{ params.attempt_number }}`
+
+## PREVIOUS ATTEMPT FAILED
+
+**Failure reason:** `${{ params.previous_review_failure }}`
+
+If the failure reason above is non-empty, your plan MUST directly address it.
+Do NOT repeat the same approach — change your strategy to fix the root cause.
 
 ## Output Instructions
 

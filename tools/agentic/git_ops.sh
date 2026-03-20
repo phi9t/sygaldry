@@ -239,11 +239,27 @@ case "${OP}" in
         LAND_WT="$(mktemp -d /tmp/rfc-land-XXXXXX)"
         rmdir "${LAND_WT}"  # worktree add requires the target to not exist
         git worktree add --detach --quiet "${LAND_WT}" "origin/${BASE_BRANCH}"
+        # Ensure LAND_WT is cleaned up even if the script exits early.
+        trap 'git worktree remove --force "${LAND_WT}" 2>/dev/null || true' EXIT
         cd "${LAND_WT}"
-        git cherry-pick "${SHA}" || { cd - > /dev/null; git worktree remove --force "${LAND_WT}" 2>/dev/null; die "cherry-pick failed"; }
-        git push origin "HEAD:refs/heads/${BASE_BRANCH}"
+        git cherry-pick "${SHA}" || { cd - > /dev/null; die "cherry-pick failed"; }
+        # Push with retry: on conflict, re-fetch, reset to latest origin, re-cherry-pick.
+        _push_ok=0
+        for _attempt in 1 2 3; do
+            if git push origin "HEAD:refs/heads/${BASE_BRANCH}"; then
+                _push_ok=1
+                break
+            fi
+            if [[ "${_attempt}" -eq 3 ]]; then
+                cd - > /dev/null
+                die "push failed after 3 attempts"
+            fi
+            log "push attempt ${_attempt} failed; re-fetching origin/${BASE_BRANCH} and retrying"
+            git fetch origin "${BASE_BRANCH}"
+            git reset --hard "origin/${BASE_BRANCH}"
+            git cherry-pick "${SHA}" || { cd - > /dev/null; die "cherry-pick failed on retry ${_attempt}"; }
+        done
         cd - > /dev/null
-        git worktree remove --force "${LAND_WT}" 2>/dev/null || true
         # Sync local branch pointer to match origin.
         git fetch origin "${BASE_BRANCH}:${BASE_BRANCH}" 2>/dev/null || true
         echo "::set-output name=landed::true"

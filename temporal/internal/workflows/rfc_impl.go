@@ -159,6 +159,11 @@ func RFCImpl(ctx workflow.Context, input RFCImplInput) (RFCImplResult, error) {
 	if maxParallel <= 0 || maxParallel > len(tasks) {
 		maxParallel = len(tasks)
 	}
+	// Direct landing cherry-picks onto origin/main; only one task at a time
+	// to avoid concurrent push conflicts.
+	if input.LandingMode == "direct" {
+		maxParallel = 1
+	}
 
 	execEngines := toAgentTaskEngines(input.ExecEngines)
 
@@ -348,9 +353,11 @@ func RFCTaskWorkflow(ctx workflow.Context, input RFCTaskInput) (RFCTaskResult, e
 			PromptFile: filepath.Join(input.RepoDir, "tools/agentic/prompts/rfc_task_execute.md"),
 			WorkingDir: input.WorktreePath,
 			Params: map[string]string{
-				"task_title":    input.Task.Title,
-				"worktree_path": input.WorktreePath,
-				"plan_file":     planFile,
+				"task_title":       input.Task.Title,
+				"task_description": input.Task.Description,
+				"rfc_path":         input.RFCPath,
+				"worktree_path":    input.WorktreePath,
+				"plan_file":        planFile,
 			},
 			Engines: engines,
 			Env:     input.Env,
@@ -361,7 +368,7 @@ func RFCTaskWorkflow(ctx workflow.Context, input RFCTaskInput) (RFCTaskResult, e
 			return result, nil
 		}
 
-		// c. Review
+		// c. Review (errors are non-fatal; zero-value reviewResult means review_passed != "true")
 		reviewCtx := workflow.WithActivityOptions(ctx, reviewAO)
 		var reviewResult activities.RunCommandResult
 		_ = workflow.ExecuteActivity(reviewCtx, activities.AgentTask, activities.AgentTaskInput{
@@ -404,7 +411,7 @@ func RFCTaskWorkflow(ctx workflow.Context, input RFCTaskInput) (RFCTaskResult, e
 	// 3. Validate
 	validateCtx := workflow.WithActivityOptions(ctx, validateAO)
 	var validateResult activities.RunCommandResult
-	_ = workflow.ExecuteActivity(validateCtx, activities.RunCommand, activities.RunCommandInput{
+	if err := workflow.ExecuteActivity(validateCtx, activities.RunCommand, activities.RunCommandInput{
 		Name:       fmt.Sprintf("validate-%s", input.Task.ID),
 		WorkflowID: workflowID,
 		StepID:     "validate",
@@ -413,7 +420,12 @@ func RFCTaskWorkflow(ctx workflow.Context, input RFCTaskInput) (RFCTaskResult, e
 		Args:       []string{"--quick"},
 		WorkingDir: input.WorktreePath,
 		Env:        input.Env,
-	}).Get(ctx, &validateResult)
+	}).Get(ctx, &validateResult); err != nil {
+		result.Succeeded = false
+		result.FailReason = fmt.Sprintf("validate activity error: %v", err)
+		cleanup()
+		return result, nil
+	}
 
 	if validateResult.ExitCode != 0 {
 		stderr := validateResult.Stderr
@@ -429,7 +441,7 @@ func RFCTaskWorkflow(ctx workflow.Context, input RFCTaskInput) (RFCTaskResult, e
 	// 4. Commit
 	commitCtx := workflow.WithActivityOptions(ctx, gitAO)
 	var commitResult activities.RunCommandResult
-	_ = workflow.ExecuteActivity(commitCtx, activities.GitOp, activities.GitOpInput{
+	if err := workflow.ExecuteActivity(commitCtx, activities.GitOp, activities.GitOpInput{
 		Name:          fmt.Sprintf("commit-%s", input.Task.ID),
 		WorkflowID:    workflowID,
 		StepID:        "commit",
@@ -441,7 +453,12 @@ func RFCTaskWorkflow(ctx workflow.Context, input RFCTaskInput) (RFCTaskResult, e
 		WorktreePath:  input.WorktreePath,
 		GitOpsScript:  input.GitOpsScript,
 		Env:           input.Env,
-	}).Get(ctx, &commitResult)
+	}).Get(ctx, &commitResult); err != nil {
+		result.Succeeded = false
+		result.FailReason = fmt.Sprintf("commit activity error: %v", err)
+		cleanup()
+		return result, nil
+	}
 
 	if commitResult.ExitCode != 0 {
 		result.Succeeded = false
@@ -455,7 +472,7 @@ func RFCTaskWorkflow(ctx workflow.Context, input RFCTaskInput) (RFCTaskResult, e
 	landCtx := workflow.WithActivityOptions(ctx, landAO)
 	if input.LandingMode == "direct" {
 		var landResult activities.RunCommandResult
-		_ = workflow.ExecuteActivity(landCtx, activities.GitOp, activities.GitOpInput{
+		if err := workflow.ExecuteActivity(landCtx, activities.GitOp, activities.GitOpInput{
 			Name:         fmt.Sprintf("land-%s", input.Task.ID),
 			WorkflowID:   workflowID,
 			StepID:       "land",
@@ -467,7 +484,12 @@ func RFCTaskWorkflow(ctx workflow.Context, input RFCTaskInput) (RFCTaskResult, e
 			WorktreePath: input.WorktreePath,
 			GitOpsScript: input.GitOpsScript,
 			Env:          input.Env,
-		}).Get(ctx, &landResult)
+		}).Get(ctx, &landResult); err != nil {
+			result.Succeeded = false
+			result.FailReason = fmt.Sprintf("land activity error: %v", err)
+			cleanup()
+			return result, nil
+		}
 		if landResult.ExitCode != 0 {
 			result.Succeeded = false
 			result.FailReason = "land failed"
@@ -476,7 +498,7 @@ func RFCTaskWorkflow(ctx workflow.Context, input RFCTaskInput) (RFCTaskResult, e
 		}
 	} else {
 		var pushResult activities.RunCommandResult
-		_ = workflow.ExecuteActivity(landCtx, activities.GitOp, activities.GitOpInput{
+		if err := workflow.ExecuteActivity(landCtx, activities.GitOp, activities.GitOpInput{
 			Name:         fmt.Sprintf("push-%s", input.Task.ID),
 			WorkflowID:   workflowID,
 			StepID:       "push",
@@ -486,7 +508,12 @@ func RFCTaskWorkflow(ctx workflow.Context, input RFCTaskInput) (RFCTaskResult, e
 			Branch:       input.BranchName,
 			GitOpsScript: input.GitOpsScript,
 			Env:          input.Env,
-		}).Get(ctx, &pushResult)
+		}).Get(ctx, &pushResult); err != nil {
+			result.Succeeded = false
+			result.FailReason = fmt.Sprintf("push activity error: %v", err)
+			cleanup()
+			return result, nil
+		}
 		if pushResult.ExitCode != 0 {
 			result.Succeeded = false
 			result.FailReason = "push failed"
@@ -494,7 +521,7 @@ func RFCTaskWorkflow(ctx workflow.Context, input RFCTaskInput) (RFCTaskResult, e
 			return result, nil
 		}
 		var prResult activities.RunCommandResult
-		_ = workflow.ExecuteActivity(landCtx, activities.GitOp, activities.GitOpInput{
+		if err := workflow.ExecuteActivity(landCtx, activities.GitOp, activities.GitOpInput{
 			Name:         fmt.Sprintf("pr-%s", input.Task.ID),
 			WorkflowID:   workflowID,
 			StepID:       "create-pr",
@@ -507,7 +534,12 @@ func RFCTaskWorkflow(ctx workflow.Context, input RFCTaskInput) (RFCTaskResult, e
 			PRBody:       fmt.Sprintf("RFC implementation: %s\n\n%s", input.Task.Title, input.Task.Description),
 			GitOpsScript: input.GitOpsScript,
 			Env:          input.Env,
-		}).Get(ctx, &prResult)
+		}).Get(ctx, &prResult); err != nil {
+			result.Succeeded = false
+			result.FailReason = fmt.Sprintf("create-pr activity error: %v", err)
+			cleanup()
+			return result, nil
+		}
 		result.PRUrl = extractSetOutput(prResult.Stdout, "pr_url")
 	}
 
