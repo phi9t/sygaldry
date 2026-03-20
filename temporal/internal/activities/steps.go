@@ -302,18 +302,17 @@ type PackageBuildInput struct {
 }
 
 type ContainerJobInput struct {
-	Name         string            `json:"name"`
-	WorkflowID   string            `json:"workflowId"`
-	RunID        string            `json:"runId"`
-	StepID       string            `json:"stepId"`
-	LogDir       string            `json:"logDir"`
-	ProjectID    string            `json:"projectId"`
-	Entrypoint   string            `json:"entrypoint"`
-	Command      string            `json:"command"`
-	Env          map[string]string `json:"env"`
-	GPU          bool              `json:"gpu"`
-	TimeoutSecs  int               `json:"timeoutSeconds"`
-	LauncherPath string            `json:"launcherPath"`
+	Name        string            `json:"name"`
+	WorkflowID  string            `json:"workflowId"`
+	RunID       string            `json:"runId"`
+	StepID      string            `json:"stepId"`
+	LogDir      string            `json:"logDir"`
+	ProjectID   string            `json:"projectId"`
+	Entrypoint  string            `json:"entrypoint"`
+	Command     string            `json:"command"`
+	Env         map[string]string `json:"env"`
+	GPU         bool              `json:"gpu"`
+	TimeoutSecs int               `json:"timeoutSeconds"`
 }
 
 type HFDownloadDatasetInput struct {
@@ -542,7 +541,7 @@ func ContainerJob(ctx context.Context, input ContainerJobInput) (RunCommandResul
 		return RunCommandResult{ExitCode: -1}, errors.New("command is required")
 	}
 
-	launcherPath, err := resolveContainerLauncherPath(input.LauncherPath)
+	launcherPath, err := resolveContainerLauncherPath()
 	if err != nil {
 		return RunCommandResult{ExitCode: -1}, err
 	}
@@ -578,11 +577,7 @@ func ContainerJob(ctx context.Context, input ContainerJobInput) (RunCommandResul
 	})
 }
 
-func resolveContainerLauncherPath(configuredPath string) (string, error) {
-	if strings.TrimSpace(configuredPath) != "" {
-		return configuredPath, nil
-	}
-
+func resolveContainerLauncherPath() (string, error) {
 	candidates := []string{}
 	if home := strings.TrimSpace(os.Getenv("SYGALDRY_HOME")); home != "" {
 		candidates = append(candidates, filepath.Join(home, "container", "launch_container.sh"))
@@ -599,7 +594,7 @@ func resolveContainerLauncherPath(configuredPath string) (string, error) {
 	}
 
 	return "", fmt.Errorf(
-		"container launcher not found; set container_job.launcher_path or SYGALDRY_HOME (checked: %s)",
+		"container launcher not found; set SYGALDRY_HOME (checked: %s)",
 		strings.Join(candidates, ", "),
 	)
 }

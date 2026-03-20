@@ -55,12 +55,11 @@ type PackageBuildSpec struct {
 }
 
 type ContainerJobSpec struct {
-	ProjectID    string            `json:"projectId" yaml:"project_id"`
-	Entrypoint   string            `json:"entrypoint" yaml:"entrypoint"`
-	Command      string            `json:"command" yaml:"command"`
-	Env          map[string]string `json:"env" yaml:"env"`
-	GPU          bool              `json:"gpu" yaml:"gpu"`
-	LauncherPath string            `json:"launcherPath" yaml:"launcher_path"`
+	ProjectID  string            `json:"projectId" yaml:"project_id"`
+	Entrypoint string            `json:"entrypoint" yaml:"entrypoint"`
+	Command    string            `json:"command" yaml:"command"`
+	Env        map[string]string `json:"env" yaml:"env"`
+	GPU        bool              `json:"gpu" yaml:"gpu"`
 }
 
 type HFDownloadDatasetSpec struct {
@@ -719,18 +718,17 @@ func startActivity(ctx workflow.Context, info *workflow.Info, logDir string, ste
 			spec = &ContainerJobSpec{}
 		}
 		return workflow.ExecuteActivity(ctx, activities.ContainerJob, activities.ContainerJobInput{
-			Name:         stepName(step),
-			WorkflowID:   info.WorkflowExecution.ID,
-			RunID:        info.WorkflowExecution.RunID,
-			StepID:       step.ID,
-			LogDir:       logDir,
-			ProjectID:    spec.ProjectID,
-			Entrypoint:   spec.Entrypoint,
-			Command:      spec.Command,
-			Env:          spec.Env,
-			GPU:          spec.GPU,
-			LauncherPath: spec.LauncherPath,
-			TimeoutSecs:  step.TimeoutSeconds,
+			Name:        stepName(step),
+			WorkflowID:  info.WorkflowExecution.ID,
+			RunID:       info.WorkflowExecution.RunID,
+			StepID:      step.ID,
+			LogDir:      logDir,
+			ProjectID:   spec.ProjectID,
+			Entrypoint:  spec.Entrypoint,
+			Command:     spec.Command,
+			Env:         spec.Env,
+			GPU:         spec.GPU,
+			TimeoutSecs: step.TimeoutSeconds,
 		})
 	case "hf_download_dataset":
 		spec := step.HFDownloadDataset
