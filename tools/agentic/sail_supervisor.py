@@ -11,7 +11,6 @@ import fcntl
 import json
 import os
 import signal
-import socket
 import subprocess
 import sys
 import tempfile
@@ -21,6 +20,10 @@ from pathlib import Path
 from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+sys.path.append(str(REPO_ROOT))
+
+from tools.agentic.temporal_probe import TemporalProbe
+
 DEFAULT_RUNTIME_ROOT = Path(
     os.environ.get(
         "SAIL_RUNTIME_ROOT",
@@ -230,19 +233,7 @@ def lock_holders(path: Path) -> list[int]:
 
 
 def temporal_reachable(address: str) -> bool:
-    host, sep, port_text = address.partition(":")
-    if not sep:
-        host = address
-        port_text = "7233"
-    try:
-        port = int(port_text)
-    except ValueError:
-        return False
-    try:
-        with socket.create_connection((host, port), timeout=3):
-            return True
-    except OSError:
-        return False
+    return TemporalProbe(address).is_reachable()
 
 
 def worker_info(pid_file: Path) -> tuple[int | None, bool]:
