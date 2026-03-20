@@ -9,7 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/exec"
@@ -302,18 +302,17 @@ type PackageBuildInput struct {
 }
 
 type ContainerJobInput struct {
-	Name         string            `json:"name"`
-	WorkflowID   string            `json:"workflowId"`
-	RunID        string            `json:"runId"`
-	StepID       string            `json:"stepId"`
-	LogDir       string            `json:"logDir"`
-	ProjectID    string            `json:"projectId"`
-	Entrypoint   string            `json:"entrypoint"`
-	Command      string            `json:"command"`
-	Env          map[string]string `json:"env"`
-	GPU          bool              `json:"gpu"`
-	TimeoutSecs  int               `json:"timeoutSeconds"`
-	LauncherPath string            `json:"launcherPath"`
+	Name        string            `json:"name"`
+	WorkflowID  string            `json:"workflowId"`
+	RunID       string            `json:"runId"`
+	StepID      string            `json:"stepId"`
+	LogDir      string            `json:"logDir"`
+	ProjectID   string            `json:"projectId"`
+	Entrypoint  string            `json:"entrypoint"`
+	Command     string            `json:"command"`
+	Env         map[string]string `json:"env"`
+	GPU         bool              `json:"gpu"`
+	TimeoutSecs int               `json:"timeoutSeconds"`
 }
 
 type HFDownloadDatasetInput struct {
@@ -557,14 +556,17 @@ func ContainerJob(ctx context.Context, input ContainerJobInput) (RunCommandResul
 		return RunCommandResult{ExitCode: -1}, errors.New("command is required")
 	}
 
-	launcherPath, err := resolveContainerLauncherPath(input.LauncherPath)
+	launcher, err := resolveContainerLauncher()
 	if err != nil {
 		return RunCommandResult{ExitCode: -1}, err
 	}
+	if launcher.usesLegacyShim {
+		slog.Warn("ContainerJob: falling back to legacy launch_container.sh", "launcher", launcher.path)
+	}
 
-	entrypoint := input.Entrypoint
+	entrypoint := normalizeContainerEntrypointName(input.Entrypoint)
 	if entrypoint == "" {
-		entrypoint = "run-job.sh"
+		entrypoint = "run-job"
 	}
 
 	args := []string{"--entrypoint", entrypoint, "--", "bash", "-lc", input.Command}
@@ -586,37 +588,91 @@ func ContainerJob(ctx context.Context, input ContainerJobInput) (RunCommandResul
 		RunID:       input.RunID,
 		StepID:      input.StepID,
 		LogDir:      input.LogDir,
-		Command:     launcherPath,
+		Command:     launcher.path,
 		Args:        args,
 		Env:         env,
 		TimeoutSecs: input.TimeoutSecs,
 	})
 }
 
-func resolveContainerLauncherPath(configuredPath string) (string, error) {
-	if strings.TrimSpace(configuredPath) != "" {
-		return configuredPath, nil
+type containerLauncher struct {
+	path           string
+	usesLegacyShim bool
+}
+
+func resolveContainerLauncher() (containerLauncher, error) {
+	return resolveContainerLauncherWith(strings.TrimSpace(os.Getenv("SYGALDRY_HOME")), exec.LookPath)
+}
+
+func resolveContainerLauncherWith(
+	sygaldryHome string,
+	lookPath func(string) (string, error),
+) (containerLauncher, error) {
+	checked := []string{}
+	addChecked := func(candidate string) {
+		if candidate != "" {
+			checked = append(checked, candidate)
+		}
+	}
+	check := func(candidate string, usesLegacyShim bool) (containerLauncher, bool) {
+		addChecked(candidate)
+		if candidate == "" {
+			return containerLauncher{}, false
+		}
+		if _, err := os.Stat(candidate); err == nil {
+			return containerLauncher{path: candidate, usesLegacyShim: usesLegacyShim}, true
+		}
+		return containerLauncher{}, false
+	}
+
+	if sygaldryHome != "" {
+		for _, candidate := range []string{
+			filepath.Join(sygaldryHome, "target", "release", "zephyr"),
+			filepath.Join(sygaldryHome, "crates", "zephyr", "target", "release", "zephyr"),
+		} {
+			if launcher, ok := check(candidate, false); ok {
+				return launcher, nil
+			}
+		}
+	}
+
+	if lookPath != nil {
+		if candidate, err := lookPath("zephyr"); err == nil {
+			addChecked(candidate)
+			return containerLauncher{path: candidate}, nil
+		}
+		addChecked("PATH:zephyr")
 	}
 
 	candidates := []string{}
-	if home := strings.TrimSpace(os.Getenv("SYGALDRY_HOME")); home != "" {
-		candidates = append(candidates, filepath.Join(home, "container", "launch_container.sh"))
+	if sygaldryHome != "" {
+		candidates = append(candidates, filepath.Join(sygaldryHome, "container", "launch_container.sh"))
 	}
 	candidates = append(candidates,
+		"../crates/zephyr/target/release/zephyr",
+		"./crates/zephyr/target/release/zephyr",
+		"/opt/sygaldry/crates/zephyr/target/release/zephyr",
 		"../container/launch_container.sh",
 		"./container/launch_container.sh",
 		"/opt/sygaldry/container/launch_container.sh",
 	)
 	for _, candidate := range candidates {
-		if _, err := os.Stat(candidate); err == nil {
-			return candidate, nil
+		usesLegacyShim := strings.HasSuffix(candidate, "launch_container.sh")
+		if launcher, ok := check(candidate, usesLegacyShim); ok {
+			return launcher, nil
 		}
 	}
 
-	return "", fmt.Errorf(
-		"container launcher not found; set container_job.launcher_path or SYGALDRY_HOME (checked: %s)",
-		strings.Join(candidates, ", "),
+	return containerLauncher{}, fmt.Errorf(
+		"container launcher not found; build or install zephyr, or ensure a launcher path exists (checked: %s)",
+		strings.Join(checked, ", "),
 	)
+}
+
+func normalizeContainerEntrypointName(name string) string {
+	name = strings.TrimSpace(name)
+	name = strings.TrimSuffix(name, ".sh")
+	return name
 }
 
 func K8sJob(ctx context.Context, input K8sJobInput) (RunCommandResult, error) {
@@ -717,7 +773,7 @@ func HFDownloadDataset(ctx context.Context, input HFDownloadDatasetInput) (RunCo
 	if split == "" {
 		split = "train[:100]"
 	}
-	cacheDir := "/opt/hf_cache"
+	cacheDir := resolveHFCacheDir(input.CacheDir)
 
 	script := `
 import importlib.util, sys
@@ -763,7 +819,7 @@ func HFDownloadModel(ctx context.Context, input HFDownloadModelInput) (RunComman
 		return RunCommandResult{ExitCode: -1}, errors.New("modelId is required")
 	}
 
-	cacheDir := "/opt/hf_cache"
+	cacheDir := resolveHFCacheDir(input.CacheDir)
 
 	script := `
 import importlib.util, sys
@@ -798,6 +854,18 @@ print(f'Downloaded {model_id} to {path}')
 		Env:         env,
 		TimeoutSecs: input.TimeoutSecs,
 	})
+}
+
+func resolveHFCacheDir(configuredPath string) string {
+	cacheDir := strings.TrimSpace(configuredPath)
+	if cacheDir != "" {
+		return cacheDir
+	}
+	cacheDir = strings.TrimSpace(os.Getenv("HF_HOME"))
+	if cacheDir != "" {
+		return cacheDir
+	}
+	return "/opt/hf_cache"
 }
 
 func resolvePythonStepCommand(requiredModules, uvDependencies []string) (string, []string) {
@@ -1004,13 +1072,13 @@ func emitEvent(logDir string, event StepEvent) {
 		}
 	}
 	if err := os.MkdirAll(logDir, 0o755); err != nil {
-		log.Printf("WARNING: emitEvent: failed to create log dir %s: %v", logDir, err)
+		slog.Warn("emitEvent: failed to create log dir", "logDir", logDir, "error", err)
 		return
 	}
 	path := filepath.Join(logDir, "events.jsonl")
 	file, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
 	if err != nil {
-		log.Printf("WARNING: emitEvent: failed to open %s: %v", path, err)
+		slog.Warn("emitEvent: failed to open event log", "path", path, "error", err)
 		return
 	}
 	defer file.Close()
@@ -1020,10 +1088,10 @@ func emitEvent(logDir string, event StepEvent) {
 	}
 	data, err := json.Marshal(event)
 	if err != nil {
-		log.Printf("WARNING: emitEvent: failed to marshal event for step %s: %v", event.StepID, err)
+		slog.Warn("emitEvent: failed to marshal event", "step_id", event.StepID, "error", err)
 		return
 	}
 	if _, err := file.Write(append(data, '\n')); err != nil {
-		log.Printf("WARNING: emitEvent: failed to write event for step %s: %v", event.StepID, err)
+		slog.Warn("emitEvent: failed to write event", "step_id", event.StepID, "error", err)
 	}
 }

@@ -35,20 +35,21 @@ func run(args []string) error {
 	flags := flag.NewFlagSet("rfc", flag.ContinueOnError)
 	flags.SetOutput(os.Stderr)
 
-	rfcPath     := flags.String("rfc", "", "Path to RFC markdown file (required)")
-	repoDir     := flags.String("repo-dir", "", "Repository root (default: SYGALDRY_HOME or auto-detected)")
+	rfcPath := flags.String("rfc", "", "Path to RFC markdown file (required)")
+	repoDir := flags.String("repo-dir", "", "Repository root (default: SYGALDRY_HOME or auto-detected)")
 	landingMode := flags.String("landing-mode", "direct", "Landing mode: direct|pr")
 	maxParallel := flags.Int("max-parallel", 3, "Maximum parallel task workflows")
-	maxRetries  := flags.Int("max-retries", 3, "Maximum retries per task")
+	maxRetries := flags.Int("max-retries", 3, "Maximum retries per task")
 	enginesFlag := flags.String("engines", "cursor,gemini,opencode,codex", "Comma-separated executor engines")
 	claudeModel := flags.String("claude-model", "claude-sonnet-4-6", "Claude model for plan/review steps")
-	workflowID  := flags.String("workflow-id", "", "Workflow ID (auto-generated if empty)")
-	asyncMode   := flags.Bool("async", false, "Return immediately without waiting for completion")
-	logDir      := flags.String("log-dir", "", "Override log directory")
-	address     := flags.String("address", envOr("TEMPORAL_ADDRESS", "localhost:7233"), "Temporal host:port")
-	namespace   := flags.String("namespace", envOr("TEMPORAL_NAMESPACE", "default"), "Temporal namespace")
-	taskQueue   := flags.String("task-queue", envOr("TEMPORAL_TASK_QUEUE", "orchestration"), "Task queue")
-	output      := flags.String("output", "yaml", "Output format: yaml|json")
+	workflowID := flags.String("workflow-id", "", "Workflow ID (auto-generated if empty)")
+	asyncMode := flags.Bool("async", false, "Return immediately without waiting for completion")
+	logDir := flags.String("log-dir", "", "Override log directory")
+	tempDir := flags.String("temp-dir", "", "Directory for RFC workflow temp files and worktrees (default: os temp dir)")
+	address := flags.String("address", envOr("TEMPORAL_ADDRESS", "localhost:7233"), "Temporal host:port")
+	namespace := flags.String("namespace", envOr("TEMPORAL_NAMESPACE", "default"), "Temporal namespace")
+	taskQueue := flags.String("task-queue", envOr("TEMPORAL_TASK_QUEUE", "orchestration"), "Task queue")
+	output := flags.String("output", "yaml", "Output format: yaml|json")
 
 	if err := flags.Parse(args); err != nil {
 		return err
@@ -86,6 +87,10 @@ func run(args []string) error {
 			resolvedLogDir = "logs"
 		}
 	}
+	resolvedTempDir := *tempDir
+	if resolvedTempDir == "" {
+		resolvedTempDir = os.TempDir()
+	}
 
 	// Parse engines.
 	var engines []string
@@ -100,6 +105,7 @@ func run(args []string) error {
 		RFCPath:           *rfcPath,
 		RepoDir:           resolvedRepoDir,
 		LogDir:            resolvedLogDir,
+		TempDir:           resolvedTempDir,
 		MaxParallelTasks:  *maxParallel,
 		MaxRetriesPerTask: *maxRetries,
 		LandingMode:       *landingMode,

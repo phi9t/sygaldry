@@ -19,9 +19,22 @@ Read the plan file at `${{ params.plan_file }}` and implement all changes descri
 
 1. Read the plan file carefully.
 2. If `task.approach` starts with `SKIP:`, exit 0 without making any changes.
-3. Otherwise, implement each change listed in `task.files_to_change`.
+3. Otherwise, implement **every** change listed in `task.files_to_change`. You MUST edit the
+   actual files — reading them and confirming they exist is not sufficient.
 4. Follow all conventions in `CLAUDE.md`.
 5. Do **NOT** commit, push, or run validation — the pipeline handles that.
 6. Do **NOT** make changes outside the files listed in the plan unless strictly necessary.
 
-Exit 0 on success. Exit non-zero if you cannot complete the implementation.
+## Mandatory Self-Review Before Exiting
+
+Before you exit, perform this checklist. Do not skip any step:
+
+1. Run `git diff --stat` in the worktree. If the output is **empty**, you have NOT completed
+   the task. Return to step 3 above and make the edits.
+2. For each file listed in `task.files_to_change`, confirm it appears in `git diff --stat`.
+3. Briefly re-read the changed sections to catch obvious mistakes (missing import, wrong
+   variable name, copy-paste error).
+4. If you find an issue, fix it before exiting.
+
+Exit 0 only after the self-review confirms real changes were made.
+Exit non-zero if you cannot complete the implementation even after retrying.

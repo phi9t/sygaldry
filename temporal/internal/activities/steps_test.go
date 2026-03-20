@@ -62,6 +62,80 @@ func TestSafeName(t *testing.T) {
 	}
 }
 
+func TestNormalizeContainerEntrypointName(t *testing.T) {
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{"run-job.sh", "run-job"},
+		{"verify-gpu", "verify-gpu"},
+		{"  hf-download.sh  ", "hf-download"},
+		{"", ""},
+	}
+	for _, tt := range tests {
+		if got := normalizeContainerEntrypointName(tt.input); got != tt.want {
+			t.Errorf("normalizeContainerEntrypointName(%q) = %q, want %q", tt.input, got, tt.want)
+		}
+	}
+}
+
+func TestResolveContainerLauncherWith(t *testing.T) {
+	t.Run("prefers zephyr binary over legacy shim", func(t *testing.T) {
+		root := t.TempDir()
+		zephyrPath := filepath.Join(root, "crates", "zephyr", "target", "release", "zephyr")
+		shimPath := filepath.Join(root, "container", "launch_container.sh")
+		if err := os.MkdirAll(filepath.Dir(zephyrPath), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.MkdirAll(filepath.Dir(shimPath), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(zephyrPath, []byte("#!/bin/sh\n"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(shimPath, []byte("#!/bin/sh\n"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+
+		launcher, err := resolveContainerLauncherWith(root, func(string) (string, error) {
+			return "", os.ErrNotExist
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if launcher.path != zephyrPath {
+			t.Fatalf("launcher.path = %q, want %q", launcher.path, zephyrPath)
+		}
+		if launcher.usesLegacyShim {
+			t.Fatal("launcher should not use legacy shim when zephyr exists")
+		}
+	})
+
+	t.Run("falls back to legacy shim when zephyr is absent", func(t *testing.T) {
+		root := t.TempDir()
+		shimPath := filepath.Join(root, "container", "launch_container.sh")
+		if err := os.MkdirAll(filepath.Dir(shimPath), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(shimPath, []byte("#!/bin/sh\n"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+
+		launcher, err := resolveContainerLauncherWith(root, func(string) (string, error) {
+			return "", os.ErrNotExist
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if launcher.path != shimPath {
+			t.Fatalf("launcher.path = %q, want %q", launcher.path, shimPath)
+		}
+		if !launcher.usesLegacyShim {
+			t.Fatal("launcher should report legacy shim fallback")
+		}
+	})
+}
+
 // ---------------------------------------------------------------------------
 // Unit tests: logWriters
 // ---------------------------------------------------------------------------
@@ -393,6 +467,29 @@ func TestHFDownloadModelValidation(t *testing.T) {
 	if err == nil {
 		t.Error("expected error for empty modelId")
 	}
+}
+
+func TestResolveHFCacheDir(t *testing.T) {
+	t.Run("prefers explicit input", func(t *testing.T) {
+		t.Setenv("HF_HOME", "/env/hf")
+		if got := resolveHFCacheDir("/custom/hf"); got != "/custom/hf" {
+			t.Fatalf("resolveHFCacheDir() = %q, want %q", got, "/custom/hf")
+		}
+	})
+
+	t.Run("falls back to HF_HOME", func(t *testing.T) {
+		t.Setenv("HF_HOME", "/env/hf")
+		if got := resolveHFCacheDir(""); got != "/env/hf" {
+			t.Fatalf("resolveHFCacheDir() = %q, want %q", got, "/env/hf")
+		}
+	})
+
+	t.Run("uses default cache dir", func(t *testing.T) {
+		t.Setenv("HF_HOME", "")
+		if got := resolveHFCacheDir(""); got != "/opt/hf_cache" {
+			t.Fatalf("resolveHFCacheDir() = %q, want %q", got, "/opt/hf_cache")
+		}
+	})
 }
 
 // ---------------------------------------------------------------------------

@@ -633,9 +633,6 @@ func mergeContainerJobSpec(base, override *workflows.ContainerJobSpec) *workflow
 	if override.GPU {
 		merged.GPU = true
 	}
-	if override.LauncherPath != "" {
-		merged.LauncherPath = override.LauncherPath
-	}
 	return &merged
 }
 

@@ -2,7 +2,7 @@ package workflows
 
 import (
 	"encoding/json"
-	"strings"
+	"path/filepath"
 	"testing"
 )
 
@@ -83,15 +83,25 @@ func TestRFCTaskCountValidation(t *testing.T) {
 	}
 }
 
-func TestWorktreePathGeneration(t *testing.T) {
+func TestRFCTempPathGeneration(t *testing.T) {
+	tempDir := "/var/tmp/rfc"
 	workflowID := "rfc-impl-20260101-abc123"
 	taskID := "task-1"
-	path := "/tmp/rfc-impl-" + rfcSafeID(workflowID) + "/" + taskID
-	if !strings.HasPrefix(path, "/tmp/rfc-impl-") {
-		t.Errorf("unexpected path prefix: %s", path)
+	safeWorkflowID := rfcSafeID(workflowID)
+
+	tasksPath := rfcTasksFilePath(tempDir, workflowID)
+	if want := filepath.Join(tempDir, "rfc-impl-"+safeWorkflowID+"-tasks.json"); tasksPath != want {
+		t.Errorf("tasks path = %q, want %q", tasksPath, want)
 	}
-	if !strings.HasSuffix(path, taskID) {
-		t.Errorf("path does not end with taskID: %s", path)
+
+	worktreePath := rfcWorktreePath(tempDir, workflowID, taskID)
+	if want := filepath.Join(tempDir, "rfc-impl-"+safeWorkflowID, taskID); worktreePath != want {
+		t.Errorf("worktree path = %q, want %q", worktreePath, want)
+	}
+
+	planPath := rfcPlanFilePath(tempDir, workflowID, taskID, 2)
+	if want := filepath.Join(tempDir, "rfc-task-"+safeWorkflowID+"-"+taskID+"-a2.yaml"); planPath != want {
+		t.Errorf("plan path = %q, want %q", planPath, want)
 	}
 }
 

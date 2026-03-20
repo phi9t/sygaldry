@@ -25,7 +25,7 @@ Each task must have this exact schema:
 {
   "id": "<short-kebab-case-id>",
   "title": "<imperative one-line title, e.g. 'add gemini engine to agent_task.go'>",
-  "description": "<2-4 sentences describing what to implement and why>",
+  "description": "<2-4 sentences describing EXACTLY what to change: which function, which line range, what the before/after looks like>",
   "filesHint": ["<relative/path/to/file.go>"],
   "priority": <1-10, 1=highest>
 }
@@ -39,3 +39,5 @@ Each task must have this exact schema:
 - Each task must be verifiable by `./validate_all.sh --quick`.
 - Maximum 10 tasks. If the RFC has more than 10 changes, pick the 10 highest-priority ones.
 - Do NOT include tasks that require human judgment, runtime state, or external dependencies unavailable in the repo.
+- The `description` MUST specify: (1) the current state of the code ("currently X"), (2) the desired state ("change to Y"), and (3) a concrete acceptance criterion verifiable via `git diff` or `grep` (e.g. "grep -n 'slog' steps.go returns non-empty output").
+- If the RFC notes that a change is ALREADY IMPLEMENTED, omit that task entirely. Only include unimplemented changes.

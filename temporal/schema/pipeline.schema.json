@@ -152,8 +152,7 @@
           "type": "object",
           "additionalProperties": { "type": "string" }
         },
-        "gpu": { "type": "boolean" },
-        "launcher_path": { "type": "string" }
+        "gpu": { "type": "boolean" }
       },
       "required": ["command"]
     },

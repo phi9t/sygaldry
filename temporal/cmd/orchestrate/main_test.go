@@ -496,6 +496,59 @@ func TestMergeGitOpSpec(t *testing.T) {
 	})
 }
 
+func TestMergeContainerJobSpec(t *testing.T) {
+	t.Run("nil base gets override fields", func(t *testing.T) {
+		result := mergeContainerJobSpec(nil, &workflows.ContainerJobSpec{
+			ProjectID:  "proj",
+			Entrypoint: "run-job.sh",
+			Command:    "python train.py",
+			Env:        map[string]string{"A": "1"},
+			GPU:        true,
+		})
+		if result.ProjectID != "proj" {
+			t.Errorf("project_id = %q, want %q", result.ProjectID, "proj")
+		}
+		if result.Command != "python train.py" {
+			t.Errorf("command = %q, want %q", result.Command, "python train.py")
+		}
+		if result.Env["A"] != "1" {
+			t.Errorf("env[A] = %q, want %q", result.Env["A"], "1")
+		}
+		if !result.GPU {
+			t.Error("gpu = false, want true")
+		}
+	})
+
+	t.Run("override merges env and preserves base values", func(t *testing.T) {
+		base := &workflows.ContainerJobSpec{
+			ProjectID:  "base-proj",
+			Entrypoint: "base-entrypoint",
+			Command:    "python base.py",
+			Env:        map[string]string{"A": "1"},
+		}
+		result := mergeContainerJobSpec(base, &workflows.ContainerJobSpec{
+			Command: "python override.py",
+			Env:     map[string]string{"B": "2"},
+			GPU:     true,
+		})
+		if result.ProjectID != "base-proj" {
+			t.Errorf("project_id = %q, want %q", result.ProjectID, "base-proj")
+		}
+		if result.Entrypoint != "base-entrypoint" {
+			t.Errorf("entrypoint = %q, want %q", result.Entrypoint, "base-entrypoint")
+		}
+		if result.Command != "python override.py" {
+			t.Errorf("command = %q, want %q", result.Command, "python override.py")
+		}
+		if result.Env["A"] != "1" || result.Env["B"] != "2" {
+			t.Errorf("env = %v, want merged A/B values", result.Env)
+		}
+		if !result.GPU {
+			t.Error("gpu = false, want true")
+		}
+	})
+}
+
 func TestRunDispatchToValidate(t *testing.T) {
 	dir := t.TempDir()
 	planPath := filepath.Join(dir, "plan.yaml")

@@ -10,13 +10,14 @@ Sources:
   5. foundation.org section header drift vs actual file list
   6. go vet ./... warnings
   7. Go functions with 0% test coverage
+  8. Rust functions with 0 execution count via cargo-llvm-cov
 
 Output: JSON array of issues sorted by priority (1=critical, 2=high, 3=normal),
         printed to stdout. Each issue has the shape:
         {
           "id":          "<type>-<hash>",
           "priority":    1|2|3,
-          "type":        "todo|shellcheck|go_test|ruff|foundation_drift|go_vet|go_coverage",
+          "type":        "todo|shellcheck|go_test|ruff|foundation_drift|go_vet|go_coverage|rust_coverage",
           "title":       "<short description>",
           "description": "<detail>",
           "files":       ["<path>", ...],
@@ -33,6 +34,7 @@ import argparse
 import datetime as dt
 import hashlib
 import json
+import os
 import re
 import subprocess
 import sys
@@ -53,6 +55,8 @@ Issue = dict[str, Any]
 SourceFunc = Callable[[Path, int], list[Issue]]
 
 SOURCE_TIMEOUT_SECS = 120
+GO_COVERAGE_FILE_ENV = "SAIL_GO_COVERAGE_FILE"
+RUST_COVERAGE_FILE_ENV = "SAIL_RUST_COVERAGE_FILE"
 
 
 def _issue_id(issue_type: str, data: str) -> str:
@@ -295,7 +299,7 @@ def discover_go_tests_and_coverage(repo_dir: Path, max_per_type: int) -> list[Is
     if not temporal_dir.is_dir():
         return []
 
-    cover_file = "/tmp/sail-coverage.out"
+    cover_file = os.environ.get(GO_COVERAGE_FILE_ENV, "/tmp/sail-coverage.out")
     try:
         # Run go test with -json for failure detection AND -coverprofile for coverage analysis
         result = subprocess.run(
@@ -388,6 +392,98 @@ def discover_go_tests_and_coverage(repo_dir: Path, max_per_type: int) -> list[Is
         if coverage_count >= max_per_type:
             break
 
+    return issues
+
+
+def discover_uncovered_rust_functions(repo_dir: Path, max_per_type: int) -> list[Issue]:
+    rust_crate_dir = repo_dir / "crates" / "zephyr"
+    if not rust_crate_dir.is_dir():
+        return []
+
+    coverage_file = Path(
+        os.environ.get(RUST_COVERAGE_FILE_ENV, "/tmp/sail-rust-coverage.json")
+    )
+
+    try:
+        probe = subprocess.run(
+            ["cargo", "llvm-cov", "--version"],
+            cwd=rust_crate_dir,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        print(
+            "Warning: cargo llvm-cov is unavailable; skipping rust coverage discovery",
+            file=sys.stderr,
+        )
+        return []
+
+    if probe.returncode != 0:
+        print(
+            "Warning: cargo llvm-cov is unavailable; skipping rust coverage discovery",
+            file=sys.stderr,
+        )
+        return []
+
+    coverage_file.unlink(missing_ok=True)
+
+    try:
+        result = subprocess.run(
+            [
+                "cargo",
+                "llvm-cov",
+                "--json",
+                "--output-path",
+                str(coverage_file),
+            ],
+            cwd=rust_crate_dir,
+            capture_output=True,
+            text=True,
+            timeout=300,
+        )
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        return []
+
+    if result.returncode != 0 and not coverage_file.exists():
+        print(
+            "Warning: cargo llvm-cov failed; skipping rust coverage discovery",
+            file=sys.stderr,
+        )
+        return []
+
+    try:
+        payload = json.loads(coverage_file.read_text())
+    except (FileNotFoundError, json.JSONDecodeError):
+        return []
+
+    issues: list[Issue] = []
+    for datum in payload.get("data", []):
+        for file_entry in datum.get("files", []):
+            filename = file_entry.get("filename", "")
+            if not filename:
+                continue
+            for function in file_entry.get("functions", []):
+                name = function.get("name", "")
+                count = function.get("count")
+                if not name or count is None or count != 0:
+                    continue
+                issues.append(
+                    {
+                        "id": _issue_id("rust_coverage", f"{filename}:{name}"),
+                        "priority": 2,
+                        "type": "rust_coverage",
+                        "title": f"Uncovered Rust function: {name}",
+                        "description": (
+                            f"{filename}: function {name!r} has 0 execution count in cargo llvm-cov output. "
+                            "Consider adding a Rust test."
+                        ),
+                        "files": [filename],
+                        "context": json.dumps(function, sort_keys=True),
+                    }
+                )
+                if len(issues) >= max_per_type:
+                    return issues
     return issues
 
 
@@ -570,6 +666,7 @@ def main() -> None:
 
     sources = [
         ("go_tests_and_coverage", discover_go_tests_and_coverage),
+        ("rust_coverage", discover_uncovered_rust_functions),
         ("go_vet", discover_go_vet),
         ("shellcheck", discover_shellcheck),
         ("todo", discover_todos),

@@ -21,6 +21,7 @@ type RFCImplInput struct {
 	RFCPath           string            `json:"rfcPath"`
 	RepoDir           string            `json:"repoDir"`
 	LogDir            string            `json:"logDir"`
+	TempDir           string            `json:"tempDir"`
 	MaxParallelTasks  int               `json:"maxParallelTasks"`  // 0 = use task count
 	MaxRetriesPerTask int               `json:"maxRetriesPerTask"` // default 3
 	LandingMode       string            `json:"landingMode"`       // "direct" | "pr"
@@ -46,6 +47,7 @@ type RFCTaskInput struct {
 	RFCPath      string                       `json:"rfcPath"`
 	RepoDir      string                       `json:"repoDir"`
 	LogDir       string                       `json:"logDir"`
+	TempDir      string                       `json:"tempDir"`
 	WorktreePath string                       `json:"worktreePath"`
 	BranchName   string                       `json:"branchName"`
 	BaseBranch   string                       `json:"baseBranch"`
@@ -90,6 +92,9 @@ func RFCImpl(ctx workflow.Context, input RFCImplInput) (RFCImplResult, error) {
 	if input.LandingMode == "" {
 		input.LandingMode = "direct"
 	}
+	if strings.TrimSpace(input.TempDir) == "" {
+		return RFCImplResult{}, errors.New("rfc_impl: tempDir is required")
+	}
 
 	info := workflow.GetInfo(ctx)
 	workflowID := info.WorkflowExecution.ID
@@ -103,7 +108,7 @@ func RFCImpl(ctx workflow.Context, input RFCImplInput) (RFCImplResult, error) {
 	actCtx := workflow.WithActivityOptions(ctx, shortAO)
 
 	// Step 1: Decompose RFC → tasks.json
-	tasksFile := fmt.Sprintf("/tmp/rfc-impl-%s-tasks.json", rfcSafeID(workflowID))
+	tasksFile := rfcTasksFilePath(input.TempDir, workflowID)
 	var decomposeResult activities.RunCommandResult
 	err := workflow.ExecuteActivity(actCtx, activities.AgentTask, activities.AgentTaskInput{
 		Name:       "rfc-decompose",
@@ -186,7 +191,8 @@ func RFCImpl(ctx workflow.Context, input RFCImplInput) (RFCImplResult, error) {
 				RFCPath:      input.RFCPath,
 				RepoDir:      input.RepoDir,
 				LogDir:       input.LogDir,
-				WorktreePath: fmt.Sprintf("/tmp/rfc-impl-%s/%s", rfcSafeID(workflowID), task.ID),
+				TempDir:      input.TempDir,
+				WorktreePath: rfcWorktreePath(input.TempDir, workflowID, task.ID),
 				BranchName:   fmt.Sprintf("rfc-impl-%s-%s", rfcSafeID(workflowID), task.ID),
 				BaseBranch:   input.BaseBranch,
 				LandingMode:  input.LandingMode,
@@ -309,7 +315,7 @@ func RFCTaskWorkflow(ctx workflow.Context, input RFCTaskInput) (RFCTaskResult, e
 		logger.Info("RFCTask attempt", "task", input.Task.ID, "attempt", attempt)
 
 		// a. Plan
-		planFile := fmt.Sprintf("/tmp/rfc-task-%s-%s-a%d.yaml", rfcSafeID(workflowID), input.Task.ID, attempt)
+		planFile := rfcPlanFilePath(input.TempDir, workflowID, input.Task.ID, attempt)
 		planCtx := workflow.WithActivityOptions(ctx, planAO)
 		var planResult activities.RunCommandResult
 		if err := workflow.ExecuteActivity(planCtx, activities.AgentTask, activities.AgentTaskInput{
@@ -368,37 +374,89 @@ func RFCTaskWorkflow(ctx workflow.Context, input RFCTaskInput) (RFCTaskResult, e
 			return result, nil
 		}
 
-		// c. Review (errors are non-fatal; zero-value reviewResult means review_passed != "true")
-		reviewCtx := workflow.WithActivityOptions(ctx, reviewAO)
-		var reviewResult activities.RunCommandResult
-		_ = workflow.ExecuteActivity(reviewCtx, activities.AgentTask, activities.AgentTaskInput{
-			Name:       fmt.Sprintf("review-%s-a%d", input.Task.ID, attempt),
+		// c0. Pre-review diff gate: skip the expensive Claude call when agent made no changes.
+		// git diff --quiet HEAD exits 0=no changes, 1=changes present.
+		diffCtx := workflow.WithActivityOptions(ctx, gitAO)
+		var diffResult activities.RunCommandResult
+		_ = workflow.ExecuteActivity(diffCtx, activities.RunCommand, activities.RunCommandInput{
+			Name:       fmt.Sprintf("check-diff-%s-a%d", input.Task.ID, attempt),
 			WorkflowID: workflowID,
-			StepID:     fmt.Sprintf("review-a%d", attempt),
+			StepID:     fmt.Sprintf("check-diff-a%d", attempt),
+			LogDir:     input.LogDir,
+			Command:    "git",
+			Args:       []string{"diff", "--quiet", "HEAD"},
+			WorkingDir: input.WorktreePath,
+			Env:        input.Env,
+		}).Get(ctx, &diffResult)
+		if diffResult.ExitCode == 0 {
+			// No working-tree changes — agent did not edit any files.
+			prevReviewFailure = "no changes made — implementer did not modify any files (git diff HEAD is empty)"
+			if attempt == maxRetries-1 {
+				result.FailReason = fmt.Sprintf("no changes after %d attempts", maxRetries)
+				result.Retries = attempt
+			}
+			continue
+		}
+
+		// c. Review — Stage 1: Spec Compliance
+		reviewCtx := workflow.WithActivityOptions(ctx, reviewAO)
+		reviewParams := map[string]string{
+			"task_id":          input.Task.ID,
+			"task_title":       input.Task.Title,
+			"task_description": input.Task.Description,
+			"worktree_path":    input.WorktreePath,
+			"plan_file":        planFile,
+			"base_branch":      input.BaseBranch,
+		}
+		var specResult activities.RunCommandResult
+		_ = workflow.ExecuteActivity(reviewCtx, activities.AgentTask, activities.AgentTaskInput{
+			Name:       fmt.Sprintf("review-spec-%s-a%d", input.Task.ID, attempt),
+			WorkflowID: workflowID,
+			StepID:     fmt.Sprintf("review-spec-a%d", attempt),
 			LogDir:     input.LogDir,
 			Engine:     activities.AgentEngineClaude,
 			Model:      input.ClaudeModel,
-			PromptFile: filepath.Join(input.RepoDir, "tools/agentic/prompts/rfc_task_review.md"),
+			PromptFile: filepath.Join(input.RepoDir, "tools/agentic/prompts/rfc_task_review_spec.md"),
 			WorkingDir: input.WorktreePath,
-			Params: map[string]string{
-				"task_id":          input.Task.ID,
-				"task_title":       input.Task.Title,
-				"task_description": input.Task.Description,
-				"worktree_path":    input.WorktreePath,
-				"plan_file":        planFile,
-				"base_branch":      input.BaseBranch,
-			},
-			Env: input.Env,
-		}).Get(ctx, &reviewResult)
+			Params:     reviewParams,
+			Env:        input.Env,
+		}).Get(ctx, &specResult)
 
-		if extractSetOutput(reviewResult.Stdout, "review_passed") == "true" {
+		if extractSetOutput(specResult.Stdout, "review_passed") != "true" {
+			prevReviewFailure = extractSetOutput(specResult.Stdout, "review_failure")
+			if prevReviewFailure == "" {
+				prevReviewFailure = "spec compliance review failed"
+			}
+			if attempt == maxRetries-1 {
+				result.FailReason = fmt.Sprintf("spec review failed after %d attempts: %s", maxRetries, prevReviewFailure)
+				result.Retries = attempt
+			}
+			continue
+		}
+
+		// c2. Review — Stage 2: Code Quality (only runs when spec compliance passes)
+		var qualResult activities.RunCommandResult
+		_ = workflow.ExecuteActivity(reviewCtx, activities.AgentTask, activities.AgentTaskInput{
+			Name:       fmt.Sprintf("review-qual-%s-a%d", input.Task.ID, attempt),
+			WorkflowID: workflowID,
+			StepID:     fmt.Sprintf("review-qual-a%d", attempt),
+			LogDir:     input.LogDir,
+			Engine:     activities.AgentEngineClaude,
+			Model:      input.ClaudeModel,
+			PromptFile: filepath.Join(input.RepoDir, "tools/agentic/prompts/rfc_task_review_quality.md"),
+			WorkingDir: input.WorktreePath,
+			Params:     reviewParams,
+			Env:        input.Env,
+		}).Get(ctx, &qualResult)
+
+		if extractSetOutput(qualResult.Stdout, "review_passed") == "true" {
 			result.Succeeded = true
 			result.Retries = attempt
 			break
 		}
-		prevReviewFailure = extractSetOutput(reviewResult.Stdout, "review_failure")
+		prevReviewFailure = extractSetOutput(qualResult.Stdout, "review_failure")
 		if attempt == maxRetries-1 {
-			result.FailReason = fmt.Sprintf("review failed after %d attempts: %s", maxRetries, prevReviewFailure)
+			result.FailReason = fmt.Sprintf("quality review failed after %d attempts: %s", maxRetries, prevReviewFailure)
 			result.Retries = attempt
 		}
 	}
@@ -567,6 +625,18 @@ func extractSetOutput(stdout, key string) string {
 func rfcSafeID(id string) string {
 	r := strings.NewReplacer("/", "_", "\\", "_", " ", "_", ":", "_", "\t", "_")
 	return r.Replace(strings.TrimSpace(id))
+}
+
+func rfcTasksFilePath(tempDir, workflowID string) string {
+	return filepath.Join(tempDir, fmt.Sprintf("rfc-impl-%s-tasks.json", rfcSafeID(workflowID)))
+}
+
+func rfcWorktreePath(tempDir, workflowID, taskID string) string {
+	return filepath.Join(tempDir, fmt.Sprintf("rfc-impl-%s", rfcSafeID(workflowID)), taskID)
+}
+
+func rfcPlanFilePath(tempDir, workflowID, taskID string, attempt int) string {
+	return filepath.Join(tempDir, fmt.Sprintf("rfc-task-%s-%s-a%d.yaml", rfcSafeID(workflowID), taskID, attempt))
 }
 
 // toAgentTaskEngines converts a []string to []activities.AgentTaskEngine.
