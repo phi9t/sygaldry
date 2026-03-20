@@ -244,11 +244,6 @@ RUN chmod +x /opt/container_entrypoints/*.sh
 USER kvothe
 WORKDIR /home/kvothe
 
-# # Copy and run user environment setup script
-# COPY setup_user_environment.sh /tmp/setup_user_environment.sh
-# RUN /tmp/setup_user_environment.sh ${RUST_VERSION} ${PYTHON_VERSION} && \
-#     rm /tmp/setup_user_environment.sh
-
 # ============================================================================
 # Final Configuration
 # ============================================================================
