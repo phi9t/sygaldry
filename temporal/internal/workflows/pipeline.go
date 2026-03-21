@@ -173,11 +173,17 @@ type PipelineResult struct {
 	Steps     []StepOutcome `json:"steps"`
 }
 
+const pipelineWorkflowVersion = 1
+
 var outputPattern = regexp.MustCompile(`^::set-output\s+name=([A-Za-z_][A-Za-z0-9_-]*)::(.*)$`)
 var templatePattern = regexp.MustCompile(`\$\{\{\s*([^}]+?)\s*\}\}`)
 
 func Pipeline(ctx workflow.Context, input PipelineInput) (PipelineResult, error) {
 	logger := workflow.GetLogger(ctx)
+	// Version guard: bump pipelineWorkflowVersion and add a new change ID guard
+	// whenever Pipeline control flow changes in a replay-sensitive way.
+	v := workflow.GetVersion(ctx, "initial", workflow.DefaultVersion, pipelineWorkflowVersion)
+	_ = v
 	info := workflow.GetInfo(ctx)
 	logDir := "logs"
 	if input.LogDir != "" {

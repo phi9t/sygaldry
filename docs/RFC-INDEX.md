@@ -1,7 +1,7 @@
 # RFC Index
 
 **Last updated:** 2026-03-21
-**Total RFCs:** 16 (44 created, 28 closed as complete or N/A)
+**Total RFCs:** 15 (44 created, 29 closed as complete or N/A)
 
 ---
 
@@ -20,7 +20,6 @@
 | RFC-015 | validate_all.sh Modernization | Proposed | Low | XS | shell |
 | RFC-016 | K3s YAML Path Externalization | Proposed (on hold) | Low | M | k3s |
 | RFC-019 | Rust Dead Code Cleanup | Proposed | Low | S | rust-core |
-| RFC-022 | Workflow Versioning (GetVersion) | Proposed | Medium | S | temporal |
 | RFC-023 | Query and Signal Handlers for Pipeline | Proposed | Medium | M | temporal |
 | RFC-031 | Scope Container User sudo Privileges | Proposed | Medium | S | docker |
 | RFC-032 | Reduce --ipc=host and --net=host Exposure | Proposed | Medium | M | docker |
@@ -36,10 +35,9 @@
 
 ### Medium priority (production readiness)
 
-1. **RFC-022** — Workflow versioning (`workflow.GetVersion`)
-2. **RFC-023** — Query/signal handlers for running pipelines
-3. **RFC-031** — Scope container sudo privileges
-4. **RFC-032** — Reduce `--ipc=host` / `--net=host` exposure
+1. **RFC-023** — Query/signal handlers for running pipelines
+2. **RFC-031** — Scope container sudo privileges
+3. **RFC-032** — Reduce `--ipc=host` / `--net=host` exposure
 
 ### Lower priority
 
@@ -87,3 +85,4 @@
 | RFC-017 | image.rs Production Visibility Cleanup | Done — `should_build_decision` now runs in production, `build_image()` calls it directly, unsafe libc calls are documented, and missing image timestamps emit a warning |
 | RFC-041 | Cache detect_user_spec to Avoid docker info | Done — `ZEPHYR_ROOTLESS` now provides a config-backed override so launches can skip probing `docker info` on every run |
 | RFC-035 | Add Remaining Test Coverage for orchestrate merge* Functions | Done — `merge_test.go` now covers the remaining orchestrate merge helpers plus `safeFilename`, `writePlanManifest`, and `printOutput` |
+| RFC-022 | Workflow Versioning (GetVersion) | Done — `Pipeline`, `RFCImpl`, and `RFCTaskWorkflow` now all register inline `workflow.GetVersion` guards for replay-safe control-flow evolution |
