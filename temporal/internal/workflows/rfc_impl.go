@@ -78,6 +78,13 @@ type RFCImplResult struct {
 	TaskResults []RFCTaskResult `json:"taskResults"`
 }
 
+type RFCImplStatus struct {
+	WorkflowID  string            `json:"workflowId"`
+	Phase       string            `json:"phase"`
+	TaskStates  map[string]string `json:"taskStates"`
+	CompletedAt *time.Time        `json:"completedAt,omitempty"`
+}
+
 // ── Parent Workflow ──────────────────────────────────────────────────────────
 
 // RFCImpl decomposes an RFC into tasks and executes them in parallel child workflows.
@@ -105,6 +112,16 @@ func RFCImpl(ctx workflow.Context, input RFCImplInput) (RFCImplResult, error) {
 	info := workflow.GetInfo(ctx)
 	workflowID := info.WorkflowExecution.ID
 	runID := info.WorkflowExecution.RunID
+	status := RFCImplStatus{
+		WorkflowID: workflowID,
+		Phase:      "decomposing",
+		TaskStates: map[string]string{},
+	}
+	if err := workflow.SetQueryHandler(ctx, pipelineStatusQuery, func() (RFCImplStatus, error) {
+		return rfcImplStatusSnapshot(status), nil
+	}); err != nil {
+		return RFCImplResult{}, err
+	}
 
 	// Activity options for the decompose + read steps.
 	shortAO := workflow.ActivityOptions{
@@ -149,21 +166,27 @@ func RFCImpl(ctx workflow.Context, input RFCImplInput) (RFCImplResult, error) {
 	var tasksJSON string
 	err = workflow.ExecuteActivity(actCtx, activities.ReadJSONFile, tasksFile).Get(ctx, &tasksJSON)
 	if err != nil {
+		completeRFCImplStatus(ctx, &status, "failed")
 		return RFCImplResult{}, fmt.Errorf("rfc_impl: read tasks file failed: %w", err)
 	}
 
 	// Step 3: Unmarshal tasks — deterministic JSON parsing is safe in a workflow.
 	var tasks []RFCTaskSpec
 	if err := json.Unmarshal([]byte(tasksJSON), &tasks); err != nil {
+		completeRFCImplStatus(ctx, &status, "failed")
 		return RFCImplResult{}, fmt.Errorf("rfc_impl: invalid tasks JSON: %w", err)
 	}
 	if len(tasks) == 0 {
+		completeRFCImplStatus(ctx, &status, "failed")
 		return RFCImplResult{}, errors.New("rfc_impl: decompose returned 0 tasks")
 	}
 	if len(tasks) > 10 {
+		completeRFCImplStatus(ctx, &status, "failed")
 		return RFCImplResult{}, fmt.Errorf("rfc_impl: decompose returned %d tasks (max 10)", len(tasks))
 	}
 	logger.Info("RFC decomposed", "taskCount", len(tasks))
+	setRFCImplTasksPending(&status, tasks)
+	status.Phase = "running"
 
 	// Step 4: Fan-out with bounded parallelism.
 	vp := workflow.GetVersion(ctx, "bounded-parallelism", workflow.DefaultVersion, rfcImplWorkflowVersion)
@@ -193,6 +216,7 @@ func RFCImpl(ctx workflow.Context, input RFCImplInput) (RFCImplResult, error) {
 
 		workflow.Go(ctx, func(ctx workflow.Context) {
 			defer func() { sema.Send(ctx, token) }()
+			setRFCImplTaskState(&status, task.ID, "running")
 
 			taskInput := RFCTaskInput{
 				Task:         task,
@@ -224,6 +248,11 @@ func RFCImpl(ctx workflow.Context, input RFCImplInput) (RFCImplResult, error) {
 					FailReason: fmt.Sprintf("child workflow error: %v", err),
 				}
 			}
+			if taskResult.Succeeded {
+				setRFCImplTaskState(&status, task.ID, "succeeded")
+			} else {
+				setRFCImplTaskState(&status, task.ID, "failed")
+			}
 			resultCh.Send(ctx, taskResult)
 		})
 	}
@@ -242,6 +271,11 @@ func RFCImpl(ctx workflow.Context, input RFCImplInput) (RFCImplResult, error) {
 			allSucceeded = false
 			break
 		}
+	}
+	if allSucceeded {
+		completeRFCImplStatus(ctx, &status, "done")
+	} else {
+		completeRFCImplStatus(ctx, &status, "failed")
 	}
 	return RFCImplResult{Succeeded: allSucceeded, TaskResults: allResults}, nil
 }
@@ -629,6 +663,32 @@ func extractSetOutput(stdout, key string) string {
 		}
 	}
 	return ""
+}
+
+func rfcImplStatusSnapshot(status RFCImplStatus) RFCImplStatus {
+	snapshot := status
+	snapshot.TaskStates = cloneStepStates(status.TaskStates)
+	return snapshot
+}
+
+func setRFCImplTasksPending(status *RFCImplStatus, tasks []RFCTaskSpec) {
+	status.TaskStates = make(map[string]string, len(tasks))
+	for _, task := range tasks {
+		status.TaskStates[task.ID] = "pending"
+	}
+}
+
+func setRFCImplTaskState(status *RFCImplStatus, taskID string, state string) {
+	if status.TaskStates == nil {
+		status.TaskStates = map[string]string{}
+	}
+	status.TaskStates[taskID] = state
+}
+
+func completeRFCImplStatus(ctx workflow.Context, status *RFCImplStatus, phase string) {
+	status.Phase = phase
+	completedAt := workflow.Now(ctx)
+	status.CompletedAt = &completedAt
 }
 
 // rfcSafeID converts a workflow ID into a filesystem-safe string.

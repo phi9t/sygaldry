@@ -173,7 +173,24 @@ type PipelineResult struct {
 	Steps     []StepOutcome `json:"steps"`
 }
 
-const pipelineWorkflowVersion = 1
+type PipelineStatus struct {
+	WorkflowID      string            `json:"workflowId"`
+	Phase           string            `json:"phase"`
+	StepStates      map[string]string `json:"stepStates"`
+	CancelRequested bool              `json:"cancelRequested"`
+	CurrentStepID   string            `json:"currentStepId,omitempty"`
+	CurrentStepName string            `json:"currentStepName,omitempty"`
+	CompletedAt     *time.Time        `json:"completedAt,omitempty"`
+}
+
+const (
+	pipelineWorkflowVersion           = 1
+	pipelineStatusQuery               = "status"
+	pipelineCancelSignal              = "cancel"
+	pipelineSearchAttrWorkflowID      = "SygaldryPipelineWorkflowID"
+	pipelineSearchAttrCurrentStepID   = "SygaldryPipelineCurrentStepID"
+	pipelineSearchAttrCurrentStepName = "SygaldryPipelineCurrentStepName"
+)
 
 var outputPattern = regexp.MustCompile(`^::set-output\s+name=([A-Za-z_][A-Za-z0-9_-]*)::(.*)$`)
 var templatePattern = regexp.MustCompile(`\$\{\{\s*([^}]+?)\s*\}\}`)
@@ -185,6 +202,14 @@ func Pipeline(ctx workflow.Context, input PipelineInput) (PipelineResult, error)
 	v := workflow.GetVersion(ctx, "initial", workflow.DefaultVersion, pipelineWorkflowVersion)
 	_ = v
 	info := workflow.GetInfo(ctx)
+	status := newPipelineStatus(info.WorkflowExecution.ID, input.Steps)
+	if err := workflow.SetQueryHandler(ctx, pipelineStatusQuery, func() (PipelineStatus, error) {
+		return pipelineStatusSnapshot(status), nil
+	}); err != nil {
+		return PipelineResult{}, err
+	}
+	cancelCh := workflow.GetSignalChannel(ctx, pipelineCancelSignal)
+	activityCtx, cancelActivities := workflow.WithCancel(ctx)
 	logDir := "logs"
 	if input.LogDir != "" {
 		logDir = input.LogDir
@@ -211,77 +236,97 @@ func Pipeline(ctx workflow.Context, input PipelineInput) (PipelineResult, error)
 	}
 
 	for len(pending) > 0 || len(running) > 0 {
+		if consumePipelineCancel(cancelCh, &status, cancelActivities) && len(running) == 0 {
+			completePipelineStatus(ctx, &status, "canceled")
+			return PipelineResult{Succeeded: false, Steps: ordered(outcomes, order)}, temporal.NewCanceledError("pipeline cancel signal received")
+		}
+
 		progressed := false
 
-		for _, id := range sortedStepIDs(pending) {
-			step := pending[id]
-			if !depsCompleted(step, outcomes) {
-				continue
-			}
-			if skip, reason := shouldSkip(step, outcomes); skip {
-				outcomes[id] = StepOutcome{
-					ID:         step.ID,
-					Name:       stepName(step),
-					State:      "skipped",
-					Result:     PipelineStepResult{Name: stepName(step)},
-					SkipReason: reason,
+		if !status.CancelRequested {
+			for _, id := range sortedStepIDs(pending) {
+				step := pending[id]
+				if !depsCompleted(step, outcomes) {
+					continue
 				}
+				if skip, reason := shouldSkip(step, outcomes); skip {
+					outcomes[id] = StepOutcome{
+						ID:         step.ID,
+						Name:       stepName(step),
+						State:      "skipped",
+						Result:     PipelineStepResult{Name: stepName(step)},
+						SkipReason: reason,
+					}
+					setPipelineStepState(&status, step.ID, "skipped")
+					delete(pending, id)
+					progressed = true
+					continue
+				}
+
+				rendered, err := prepareStep(step, input, outcomes)
+				if err != nil {
+					outcome := StepOutcome{
+						ID:    step.ID,
+						Name:  stepName(step),
+						State: "failed",
+						Result: PipelineStepResult{
+							Name:      stepName(step),
+							Succeeded: false,
+							Error:     err.Error(),
+						},
+					}
+					outcomes[id] = outcome
+					setPipelineStepState(&status, step.ID, "failed")
+					delete(pending, id)
+					progressed = true
+					if !step.AllowFailure {
+						completePipelineStatus(ctx, &status, "failed")
+						return PipelineResult{Succeeded: false, Steps: ordered(outcomes, order)}, temporal.NewNonRetryableApplicationError(err.Error(), "TemplateExpansionFailed", nil)
+					}
+					continue
+				}
+
+				logger.Info("running step", "id", rendered.ID, "type", rendered.Type)
+				stepCtx := workflow.WithActivityOptions(activityCtx, activityOptionsForStep(baseOptions, rendered))
+				setPipelineStepRunning(&status, rendered)
+				upsertPipelineSearchAttributes(ctx, info.WorkflowExecution.ID, rendered)
+				activityFuture := startActivity(stepCtx, info, logDir, rendered)
+				running[id] = runningStep{step: rendered, ctx: stepCtx, future: activityFuture}
 				delete(pending, id)
 				progressed = true
-				continue
 			}
-
-			rendered, err := prepareStep(step, input, outcomes)
-			if err != nil {
-				outcome := StepOutcome{
-					ID:    step.ID,
-					Name:  stepName(step),
-					State: "failed",
-					Result: PipelineStepResult{
-						Name:      stepName(step),
-						Succeeded: false,
-						Error:     err.Error(),
-					},
-				}
-				outcomes[id] = outcome
-				delete(pending, id)
-				progressed = true
-				if !step.AllowFailure {
-					return PipelineResult{Succeeded: false, Steps: ordered(outcomes, order)}, temporal.NewNonRetryableApplicationError(err.Error(), "TemplateExpansionFailed", nil)
-				}
-				continue
-			}
-
-			logger.Info("running step", "id", rendered.ID, "type", rendered.Type)
-			stepCtx := workflow.WithActivityOptions(ctx, activityOptionsForStep(baseOptions, rendered))
-			workflow.UpsertSearchAttributes(ctx, map[string]interface{}{
-				"CustomStringField":  stepName(rendered),
-				"CustomKeywordField": rendered.ID,
-			})
-			activityFuture := startActivity(stepCtx, info, logDir, rendered)
-			running[id] = runningStep{step: rendered, ctx: stepCtx, future: activityFuture}
-			delete(pending, id)
-			progressed = true
 		}
 
 		if len(running) == 0 {
 			if progressed {
 				continue
 			}
+			completePipelineStatus(ctx, &status, "failed")
 			return PipelineResult{Succeeded: false, Steps: ordered(outcomes, order)}, temporal.NewNonRetryableApplicationError("pipeline deadlock: check dependencies and conditions", "PipelineDeadlock", nil)
 		}
 
-		completedID, completedResult, completedErr := awaitNextCompletion(ctx, running)
+		canceled, completedID, completedResult, completedErr := awaitNextCompletion(ctx, running, cancelCh)
+		if canceled {
+			consumePipelineCancel(cancelCh, &status, cancelActivities)
+			continue
+		}
 		run := running[completedID]
 		delete(running, completedID)
 
-		outcome, earlyReturn := resolveStepOutcome(run, completedResult, completedErr, outcomes, order)
+		outcome, earlyReturn := resolveStepOutcome(run, completedResult, completedErr, outcomes, order, status.CancelRequested)
 		outcomes[run.step.ID] = outcome
+		setPipelineStepState(&status, run.step.ID, outcome.State)
 		if earlyReturn != nil {
+			if temporal.IsCanceledError(earlyReturn.err) {
+				completePipelineStatus(ctx, &status, "canceled")
+			} else {
+				completePipelineStatus(ctx, &status, "failed")
+			}
 			return earlyReturn.PipelineResult, earlyReturn.err
 		}
 	}
 
+	completePipelineStatus(ctx, &status, "done")
 	return PipelineResult{Succeeded: true, Steps: ordered(outcomes, order)}, nil
 }
 
@@ -297,9 +342,11 @@ type pipelineEarlyReturn struct {
 	err error
 }
 
-// awaitNextCompletion blocks on the Temporal selector until one running activity finishes.
-func awaitNextCompletion(ctx workflow.Context, running map[string]runningStep) (string, PipelineStepResult, error) {
+// awaitNextCompletion blocks on the Temporal selector until one running activity finishes
+// or a cancel signal is received.
+func awaitNextCompletion(ctx workflow.Context, running map[string]runningStep, cancelCh workflow.ReceiveChannel) (bool, string, PipelineStepResult, error) {
 	selector := workflow.NewSelector(ctx)
+	var canceled bool
 	var completedID string
 	var completedResult PipelineStepResult
 	var completedErr error
@@ -311,8 +358,13 @@ func awaitNextCompletion(ctx workflow.Context, running map[string]runningStep) (
 			completedResult, completedErr = waitActivity(runCopy)
 		})
 	}
+	selector.AddReceive(cancelCh, func(c workflow.ReceiveChannel, more bool) {
+		var signal struct{}
+		c.Receive(ctx, &signal)
+		canceled = true
+	})
 	selector.Select(ctx)
-	return completedID, completedResult, completedErr
+	return canceled, completedID, completedResult, completedErr
 }
 
 // resolveStepOutcome converts activity completion into a StepOutcome and optionally
@@ -323,6 +375,7 @@ func resolveStepOutcome(
 	activityErr error,
 	outcomes map[string]StepOutcome,
 	order []string,
+	cancelRequested bool,
 ) (StepOutcome, *pipelineEarlyReturn) {
 	outcome := StepOutcome{
 		ID:     run.step.ID,
@@ -331,6 +384,19 @@ func resolveStepOutcome(
 	}
 
 	if activityErr != nil {
+		if temporal.IsCanceledError(activityErr) {
+			outcome.State = "canceled"
+			outcome.Result.Succeeded = false
+			outcome.Result.Error = activityErr.Error()
+			if cancelRequested {
+				outcomes[run.step.ID] = outcome
+				return outcome, &pipelineEarlyReturn{
+					PipelineResult: PipelineResult{Succeeded: false, Steps: ordered(outcomes, order)},
+					err:            temporal.NewCanceledError("pipeline cancel signal received"),
+				}
+			}
+			return outcome, nil
+		}
 		outcome.State = "failed"
 		outcome.Result.Succeeded = false
 		outcome.Result.Error = activityErr.Error()
@@ -939,4 +1005,88 @@ func stepName(step PipelineStep) string {
 		return step.Name
 	}
 	return step.ID
+}
+
+func newPipelineStatus(workflowID string, steps []PipelineStep) PipelineStatus {
+	stepStates := make(map[string]string, len(steps))
+	for _, step := range steps {
+		stepStates[step.ID] = "pending"
+	}
+	return PipelineStatus{
+		WorkflowID: workflowID,
+		Phase:      "running",
+		StepStates: stepStates,
+	}
+}
+
+func pipelineStatusSnapshot(status PipelineStatus) PipelineStatus {
+	snapshot := status
+	snapshot.StepStates = cloneStepStates(status.StepStates)
+	return snapshot
+}
+
+func cloneStepStates(states map[string]string) map[string]string {
+	if len(states) == 0 {
+		return map[string]string{}
+	}
+	cloned := make(map[string]string, len(states))
+	for key, value := range states {
+		cloned[key] = value
+	}
+	return cloned
+}
+
+func setPipelineStepState(status *PipelineStatus, stepID string, state string) {
+	if status.StepStates == nil {
+		status.StepStates = map[string]string{}
+	}
+	status.StepStates[stepID] = state
+	if status.CurrentStepID == stepID && state != "running" {
+		status.CurrentStepID = ""
+		status.CurrentStepName = ""
+	}
+}
+
+func setPipelineStepRunning(status *PipelineStatus, step PipelineStep) {
+	setPipelineStepState(status, step.ID, "running")
+	status.CurrentStepID = step.ID
+	status.CurrentStepName = stepName(step)
+}
+
+func consumePipelineCancel(cancelCh workflow.ReceiveChannel, status *PipelineStatus, cancelActivities func()) bool {
+	if status.CancelRequested {
+		return true
+	}
+	received := false
+	for {
+		var signal struct{}
+		if !cancelCh.ReceiveAsync(&signal) {
+			break
+		}
+		received = true
+	}
+	if received {
+		status.CancelRequested = true
+		status.Phase = "cancelling"
+		cancelActivities()
+	}
+	return status.CancelRequested
+}
+
+func completePipelineStatus(ctx workflow.Context, status *PipelineStatus, phase string) {
+	status.Phase = phase
+	completedAt := workflow.Now(ctx)
+	status.CompletedAt = &completedAt
+	if phase != "running" && phase != "cancelling" {
+		status.CurrentStepID = ""
+		status.CurrentStepName = ""
+	}
+}
+
+func upsertPipelineSearchAttributes(ctx workflow.Context, workflowID string, step PipelineStep) {
+	_ = workflow.UpsertSearchAttributes(ctx, map[string]interface{}{
+		pipelineSearchAttrWorkflowID:      workflowID,
+		pipelineSearchAttrCurrentStepID:   step.ID,
+		pipelineSearchAttrCurrentStepName: stepName(step),
+	})
 }

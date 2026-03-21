@@ -10,6 +10,70 @@ import (
 	"go.temporal.io/sdk/workflow"
 )
 
+func TestNewPipelineStatusStartsPending(t *testing.T) {
+	steps := []PipelineStep{{ID: "build"}, {ID: "test"}}
+	status := newPipelineStatus("wf-123", steps)
+
+	if status.WorkflowID != "wf-123" {
+		t.Fatalf("workflow id = %q, want wf-123", status.WorkflowID)
+	}
+	if status.Phase != "running" {
+		t.Fatalf("phase = %q, want running", status.Phase)
+	}
+	if got := status.StepStates["build"]; got != "pending" {
+		t.Fatalf("build state = %q, want pending", got)
+	}
+	if got := status.StepStates["test"]; got != "pending" {
+		t.Fatalf("test state = %q, want pending", got)
+	}
+}
+
+func TestPipelineStatusSnapshotClonesMap(t *testing.T) {
+	status := newPipelineStatus("wf-123", []PipelineStep{{ID: "build"}})
+	snapshot := pipelineStatusSnapshot(status)
+	snapshot.StepStates["build"] = "failed"
+
+	if got := status.StepStates["build"]; got != "pending" {
+		t.Fatalf("original state mutated to %q", got)
+	}
+}
+
+func TestSetPipelineStepRunningTracksCurrentStep(t *testing.T) {
+	status := newPipelineStatus("wf-123", []PipelineStep{{ID: "build", Name: "Build"}})
+	setPipelineStepRunning(&status, PipelineStep{ID: "build", Name: "Build"})
+
+	if got := status.StepStates["build"]; got != "running" {
+		t.Fatalf("build state = %q, want running", got)
+	}
+	if status.CurrentStepID != "build" || status.CurrentStepName != "Build" {
+		t.Fatalf("current step = %q/%q, want build/Build", status.CurrentStepID, status.CurrentStepName)
+	}
+}
+
+func TestResolveStepOutcomeCanceledOnCancelSignal(t *testing.T) {
+	run := runningStep{step: PipelineStep{ID: "build", Name: "Build"}}
+	outcomes := map[string]StepOutcome{}
+
+	outcome, earlyReturn := resolveStepOutcome(
+		run,
+		PipelineStepResult{Name: "Build"},
+		temporal.NewCanceledError("cancelled"),
+		outcomes,
+		[]string{"build"},
+		true,
+	)
+
+	if outcome.State != "canceled" {
+		t.Fatalf("state = %q, want canceled", outcome.State)
+	}
+	if earlyReturn == nil {
+		t.Fatal("expected early return on cancel")
+	}
+	if !temporal.IsCanceledError(earlyReturn.err) {
+		t.Fatalf("expected canceled error, got %v", earlyReturn.err)
+	}
+}
+
 // ---------------------------------------------------------------------------
 // depsCompleted
 // ---------------------------------------------------------------------------
@@ -381,7 +445,7 @@ func TestResolveStepOutcomeSuccess(t *testing.T) {
 	outcomes := map[string]StepOutcome{}
 	order := []string{"s1"}
 
-	outcome, earlyReturn := resolveStepOutcome(run, result, nil, outcomes, order)
+	outcome, earlyReturn := resolveStepOutcome(run, result, nil, outcomes, order, false)
 	if outcome.State != "success" {
 		t.Errorf("State = %q, want success", outcome.State)
 	}
@@ -396,7 +460,7 @@ func TestResolveStepOutcomeNonZeroExit(t *testing.T) {
 	outcomes := map[string]StepOutcome{}
 	order := []string{"s1"}
 
-	outcome, earlyReturn := resolveStepOutcome(run, result, nil, outcomes, order)
+	outcome, earlyReturn := resolveStepOutcome(run, result, nil, outcomes, order, false)
 	if outcome.State != "failed" {
 		t.Errorf("State = %q, want failed", outcome.State)
 	}
@@ -414,7 +478,7 @@ func TestResolveStepOutcomeNonZeroExitAllowed(t *testing.T) {
 	outcomes := map[string]StepOutcome{}
 	order := []string{"s1"}
 
-	outcome, earlyReturn := resolveStepOutcome(run, result, nil, outcomes, order)
+	outcome, earlyReturn := resolveStepOutcome(run, result, nil, outcomes, order, false)
 	if outcome.State != "failed" {
 		t.Errorf("State = %q, want failed", outcome.State)
 	}
@@ -429,7 +493,7 @@ func TestResolveStepOutcomeActivityError(t *testing.T) {
 	outcomes := map[string]StepOutcome{}
 	order := []string{"s1"}
 
-	outcome, earlyReturn := resolveStepOutcome(run, result, fmt.Errorf("timeout"), outcomes, order)
+	outcome, earlyReturn := resolveStepOutcome(run, result, fmt.Errorf("timeout"), outcomes, order, false)
 	if outcome.State != "failed" {
 		t.Errorf("State = %q, want failed", outcome.State)
 	}
@@ -447,7 +511,7 @@ func TestResolveStepOutcomeActivityErrorAllowed(t *testing.T) {
 	outcomes := map[string]StepOutcome{}
 	order := []string{"s1"}
 
-	_, earlyReturn := resolveStepOutcome(run, result, fmt.Errorf("timeout"), outcomes, order)
+	_, earlyReturn := resolveStepOutcome(run, result, fmt.Errorf("timeout"), outcomes, order, false)
 	if earlyReturn != nil {
 		t.Error("should NOT early return when AllowFailure is true")
 	}

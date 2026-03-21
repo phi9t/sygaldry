@@ -6,6 +6,34 @@ import (
 	"testing"
 )
 
+func TestSetRFCImplTasksPending(t *testing.T) {
+	status := RFCImplStatus{WorkflowID: "wf-123", Phase: "decomposing"}
+	tasks := []RFCTaskSpec{{ID: "t1"}, {ID: "t2"}}
+
+	setRFCImplTasksPending(&status, tasks)
+
+	if got := status.TaskStates["t1"]; got != "pending" {
+		t.Fatalf("t1 state = %q, want pending", got)
+	}
+	if got := status.TaskStates["t2"]; got != "pending" {
+		t.Fatalf("t2 state = %q, want pending", got)
+	}
+}
+
+func TestRFCImplStatusSnapshotClonesMap(t *testing.T) {
+	status := RFCImplStatus{
+		WorkflowID: "wf-123",
+		Phase:      "running",
+		TaskStates: map[string]string{"t1": "running"},
+	}
+	snapshot := rfcImplStatusSnapshot(status)
+	snapshot.TaskStates["t1"] = "failed"
+
+	if got := status.TaskStates["t1"]; got != "running" {
+		t.Fatalf("original state mutated to %q", got)
+	}
+}
+
 func TestExtractSetOutput(t *testing.T) {
 	tests := []struct {
 		stdout string

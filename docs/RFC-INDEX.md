@@ -1,7 +1,7 @@
 # RFC Index
 
 **Last updated:** 2026-03-21
-**Total RFCs:** 10 (44 created, 34 closed as complete or N/A)
+**Total RFCs:** 9 (44 created, 35 closed as complete or N/A)
 
 ---
 
@@ -17,7 +17,6 @@
 | RFC-013 | Dockerfile Cache Layer Optimization | Proposed | Low | M | docker |
 | RFC-016 | K3s YAML Path Externalization | Proposed (on hold) | Low | M | k3s |
 | RFC-019 | Rust Dead Code Cleanup | Proposed | Low | S | rust-core |
-| RFC-023 | Query and Signal Handlers for Pipeline | Proposed | Medium | M | temporal |
 | RFC-031 | Add Explicit Dev-Only Unrestricted sudo Opt-In | Draft v2 | Low | S | docker |
 
 ---
@@ -34,16 +33,15 @@
 
 ### Medium priority (production readiness)
 
-4. **RFC-023** — Query/signal handlers for running pipelines
-5. **RFC-012** — Orchestrate command decomposition
+4. **RFC-012** — Orchestrate command decomposition
 
 ### Lower priority
 
-6. **RFC-019** — Rust dead code cleanup
-7. **RFC-031** — Dev-only unrestricted sudo opt-in
-8. **RFC-004** — SAIL infrastructure simplification
-9. **RFC-013** — Dockerfile cache layer optimization
-10. **RFC-016** — K3s YAML path externalization (on hold: K3s strategic direction undecided)
+5. **RFC-019** — Rust dead code cleanup
+6. **RFC-031** — Dev-only unrestricted sudo opt-in
+7. **RFC-004** — SAIL infrastructure simplification
+8. **RFC-013** — Dockerfile cache layer optimization
+9. **RFC-016** — K3s YAML path externalization (on hold: K3s strategic direction undecided)
 
 ---
 
@@ -82,3 +80,4 @@
 | RFC-033 | Add Resource Limits to docker run | Done — Zephyr now supports bounded `--memory`, `--cpus`, `--memory-swap`, and `--pids-limit`, with `SAIL_RUN=1` defaulting memory to `64g` |
 | RFC-010 | Rust Host Module Testing | Done — `docker_args.rs`, `job.rs`, `lease.rs`, and `container/entrypoint.rs` now all carry focused unit-test modules instead of the near-zero coverage described in the RFC |
 | RFC-014 | Rust Config and Paths Cleanup | Done — `config.rs` now uses path helpers instead of repeated `.display().to_string()` conversions, `projects_root` is surfaced in effective config output, and `paths.rs` uses named layout-version constants |
+| RFC-023 | Query and Signal Handlers for Pipeline | Done — `Pipeline` now exposes a `status` query, honors a `cancel` signal, and uses named search attributes; `RFCImpl` now exposes task-progress status; `temporal/scripts/register_search_attributes.sh` registers the new search-attribute keys |
