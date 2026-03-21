@@ -1,0 +1,15 @@
+task:
+  id: "warn-unknown-flags"
+  title: "emit a warning for unrecognized flags instead of silently dropping them"
+  approach: |
+    Inspection of validate_all.sh:136-138 shows the warning is already implemented:
+    the `*)` case already calls `log "WARNING: unknown flag '$1' ignored"` before shifting.
+    No code change is needed; the acceptance criterion is already met.
+    The plan is to verify the existing behavior satisfies the criterion and confirm no further action is required.
+  files_to_change:
+    - path: "validate_all.sh"
+      change: "No change needed — warning is already emitted at line 137 for unrecognized flags."
+  acceptance_criteria:
+    - "Running `./validate_all.sh --typo-flag --quick 2>&1 | grep WARNING` returns a line containing 'unknown flag'."
+  risks:
+    - "None — the code is already correct; this is a no-op plan."

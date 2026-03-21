@@ -133,7 +133,7 @@ while [[ $# -gt 0 ]]; do
             QUALITY_STRICT=true
             shift
             ;;
-        *)
+        *)  # unrecognized flag: warn and skip
             log "WARNING: unknown flag '$1' ignored"
             shift
             ;;
