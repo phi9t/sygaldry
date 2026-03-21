@@ -1,0 +1,24 @@
+task:
+  id: "pipeline-getversion-guard"
+  title: "add workflow.GetVersion guard to Pipeline function in pipeline.go"
+  approach: |
+    The previous attempt made no file changes. This attempt will directly edit
+    temporal/internal/workflows/pipeline.go with two concrete changes: (1) add a
+    package-level const `pipelineWorkflowVersion = 1` after the import block (after
+    line 16), and (2) insert `v := workflow.GetVersion(ctx, "initial",
+    workflow.DefaultVersion, pipelineWorkflowVersion); _ = v` immediately after
+    `logger := workflow.GetLogger(ctx)` on line 180. Changes are minimal and
+    self-contained.
+  files_to_change:
+    - path: "temporal/internal/workflows/pipeline.go"
+      change: |
+        1. After the closing paren of the import block (line 16), add:
+           `const pipelineWorkflowVersion = 1`
+        2. After line 180 (`logger := workflow.GetLogger(ctx)`), insert:
+           `v := workflow.GetVersion(ctx, "initial", workflow.DefaultVersion, pipelineWorkflowVersion); _ = v`
+  acceptance_criteria:
+    - "grep -n 'GetVersion' temporal/internal/workflows/pipeline.go returns at least one match"
+    - "cd temporal && go build ./... exits with code 0"
+    - "cd temporal && go test ./internal/workflows/... exits with code 0"
+  risks:
+    - "Replaying existing workflow histories against the new code will call GetVersion for the first time; existing in-flight workflows that were started before this change may see unexpected version behavior — acceptable for a first-time versioning guard"

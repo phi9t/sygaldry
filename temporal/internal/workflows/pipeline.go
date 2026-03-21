@@ -15,6 +15,8 @@ import (
 	"temporal-orchestration/internal/activities"
 )
 
+const pipelineWorkflowVersion = 1
+
 type When struct {
 	Step   string `json:"step" yaml:"step"`
 	Status string `json:"status" yaml:"status"`
@@ -178,6 +180,8 @@ var templatePattern = regexp.MustCompile(`\$\{\{\s*([^}]+?)\s*\}\}`)
 
 func Pipeline(ctx workflow.Context, input PipelineInput) (PipelineResult, error) {
 	logger := workflow.GetLogger(ctx)
+	v := workflow.GetVersion(ctx, "initial", workflow.DefaultVersion, pipelineWorkflowVersion)
+	_ = v
 	info := workflow.GetInfo(ctx)
 	logDir := "logs"
 	if input.LogDir != "" {
