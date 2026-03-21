@@ -15,12 +15,10 @@ impl RuntimeContext {
         }
     }
 
-    #[allow(dead_code)]
     pub fn is_container(self) -> bool {
         self == Self::Container
     }
 
-    #[allow(dead_code)]
     pub fn is_host(self) -> bool {
         self == Self::Host
     }

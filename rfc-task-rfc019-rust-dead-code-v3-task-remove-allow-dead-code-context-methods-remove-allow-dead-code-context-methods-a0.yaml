@@ -1,0 +1,16 @@
+task:
+  id: "remove-allow-dead-code-context-methods"
+  title: "remove #[allow(dead_code)] from is_container and is_host in context.rs"
+  approach: |
+    Remove the two #[allow(dead_code)] attributes at lines 18 and 23 of
+    crates/zephyr/src/context.rs. Both methods are pub on a pub enum so the
+    compiler does not flag them; the annotations are unnecessary. The method
+    bodies and tests remain unchanged.
+  files_to_change:
+    - path: "crates/zephyr/src/context.rs"
+      change: "Delete the #[allow(dead_code)] line above is_container() and the #[allow(dead_code)] line above is_host()"
+  acceptance_criteria:
+    - "grep -n 'allow(dead_code)' crates/zephyr/src/context.rs returns no output"
+    - "cargo test -p zephyr passes with no compilation errors"
+  risks:
+    - "None — removing a suppression attribute on pub methods cannot introduce new failures"
