@@ -1,0 +1,16 @@
+task:
+  id: "add-unsafe-safety-comments"
+  title: "add SAFETY comments to libc::getuid and libc::getgid unsafe blocks"
+  approach: |
+    Insert a single `// SAFETY:` comment block immediately above the two unsafe calls at lines
+    125-126 of `crates/zephyr/src/host/image.rs`, explaining that `getuid(2)` and `getgid(2)`
+    are unconditionally safe: they take no arguments, dereference no pointers, and have no
+    preconditions that could lead to undefined behaviour. No other changes are needed.
+  files_to_change:
+    - path: "crates/zephyr/src/host/image.rs"
+      change: "Add a // SAFETY: comment block above the unsafe { libc::getuid() } and unsafe { libc::getgid() } calls at lines 125-126"
+  acceptance_criteria:
+    - "grep -n 'SAFETY' crates/zephyr/src/host/image.rs returns non-empty output near lines 125-132"
+    - "cargo clippy -- -D warnings passes with no new warnings"
+  risks:
+    - "None — purely additive comment change with no behavioural impact"

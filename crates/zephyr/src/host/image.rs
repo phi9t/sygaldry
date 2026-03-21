@@ -122,6 +122,9 @@ pub fn build_image(config: &ZephyrConfig, force: bool) -> Result<()> {
 
     eprintln!("[zephyr] Building Docker image {}...", config.image);
 
+    // SAFETY: libc::getuid() and libc::getgid() are unconditionally safe: they take no
+    // arguments, dereference no pointers, and have no preconditions that could lead to
+    // undefined behaviour.
     let uid = unsafe { libc::getuid() };
     let gid = unsafe { libc::getgid() };
 
