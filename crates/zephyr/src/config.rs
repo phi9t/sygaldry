@@ -81,6 +81,7 @@ pub struct ZephyrConfig {
     pub net: String,
     pub ipc: String,
     pub build_policy: BuildPolicy,
+    pub rootless_override: Option<bool>,
     pub extra_docker_args: Vec<String>,
     pub required_cuda: String,
 
@@ -116,6 +117,21 @@ fn env_chain(vars: &[&str], default: &str) -> String {
 
 fn env_or(var: &str, default: &str) -> String {
     std::env::var(var).unwrap_or_else(|_| default.to_string())
+}
+
+fn parse_bool_env(var: &str) -> Option<bool> {
+    let val = std::env::var(var).ok()?;
+    if val.is_empty() {
+        return None;
+    }
+    if val == "1" || val.eq_ignore_ascii_case("true") {
+        Some(true)
+    } else if val == "0" || val.eq_ignore_ascii_case("false") {
+        Some(false)
+    } else {
+        eprintln!("[zephyr] warning: ignoring invalid {var}={val}; expected 0/1/true/false");
+        None
+    }
 }
 
 /// Log a deprecation warning if a legacy env var is set.
@@ -154,6 +170,7 @@ impl ZephyrConfig {
             net: env_or("SYGALDRY_NET", "host"),
             ipc: env_or("SYGALDRY_IPC", "host"),
             build_policy,
+            rootless_override: parse_bool_env("ZEPHYR_ROOTLESS"),
             extra_docker_args,
             required_cuda: env_or("SYGALDRY_REQUIRED_CUDA_VERSION", "12.9"),
             lease_mode,
@@ -403,6 +420,9 @@ impl ZephyrConfig {
             self.layout.spack_store.display(),
             crate::paths::container_paths::SPACK_STORE
         );
+        if let Some(rootless_override) = self.rootless_override {
+            eprintln!("[zephyr]   Rootless override: {}", rootless_override);
+        }
     }
 }
 
@@ -432,6 +452,7 @@ mod tests {
         "SYGALDRY_EXTRA_DOCKER_ARGS",
         "SYGALDRY_REQUIRED_CUDA_VERSION",
         "SYGALDRY_REPO",
+        "ZEPHYR_ROOTLESS",
         "SYGALDRY_SPACK_STORE",
         "SYGALDRY_HF_CACHE",
         "SYGALDRY_UV_CACHE",
@@ -571,6 +592,7 @@ mod tests {
         assert_eq!(config.net, "host");
         assert_eq!(config.ipc, "host");
         assert_eq!(config.build_policy, BuildPolicy::Auto);
+        assert_eq!(config.rootless_override, None);
         assert_eq!(config.required_cuda, "12.9");
         assert_eq!(config.lease_mode, LeaseMode::Warn);
         assert_eq!(config.cache_profile, CacheProfile::Shared);
@@ -792,5 +814,25 @@ mod tests {
         let config = ZephyrConfig::from_env(&CliOverrides::default());
         assert_eq!(config.build_policy, BuildPolicy::Auto);
         std::env::remove_var("SYGALDRY_BUILD_IMAGE");
+    }
+
+    #[test]
+    #[serial]
+    fn config_rootless_override_from_env() {
+        clear_config_env();
+        std::env::set_var("ZEPHYR_ROOTLESS", "1");
+        let config = ZephyrConfig::from_env(&CliOverrides::default());
+        assert_eq!(config.rootless_override, Some(true));
+        std::env::remove_var("ZEPHYR_ROOTLESS");
+    }
+
+    #[test]
+    #[serial]
+    fn config_invalid_rootless_override_is_ignored() {
+        clear_config_env();
+        std::env::set_var("ZEPHYR_ROOTLESS", "maybe");
+        let config = ZephyrConfig::from_env(&CliOverrides::default());
+        assert_eq!(config.rootless_override, None);
+        std::env::remove_var("ZEPHYR_ROOTLESS");
     }
 }

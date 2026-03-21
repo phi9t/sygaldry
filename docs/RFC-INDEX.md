@@ -1,7 +1,7 @@
 # RFC Index
 
-**Last updated:** 2026-03-20
-**Total RFCs:** 19 (44 created, 25 closed as complete or N/A)
+**Last updated:** 2026-03-21
+**Total RFCs:** 17 (44 created, 27 closed as complete or N/A)
 
 ---
 
@@ -19,7 +19,6 @@
 | RFC-014 | Rust Config and Paths Cleanup | Draft v2 | Low | S | rust-core |
 | RFC-015 | validate_all.sh Modernization | Proposed | Low | XS | shell |
 | RFC-016 | K3s YAML Path Externalization | Proposed (on hold) | Low | M | k3s |
-| RFC-017 | image.rs Production Visibility Cleanup | Proposed | Medium | S | rust-core |
 | RFC-019 | Rust Dead Code Cleanup | Proposed | Low | S | rust-core |
 | RFC-022 | Workflow Versioning (GetVersion) | Proposed | Medium | S | temporal |
 | RFC-023 | Query and Signal Handlers for Pipeline | Proposed | Medium | M | temporal |
@@ -27,7 +26,6 @@
 | RFC-032 | Reduce --ipc=host and --net=host Exposure | Proposed | Medium | M | docker |
 | RFC-033 | Add Resource Limits to docker run | Proposed | Low | S | docker |
 | RFC-035 | Add Remaining Test Coverage for orchestrate merge* Functions | Draft v2 | Medium | M | testing |
-| RFC-041 | Cache detect_user_spec to Avoid docker info | Proposed | Low | S | rust-core |
 
 ---
 
@@ -41,10 +39,9 @@
 
 1. **RFC-022** — Workflow versioning (`workflow.GetVersion`)
 2. **RFC-023** — Query/signal handlers for running pipelines
-3. **RFC-017** — `should_build_decision` out of `cfg(test)` + safety comments + fallback log
-4. **RFC-035** — Test coverage for orchestrate `merge*` functions
-5. **RFC-031** — Scope container sudo privileges
-6. **RFC-032** — Reduce `--ipc=host` / `--net=host` exposure
+3. **RFC-035** — Test coverage for orchestrate `merge*` functions
+4. **RFC-031** — Scope container sudo privileges
+5. **RFC-032** — Reduce `--ipc=host` / `--net=host` exposure
 
 ### Lower priority
 
@@ -54,13 +51,12 @@
 10. **RFC-012** — Orchestrate command decomposition (L effort)
 11. **RFC-014** — Rust config and paths cleanup
 12. **RFC-015** — validate_all.sh modernization
-13. **RFC-019** — Rust dead code cleanup (S effort — 8 files)
-14. **RFC-033** — Add resource limits to docker run
-15. **RFC-041** — Cache `detect_user_spec` to avoid `docker info`
-16. **RFC-004** — SAIL infrastructure simplification
-17. **RFC-013** — Dockerfile cache layer optimization
-18. **RFC-016** — K3s YAML path externalization (on hold: K3s strategic direction undecided)
-19. **RFC-002** — Rust as container foundation (L effort, depends on RFC-006)
+12. **RFC-019** — Rust dead code cleanup (S effort — 8 files)
+13. **RFC-033** — Add resource limits to docker run
+14. **RFC-004** — SAIL infrastructure simplification
+15. **RFC-013** — Dockerfile cache layer optimization
+16. **RFC-016** — K3s YAML path externalization (on hold: K3s strategic direction undecided)
+17. **RFC-002** — Rust as container foundation (L effort, depends on RFC-006)
 
 ---
 
@@ -90,3 +86,5 @@
 | RFC-040 | build_shared_caches Tuple → Struct | Done — `build_shared_caches()` now returns a named `SharedCaches` struct in `crates/zephyr/src/config.rs` |
 | RFC-028 | ContainerJob Should Use zephyr Binary | Done — `ContainerJob` now prefers the `zephyr` binary, strips legacy `.sh` entrypoint suffixes, and only warns when it falls back to `launch_container.sh` |
 | RFC-020 | Retire launch_container.sh | Done — replaced 646-line script with a thin shim that delegates to the `zephyr` binary; falls back with a clear error if binary is not built |
+| RFC-017 | image.rs Production Visibility Cleanup | Done — `should_build_decision` now runs in production, `build_image()` calls it directly, unsafe libc calls are documented, and missing image timestamps emit a warning |
+| RFC-041 | Cache detect_user_spec to Avoid docker info | Done — `ZEPHYR_ROOTLESS` now provides a config-backed override so launches can skip probing `docker info` on every run |

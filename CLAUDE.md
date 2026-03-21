@@ -328,6 +328,7 @@ Note: Always separate `declare`/`readonly`/`local` from command substitution ass
 - `ZEPHYR_SHARED_HF_CACHE` - Shared HuggingFace cache path
 - `ZEPHYR_SHARED_UV_CACHE` - Shared UV download cache path
 - `ZEPHYR_PROJECTS_ROOT` - Per-project root (default: `<cache_root>/projects`)
+- `ZEPHYR_ROOTLESS` - Optional `0|1` / `false|true` override for rootless Docker detection to avoid probing `docker info` on every launch
 - `ZEPHYR_SNAPSHOT_REF` - Digest-pinned snapshot ref for validation scripts
 - `SYGALDRY_PROJECT_ID` - Project isolation namespace
 - `SYGALDRY_IMAGE` - Custom Docker image name (default `sygaldry/zephyr:base`)

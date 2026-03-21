@@ -44,7 +44,6 @@ pub fn read_image_label(image: &str, label: &str) -> Option<String> {
 /// Determine if we should build the image (pure logic, no side effects).
 ///
 /// Returns `Ok(true)` to build, `Ok(false)` to skip, `Err` if Never policy + missing image.
-#[cfg(test)]
 fn should_build_decision(
     policy: BuildPolicy,
     img_exists: bool,
@@ -76,38 +75,45 @@ fn should_build_decision(
 
 /// Build the Docker image according to the configured policy.
 pub fn build_image(config: &ZephyrConfig, force: bool) -> Result<()> {
-    let policy = if force { BuildPolicy::Always } else { config.build_policy };
-
-    let dockerfile = config.sygaldry_home.join("container/dev_container.dockerfile");
-    let exists = image_exists(&config.image);
-
-    let should_build = match policy {
-        BuildPolicy::Never => {
-            if !exists {
-                return Err(ZephyrError::ImageNotFound {
-                    image: config.image.clone(),
-                });
-            }
-            false
-        }
-        BuildPolicy::Always => true,
-        BuildPolicy::Auto => {
-            if !exists {
-                true
-            } else if dockerfile.exists() {
-                let df_mtime = std::fs::metadata(&dockerfile)
-                    .ok()
-                    .and_then(|m| m.modified().ok())
-                    .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-                    .map(|d| d.as_secs() as i64)
-                    .unwrap_or(0);
-                let img_epoch = image_created_epoch(&config.image).unwrap_or(0);
-                df_mtime > img_epoch
-            } else {
-                false
-            }
-        }
+    let policy = if force {
+        BuildPolicy::Always
+    } else {
+        config.build_policy
     };
+
+    let dockerfile = config
+        .sygaldry_home
+        .join("container/dev_container.dockerfile");
+    let exists = image_exists(&config.image);
+    let df_mtime = if dockerfile.exists() {
+        std::fs::metadata(&dockerfile)
+            .ok()
+            .and_then(|m| m.modified().ok())
+            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+            .map(|d| d.as_secs() as i64)
+    } else {
+        None
+    };
+    let img_epoch = if exists {
+        image_created_epoch(&config.image)
+    } else {
+        None
+    };
+
+    if matches!(policy, BuildPolicy::Auto) && exists && df_mtime.is_some() && img_epoch.is_none() {
+        eprintln!(
+            "[zephyr] warning: could not determine image creation time for '{}'; assuming rebuild may be needed",
+            config.image
+        );
+    }
+
+    let should_build =
+        should_build_decision(policy, exists, df_mtime, img_epoch).map_err(|err| match err {
+            ZephyrError::ImageNotFound { .. } => ZephyrError::ImageNotFound {
+                image: config.image.clone(),
+            },
+            other => other,
+        })?;
 
     if !should_build {
         return Ok(());
@@ -122,6 +128,8 @@ pub fn build_image(config: &ZephyrConfig, force: bool) -> Result<()> {
 
     eprintln!("[zephyr] Building Docker image {}...", config.image);
 
+    // SAFETY: getuid(2) and getgid(2) have no preconditions, dereference no
+    // pointers, and are safe to call from any process context.
     let uid = unsafe { libc::getuid() };
     let gid = unsafe { libc::getgid() };
 
@@ -192,8 +200,14 @@ mod tests {
 
     #[test]
     fn should_build_always_returns_true() {
-        assert_eq!(should_build_decision(BuildPolicy::Always, true, None, None).unwrap(), true);
-        assert_eq!(should_build_decision(BuildPolicy::Always, false, None, None).unwrap(), true);
+        assert_eq!(
+            should_build_decision(BuildPolicy::Always, true, None, None).unwrap(),
+            true
+        );
+        assert_eq!(
+            should_build_decision(BuildPolicy::Always, false, None, None).unwrap(),
+            true
+        );
     }
 
     #[test]
@@ -224,6 +238,12 @@ mod tests {
     fn should_build_auto_same_timestamp_returns_false() {
         let result = should_build_decision(BuildPolicy::Auto, true, Some(100), Some(100));
         assert_eq!(result.unwrap(), false);
+    }
+
+    #[test]
+    fn should_build_auto_missing_image_timestamp_falls_back_to_rebuild() {
+        let result = should_build_decision(BuildPolicy::Auto, true, Some(100), None);
+        assert_eq!(result.unwrap(), true);
     }
 
     // -- image_exists adaptive --

@@ -44,7 +44,10 @@ pub(crate) fn resolve_entrypoint_path(
 }
 
 /// Build the set of environment variables to pass into the container.
-pub(crate) fn build_env_args(config: &ZephyrConfig, sygaldry_root_in_container: &str) -> Vec<String> {
+pub(crate) fn build_env_args(
+    config: &ZephyrConfig,
+    sygaldry_root_in_container: &str,
+) -> Vec<String> {
     let mut args = Vec::new();
 
     let env_vars: Vec<(&str, String)> = vec![
@@ -70,7 +73,10 @@ pub(crate) fn build_env_args(config: &ZephyrConfig, sygaldry_root_in_container: 
         ("TORCH_HOME", container_paths::TORCH_CACHE.into()),
         ("TRITON_CACHE_DIR", container_paths::TRITON_CACHE.into()),
         ("CUDA_CACHE_PATH", container_paths::NV_COMPUTE_CACHE.into()),
-        ("JAX_COMPILATION_CACHE_DIR", container_paths::JAX_CACHE.into()),
+        (
+            "JAX_COMPILATION_CACHE_DIR",
+            container_paths::JAX_CACHE.into(),
+        ),
     ];
 
     for (key, val) in &env_vars {
@@ -126,22 +132,77 @@ fn build_volume_mounts(
 ) -> crate::error::Result<()> {
     // Per-project directories
     push_mount(args, &config.layout.home, container_paths::HOME, false)?;
-    push_mount(args, &config.layout.config, container_paths::CONFIG_HOME, false)?;
-    push_mount(args, &config.layout.local_share, container_paths::LOCAL_SHARE, false)?;
-    push_mount(args, &config.layout.outputs, container_paths::OUTPUT_ROOT, false)?;
+    push_mount(
+        args,
+        &config.layout.config,
+        container_paths::CONFIG_HOME,
+        false,
+    )?;
+    push_mount(
+        args,
+        &config.layout.local_share,
+        container_paths::LOCAL_SHARE,
+        false,
+    )?;
+    push_mount(
+        args,
+        &config.layout.outputs,
+        container_paths::OUTPUT_ROOT,
+        false,
+    )?;
 
     // Shared caches
-    push_mount(args, &config.layout.bazel_cache, container_paths::BAZEL_CACHE, false)?;
-    push_mount(args, &config.layout.hf_cache, container_paths::HF_CACHE, false)?;
-    push_mount(args, &config.layout.uv_cache, container_paths::UV_CACHE, false)?;
-    push_mount(args, &config.layout.torch_cache, container_paths::TORCH_CACHE, false)?;
-    push_mount(args, &config.layout.triton_cache, container_paths::TRITON_CACHE, false)?;
-    push_mount(args, &config.layout.nv_compute_cache, container_paths::NV_COMPUTE_CACHE, false)?;
-    push_mount(args, &config.layout.jax_cache, container_paths::JAX_CACHE, false)?;
+    push_mount(
+        args,
+        &config.layout.bazel_cache,
+        container_paths::BAZEL_CACHE,
+        false,
+    )?;
+    push_mount(
+        args,
+        &config.layout.hf_cache,
+        container_paths::HF_CACHE,
+        false,
+    )?;
+    push_mount(
+        args,
+        &config.layout.uv_cache,
+        container_paths::UV_CACHE,
+        false,
+    )?;
+    push_mount(
+        args,
+        &config.layout.torch_cache,
+        container_paths::TORCH_CACHE,
+        false,
+    )?;
+    push_mount(
+        args,
+        &config.layout.triton_cache,
+        container_paths::TRITON_CACHE,
+        false,
+    )?;
+    push_mount(
+        args,
+        &config.layout.nv_compute_cache,
+        container_paths::NV_COMPUTE_CACHE,
+        false,
+    )?;
+    push_mount(
+        args,
+        &config.layout.jax_cache,
+        container_paths::JAX_CACHE,
+        false,
+    )?;
 
     // Spack store (skip if baked into image)
     if !spack_baked {
-        push_mount(args, &config.layout.spack_store, container_paths::SPACK_STORE, false)?;
+        push_mount(
+            args,
+            &config.layout.spack_store,
+            container_paths::SPACK_STORE,
+            false,
+        )?;
     }
 
     // Compatibility overlay for lib helpers
@@ -187,7 +248,12 @@ fn build_mode_mounts(
                 push_mount(args, &config.sygaldry_home, container_paths::SYGALDRY, true)?;
             }
 
-            push_mount(args, &config.layout.workspace, container_paths::WORKSPACE, false)?;
+            push_mount(
+                args,
+                &config.layout.workspace,
+                container_paths::WORKSPACE,
+                false,
+            )?;
             args.push(
                 Mount {
                     host: repo_path,
@@ -237,7 +303,7 @@ pub fn build(
     args.push(format!("--ipc={}", config.ipc));
 
     // User mapping
-    let user_spec = detect_user_spec();
+    let user_spec = detect_user_spec(config.rootless_override);
     args.push(format!("--user={user_spec}"));
 
     // Host identity mount (optional)
@@ -250,11 +316,15 @@ pub fn build(
     build_volume_mounts(&mut args, config, spack_baked)?;
 
     // Mode-specific mounts and workdir
-    let sygaldry_root_in_container = build_mode_mounts(&mut args, config, entrypoint_container_dir)?;
+    let sygaldry_root_in_container =
+        build_mode_mounts(&mut args, config, entrypoint_container_dir)?;
 
     // Resolve entrypoint path
-    let entrypoint_path =
-        resolve_entrypoint_path(entrypoint_name, entrypoint_container_dir, &config.launch_mode);
+    let entrypoint_path = resolve_entrypoint_path(
+        entrypoint_name,
+        entrypoint_container_dir,
+        &config.launch_mode,
+    );
     args.push(format!("--entrypoint={entrypoint_path}"));
 
     // GPU flags
@@ -270,16 +340,20 @@ pub fn build(
 }
 
 /// Detect user spec for --user flag.
-fn detect_user_spec() -> String {
+fn detect_user_spec(rootless_override: Option<bool>) -> String {
+    // SAFETY: getuid(2) and getgid(2) have no preconditions, dereference no
+    // pointers, and are safe to call from any process context.
     let uid = unsafe { libc::getuid() };
     let gid = unsafe { libc::getgid() };
 
-    let is_rootless = std::process::Command::new("docker")
-        .args(["info"])
-        .output()
-        .ok()
-        .map(|o| String::from_utf8_lossy(&o.stdout).contains("rootless"))
-        .unwrap_or(false);
+    let is_rootless = rootless_override.unwrap_or_else(|| {
+        std::process::Command::new("docker")
+            .args(["info"])
+            .output()
+            .ok()
+            .map(|o| String::from_utf8_lossy(&o.stdout).contains("rootless"))
+            .unwrap_or(false)
+    });
 
     if is_rootless {
         "0:0".to_string()
@@ -290,6 +364,9 @@ fn detect_user_spec() -> String {
 
 /// Check if stdin is a terminal (for -it flags).
 fn atty_stdin() -> bool {
+    // SAFETY: isatty(3) only inspects the file descriptor number and has no
+    // aliasing or lifetime requirements. File descriptor 0 is always valid to
+    // query even when it is not attached to a terminal.
     unsafe { libc::isatty(0) != 0 }
 }
 
@@ -338,7 +415,10 @@ mod tests {
         let path = resolve_entrypoint_path("default", None, &LaunchMode::Legacy);
         assert_eq!(
             path,
-            format!("{}/container/entrypoints/default.sh", container_paths::WORKSPACE)
+            format!(
+                "{}/container/entrypoints/default.sh",
+                container_paths::WORKSPACE
+            )
         );
     }
 
@@ -361,8 +441,7 @@ mod tests {
 
     #[test]
     fn entrypoint_path_custom_dir() {
-        let path =
-            resolve_entrypoint_path("verify-gpu", Some("/opt/custom"), &LaunchMode::Legacy);
+        let path = resolve_entrypoint_path("verify-gpu", Some("/opt/custom"), &LaunchMode::Legacy);
         assert_eq!(path, "/opt/custom/verify-gpu.sh");
     }
 
@@ -411,6 +490,7 @@ mod tests {
             net: "host".into(),
             ipc: "host".into(),
             build_policy: BuildPolicy::Never,
+            rootless_override: None,
             extra_docker_args: vec![],
             required_cuda: "12.9".into(),
             lease_mode: LeaseMode::Warn,
@@ -430,9 +510,16 @@ mod tests {
         let config = test_config_in(tmp.path());
         let env_args = build_env_args(&config, "/workspace");
 
-        let has = |key: &str| env_args.iter().any(|a| a.starts_with(&format!("--env={key}=")));
+        let has = |key: &str| {
+            env_args
+                .iter()
+                .any(|a| a.starts_with(&format!("--env={key}=")))
+        };
 
-        assert!(has("SYGALDRY_IN_CONTAINER"), "missing SYGALDRY_IN_CONTAINER");
+        assert!(
+            has("SYGALDRY_IN_CONTAINER"),
+            "missing SYGALDRY_IN_CONTAINER"
+        );
         assert!(has("SYGALDRY_ROOT"), "missing SYGALDRY_ROOT");
         assert!(has("SYGALDRY_PROJECT_ID"), "missing SYGALDRY_PROJECT_ID");
         assert!(has("SYGALDRY_RUN_ID"), "missing SYGALDRY_RUN_ID");
@@ -467,6 +554,21 @@ mod tests {
         let config = test_config_in(tmp.path());
         let env_args = build_env_args(&config, "/workspace");
         assert!(env_args.contains(&"--env=ZEPHYR_LEASE_MODE=warn".to_string()));
+    }
+
+    #[test]
+    fn detect_user_spec_honors_rootless_override_true() {
+        assert_eq!(detect_user_spec(Some(true)), "0:0");
+    }
+
+    #[test]
+    fn detect_user_spec_honors_rootless_override_false() {
+        // SAFETY: getuid(2) and getgid(2) have no preconditions and only return
+        // the current process identity.
+        let expected = format!("{}:{}", unsafe { libc::getuid() }, unsafe {
+            libc::getgid()
+        });
+        assert_eq!(detect_user_spec(Some(false)), expected);
     }
 
     // -- full build() tests --
@@ -511,7 +613,10 @@ mod tests {
         std::fs::create_dir_all(&config.sygaldry_home).unwrap();
 
         let args = build(&config, "run-job", false, None).unwrap();
-        let ep = args.iter().find(|a| a.starts_with("--entrypoint=")).unwrap();
+        let ep = args
+            .iter()
+            .find(|a| a.starts_with("--entrypoint="))
+            .unwrap();
         assert!(ep.contains("run-job.sh"));
     }
 
@@ -526,11 +631,19 @@ mod tests {
         let args_baked = build(&config, "default", true, None).unwrap();
         let args_unbaked = build(&config, "default", false, None).unwrap();
 
-        let has_spack_mount =
-            |args: &[String]| args.iter().any(|a| a.contains(container_paths::SPACK_STORE));
+        let has_spack_mount = |args: &[String]| {
+            args.iter()
+                .any(|a| a.contains(container_paths::SPACK_STORE))
+        };
 
-        assert!(!has_spack_mount(&args_baked), "baked should skip spack mount");
-        assert!(has_spack_mount(&args_unbaked), "unbaked should have spack mount");
+        assert!(
+            !has_spack_mount(&args_baked),
+            "baked should skip spack mount"
+        );
+        assert!(
+            has_spack_mount(&args_unbaked),
+            "unbaked should have spack mount"
+        );
     }
 
     #[test]
@@ -563,7 +676,10 @@ mod tests {
 
         let args = build(&config, "default", false, None).unwrap();
         assert!(
-            args.contains(&format!("--workdir={}/my-ml-project", container_paths::WORKSPACE)),
+            args.contains(&format!(
+                "--workdir={}/my-ml-project",
+                container_paths::WORKSPACE
+            )),
             "multi-repo workdir should include repo name"
         );
     }
@@ -593,7 +709,8 @@ mod tests {
 
         let args = build(&config, "default", false, None).unwrap();
         assert!(
-            args.iter().any(|a| a.contains(container_paths::HOME) && a.starts_with("--volume=")),
+            args.iter()
+                .any(|a| a.contains(container_paths::HOME) && a.starts_with("--volume=")),
             "should mount HOME"
         );
     }
