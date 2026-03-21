@@ -134,6 +134,7 @@ while [[ $# -gt 0 ]]; do
             shift
             ;;
         *)
+            log "WARNING: unknown flag '$1' ignored"
             shift
             ;;
     esac
@@ -189,15 +190,29 @@ if [[ "${QUALITY_LINT}" == "true" ]] || [[ "${QUALITY_TEST}" == "true" ]] || [[ 
 fi
 
 # ---- Go checks ----
+GO_BIN="$(command -v go || true)"
+
 section "Go: build"
-run_check "go build ./cmd/worker" go build -C "${SCRIPT_DIR}/temporal" ./cmd/worker
-run_check "go build ./cmd/orchestrate" go build -C "${SCRIPT_DIR}/temporal" ./cmd/orchestrate
+if [[ -n "${GO_BIN}" ]]; then
+    run_check "go build ./cmd/worker" go build -C "${SCRIPT_DIR}/temporal" ./cmd/worker
+    run_check "go build ./cmd/orchestrate" go build -C "${SCRIPT_DIR}/temporal" ./cmd/orchestrate
+else
+    log "SKIP: go not found"
+fi
 
 section "Go: vet"
-run_check "go vet" go vet -C "${SCRIPT_DIR}/temporal" ./...
+if [[ -n "${GO_BIN}" ]]; then
+    run_check "go vet" go vet -C "${SCRIPT_DIR}/temporal" ./...
+else
+    log "SKIP: go not found"
+fi
 
 section "Go: test"
-run_check "go test" go test -C "${SCRIPT_DIR}/temporal" -count=1 ./...
+if [[ -n "${GO_BIN}" ]]; then
+    run_check "go test" go test -C "${SCRIPT_DIR}/temporal" -count=1 ./...
+else
+    log "SKIP: go not found"
+fi
 
 # ---- Python checks ----
 VENV_DIR="${SCRIPT_DIR}/.venv-lint"

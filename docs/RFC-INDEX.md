@@ -1,7 +1,7 @@
 # RFC Index
 
 **Last updated:** 2026-03-21
-**Total RFCs:** 15 (44 created, 29 closed as complete or N/A)
+**Total RFCs:** 14 (44 created, 30 closed as complete or N/A)
 
 ---
 
@@ -17,7 +17,6 @@
 | RFC-012 | Orchestrate Command Decomposition | Proposed | Medium | L | temporal |
 | RFC-013 | Dockerfile Cache Layer Optimization | Proposed | Low | M | docker |
 | RFC-014 | Rust Config and Paths Cleanup | Draft v2 | Low | S | rust-core |
-| RFC-015 | validate_all.sh Modernization | Proposed | Low | XS | shell |
 | RFC-016 | K3s YAML Path Externalization | Proposed (on hold) | Low | M | k3s |
 | RFC-019 | Rust Dead Code Cleanup | Proposed | Low | S | rust-core |
 | RFC-023 | Query and Signal Handlers for Pipeline | Proposed | Medium | M | temporal |
@@ -46,7 +45,6 @@
 9. **RFC-010** — Rust host module testing
 10. **RFC-012** — Orchestrate command decomposition (L effort)
 11. **RFC-014** — Rust config and paths cleanup
-12. **RFC-015** — validate_all.sh modernization
 12. **RFC-019** — Rust dead code cleanup (S effort — 8 files)
 13. **RFC-033** — Add resource limits to docker run
 14. **RFC-004** — SAIL infrastructure simplification
@@ -86,3 +84,4 @@
 | RFC-041 | Cache detect_user_spec to Avoid docker info | Done — `ZEPHYR_ROOTLESS` now provides a config-backed override so launches can skip probing `docker info` on every run |
 | RFC-035 | Add Remaining Test Coverage for orchestrate merge* Functions | Done — `merge_test.go` now covers the remaining orchestrate merge helpers plus `safeFilename`, `writePlanManifest`, and `printOutput` |
 | RFC-022 | Workflow Versioning (GetVersion) | Done — `Pipeline`, `RFCImpl`, and `RFCTaskWorkflow` now all register inline `workflow.GetVersion` guards for replay-safe control-flow evolution |
+| RFC-015 | validate_all.sh Modernization | Done — `validate_all.sh` now warns on unknown flags and skips Go validation sections cleanly when `go` is not installed |
