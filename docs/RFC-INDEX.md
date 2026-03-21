@@ -1,7 +1,7 @@
 # RFC Index
 
 **Last updated:** 2026-03-21
-**Total RFCs:** 17 (44 created, 27 closed as complete or N/A)
+**Total RFCs:** 16 (44 created, 28 closed as complete or N/A)
 
 ---
 
@@ -25,7 +25,6 @@
 | RFC-031 | Scope Container User sudo Privileges | Proposed | Medium | S | docker |
 | RFC-032 | Reduce --ipc=host and --net=host Exposure | Proposed | Medium | M | docker |
 | RFC-033 | Add Resource Limits to docker run | Proposed | Low | S | docker |
-| RFC-035 | Add Remaining Test Coverage for orchestrate merge* Functions | Draft v2 | Medium | M | testing |
 
 ---
 
@@ -39,9 +38,8 @@
 
 1. **RFC-022** — Workflow versioning (`workflow.GetVersion`)
 2. **RFC-023** — Query/signal handlers for running pipelines
-3. **RFC-035** — Test coverage for orchestrate `merge*` functions
-4. **RFC-031** — Scope container sudo privileges
-5. **RFC-032** — Reduce `--ipc=host` / `--net=host` exposure
+3. **RFC-031** — Scope container sudo privileges
+4. **RFC-032** — Reduce `--ipc=host` / `--net=host` exposure
 
 ### Lower priority
 
@@ -88,3 +86,4 @@
 | RFC-020 | Retire launch_container.sh | Done — replaced 646-line script with a thin shim that delegates to the `zephyr` binary; falls back with a clear error if binary is not built |
 | RFC-017 | image.rs Production Visibility Cleanup | Done — `should_build_decision` now runs in production, `build_image()` calls it directly, unsafe libc calls are documented, and missing image timestamps emit a warning |
 | RFC-041 | Cache detect_user_spec to Avoid docker info | Done — `ZEPHYR_ROOTLESS` now provides a config-backed override so launches can skip probing `docker info` on every run |
+| RFC-035 | Add Remaining Test Coverage for orchestrate merge* Functions | Done — `merge_test.go` now covers the remaining orchestrate merge helpers plus `safeFilename`, `writePlanManifest`, and `printOutput` |
