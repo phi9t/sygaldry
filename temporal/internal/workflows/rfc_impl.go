@@ -636,7 +636,9 @@ func rfcWorktreePath(tempDir, workflowID, taskID string) string {
 }
 
 func rfcPlanFilePath(tempDir, workflowID, taskID string, attempt int) string {
-	return filepath.Join(tempDir, fmt.Sprintf("rfc-task-%s-%s-a%d.yaml", rfcSafeID(workflowID), taskID, attempt))
+	// Place inside the worktree so execute agents can read without external-directory
+	// permission issues (the worktree is the agent's working directory).
+	return filepath.Join(rfcWorktreePath(tempDir, workflowID, taskID), fmt.Sprintf(".rfc-plan-a%d.yaml", attempt))
 }
 
 // toAgentTaskEngines converts a []string to []activities.AgentTaskEngine.

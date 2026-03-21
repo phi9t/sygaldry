@@ -100,7 +100,7 @@ func TestRFCTempPathGeneration(t *testing.T) {
 	}
 
 	planPath := rfcPlanFilePath(tempDir, workflowID, taskID, 2)
-	if want := filepath.Join(tempDir, "rfc-task-"+safeWorkflowID+"-"+taskID+"-a2.yaml"); planPath != want {
+	if want := filepath.Join(rfcWorktreePath(tempDir, workflowID, taskID), ".rfc-plan-a2.yaml"); planPath != want {
 		t.Errorf("plan path = %q, want %q", planPath, want)
 	}
 }
