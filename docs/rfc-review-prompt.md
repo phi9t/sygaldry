@@ -1,6 +1,6 @@
 # RFC Review, Consolidation, and Revision
 
-You are reviewing the 11 open RFC files in `docs/` against the current state of
+You are reviewing the 10 open RFC files in `docs/` against the current state of
 the Sygaldry codebase. Your job is to determine which RFCs are done, which are
 stale, which need narrowing, and which are accurate — then apply all changes and
 update the index.
@@ -121,7 +121,7 @@ grep -rn 'k3s\|K3s' temporal/ --include='*.go' | head -10
 
 ## Step 2 — Triage each RFC
 
-For **each of the 11 open RFCs**, assign one label based on what the ground-truth
+For **each of the 10 open RFCs**, assign one label based on what the ground-truth
 commands showed:
 
 | Label | Meaning | Action |

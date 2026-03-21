@@ -38,6 +38,8 @@ pub mod container_paths {
 
 /// Default host-side root for all Zephyr container state.
 pub const DEFAULT_CACHE_ROOT: &str = "/mnt/data_infra/zephyr_container_infra";
+const LAYOUT_VERSION: u32 = 2;
+const LAYOUT_NAME: &str = "unified-shared-cache-project-isolation";
 
 /// Host-side directory layout derived from a project config.
 ///
@@ -48,7 +50,6 @@ pub struct HostLayout {
     pub cache_root: PathBuf,
     pub shared_root: PathBuf,
     pub build_root: PathBuf,
-    #[allow(dead_code)]
     pub projects_root: PathBuf,
     pub project_root: PathBuf,
     pub meta_root: PathBuf,
@@ -113,7 +114,7 @@ impl HostLayout {
     pub fn write_layout_version(&self) -> crate::error::Result<()> {
         let path = self.meta_root.join("layout_version.json");
         let content =
-            r#"{"layout_version":2,"layout_name":"unified-shared-cache-project-isolation"}"#;
+            format!(r#"{{"layout_version":{LAYOUT_VERSION},"layout_name":"{LAYOUT_NAME}"}}"#);
         std::fs::write(&path, content.as_bytes()).with_path(&path)?;
         Ok(())
     }
@@ -287,10 +288,10 @@ mod tests {
         assert!(path.exists());
         let content = std::fs::read_to_string(&path).unwrap();
         assert!(content.contains("layout_version"));
-        assert!(content.contains("unified-shared-cache-project-isolation"));
+        assert!(content.contains(LAYOUT_NAME));
 
         let parsed: serde_json::Value = serde_json::from_str(&content).unwrap();
-        assert_eq!(parsed["layout_version"], 2);
+        assert_eq!(parsed["layout_version"], LAYOUT_VERSION);
     }
 
     #[test]
