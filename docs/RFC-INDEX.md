@@ -10,7 +10,7 @@
 | # | Title | Status | Priority | Effort | Area |
 |---|-------|--------|----------|--------|------|
 | RFC-002 | Rust as Container Infrastructure Foundation | Draft v3 | High | L | rust-core |
-| RFC-004 | SAIL Infrastructure Simplification | Draft v3 | Low | M | agentic |
+| RFC-004 | SAIL Supervisor Decomposition | Draft v4 | Low | M | agentic |
 | RFC-006 | Rust Entrypoint Consolidation | Draft v1 | Medium | M | rust-core |
 | RFC-012 | Orchestrate Command Decomposition | Proposed | Medium | L | temporal |
 | RFC-013 | Dockerfile Cache Layer Optimization | Proposed | Low | M | docker |

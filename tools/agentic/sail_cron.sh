@@ -9,6 +9,8 @@ ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 readonly ROOT_DIR
 CONFIG_FILE="${SCRIPT_DIR}/config.yaml"
 readonly CONFIG_FILE
+# shellcheck source=tools/agentic/lib/sail_config.sh
+source "${SCRIPT_DIR}/lib/sail_config.sh"
 
 DEFAULT_ENV_FILE="/mnt/data_infra/zephyr_container_infra/sygaldry/config/sail-cron.env"
 readonly DEFAULT_ENV_FILE
@@ -39,26 +41,6 @@ WORKER_TEMPORAL_LOG_DIR="${INFRA_DIR}/worker-temporal-logs"
 
 log() { echo "[$(date +'%Y-%m-%d %H:%M:%S')] [sail-cron] $*" >&2; }
 die() { log "ERROR: $*"; exit 1; }
-
-_cfg_section() {
-    local section="$1" key="$2" default="$3"
-    local value
-    value="$(
-        awk -v target_section="${section}" -v target_key="${key}" '
-            $0 ~ ("^" target_section ":") { in_section = 1; next }
-            in_section && $0 ~ /^[^[:space:]]/ { in_section = 0 }
-            in_section && $0 ~ ("^  " target_key ":") {
-                sub(/^[^:]+:[[:space:]]*/, "", $0)
-                sub(/[[:space:]]+#.*$/, "", $0)
-                gsub(/"/, "", $0)
-                gsub(/[[:space:]]+$/, "", $0)
-                print
-                exit
-            }
-        ' "${CONFIG_FILE}" 2>/dev/null || true
-    )"
-    echo "${value:-${default}}"
-}
 
 BASE_BRANCH="${SAIL_BASE_BRANCH:-$(_cfg_section repo base_branch main)}"
 PLANNER_ENGINE="${SAIL_PLANNER_ENGINE:-$(_cfg_section planner engine local)}"

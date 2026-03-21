@@ -121,7 +121,7 @@ grep -rn 'k3s\|K3s' temporal/ --include='*.go' | head -10
 
 ## Step 2 — Triage each RFC
 
-For **each of the 9 open RFCs**, assign one label based on what the ground-truth
+For **each of the 6 open RFCs**, assign one label based on what the ground-truth
 commands showed:
 
 | Label | Meaning | Action |

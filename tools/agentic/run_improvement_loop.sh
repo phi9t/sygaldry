@@ -27,6 +27,8 @@ DEFAULT_REPO_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 readonly DEFAULT_REPO_DIR
 CONFIG="${SCRIPT_DIR}/config.yaml"
 readonly CONFIG
+# shellcheck source=tools/agentic/lib/sail_config.sh
+source "${SCRIPT_DIR}/lib/sail_config.sh"
 PLAN_FILE="${SCRIPT_DIR}/improvement_loop.yaml"
 readonly PLAN_FILE
 MAJOR_PLAN_FILE="${SCRIPT_DIR}/major_improvement_loop.yaml"
@@ -68,26 +70,6 @@ _touch_heartbeat() {
     fi
 }
 
-_cfg_section() {
-    local section="$1" key="$2" default="$3"
-    local value
-    value="$(
-        awk -v target_section="${section}" -v target_key="${key}" '
-            $0 ~ ("^" target_section ":") { in_section = 1; next }
-            in_section && $0 ~ /^[^[:space:]]/ { in_section = 0 }
-            in_section && $0 ~ ("^  " target_key ":") {
-                sub(/^[^:]+:[[:space:]]*/, "", $0)
-                sub(/[[:space:]]+#.*$/, "", $0)
-                gsub(/"/, "", $0)
-                gsub(/[[:space:]]+$/, "", $0)
-                print
-                exit
-            }
-        ' "${CONFIG}" 2>/dev/null || true
-    )"
-    echo "${value:-${default}}"
-}
-
 _json_len() {
     python3 -c "import json,sys; print(len(json.load(sys.stdin)))"
 }
@@ -110,24 +92,14 @@ PY
 
 _record_attempt_registry() {
     local issue_id="$1" status="$2" branch="$3" pr_url="$4" workflow_id="$5" temporal_run_id="$6"
-    python3 - "$ATTEMPTED_FILE" "$issue_id" "$status" "$branch" "$pr_url" "$workflow_id" "$temporal_run_id" <<'PY'
-import datetime as dt
-import json
-import sys
-
-path, issue_id, status, branch, pr_url, workflow_id, temporal_run_id = sys.argv[1:8]
-record = {
-    "issue_id": issue_id,
-    "status": status,
-    "branch": branch,
-    "pr_url": pr_url,
-    "workflow_id": workflow_id,
-    "temporal_run_id": temporal_run_id,
-    "timestamp": dt.datetime.now(dt.UTC).isoformat().replace("+00:00", "Z"),
-}
-with open(path, "a", encoding="utf-8") as file:
-    file.write(json.dumps(record, sort_keys=True) + "\n")
-PY
+    python3 "${SCRIPT_DIR}/record_attempt.py" \
+        --path "${ATTEMPTED_FILE}" \
+        --issue-id "${issue_id}" \
+        --status "${status}" \
+        --branch "${branch}" \
+        --pr-url "${pr_url}" \
+        --workflow-id "${workflow_id}" \
+        --temporal-run-id "${temporal_run_id}"
 }
 
 _record_issue_attempt() {
