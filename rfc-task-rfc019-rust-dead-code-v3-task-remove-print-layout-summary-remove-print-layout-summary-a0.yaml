@@ -1,0 +1,18 @@
+task:
+  id: "remove-print-layout-summary"
+  title: "remove unused print_layout_summary and dir_status from host/dirs.rs"
+  approach: |
+    Delete lines 50-69 from crates/zephyr/src/host/dirs.rs, which contain the
+    #[allow(dead_code)] attribute, pub fn print_layout_summary, and private fn
+    dir_status. Then remove the dir_status_reports_correctly test (lines 128-140)
+    from the tests module, as it tests the now-deleted dir_status function.
+    No other files reference these functions.
+  files_to_change:
+    - path: "crates/zephyr/src/host/dirs.rs"
+      change: "Remove print_layout_summary (with its #[allow(dead_code)]), dir_status, and the dir_status_reports_correctly test"
+  acceptance_criteria:
+    - "grep -n 'print_layout_summary\\|dir_status' crates/zephyr/src/host/dirs.rs returns no output"
+    - "cargo build -p zephyr succeeds with no dead_code warnings for these symbols"
+    - "cargo test -p zephyr passes (remaining tests still green)"
+  risks:
+    - "No known callers outside this file, but confirm with grep across crates/ before deleting"

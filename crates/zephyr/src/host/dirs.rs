@@ -47,27 +47,6 @@ fn validate_layout(layout: &crate::paths::HostLayout) -> Result<()> {
     Ok(())
 }
 
-/// Print a human-readable summary of the host layout for diagnostics.
-#[allow(dead_code)]
-pub fn print_layout_summary(layout: &crate::paths::HostLayout) {
-    eprintln!("[zephyr] Host layout:");
-    eprintln!("  cache_root:   {}", layout.cache_root.display());
-    eprintln!("  project_root: {}", layout.project_root.display());
-    eprintln!("  spack_store:  {} ({})", layout.spack_store.display(), dir_status(&layout.spack_store));
-    eprintln!("  hf_cache:     {} ({})", layout.hf_cache.display(), dir_status(&layout.hf_cache));
-    eprintln!("  uv_cache:     {} ({})", layout.uv_cache.display(), dir_status(&layout.uv_cache));
-}
-
-fn dir_status(path: &std::path::Path) -> &'static str {
-    if !path.exists() {
-        "missing"
-    } else if path.is_dir() {
-        "ok"
-    } else {
-        "NOT a directory"
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -122,20 +101,5 @@ mod tests {
         let err = validate_layout(&layout).unwrap_err();
         let msg = format!("{err}");
         assert!(msg.contains("not a directory"), "got: {msg}");
-    }
-
-    #[test]
-    fn dir_status_reports_correctly() {
-        let tmp = tempfile::tempdir().unwrap();
-        let existing = tmp.path().join("exists");
-        std::fs::create_dir(&existing).unwrap();
-        assert_eq!(dir_status(&existing), "ok");
-
-        let missing = tmp.path().join("missing");
-        assert_eq!(dir_status(&missing), "missing");
-
-        let file = tmp.path().join("file");
-        std::fs::write(&file, b"x").unwrap();
-        assert_eq!(dir_status(&file), "NOT a directory");
     }
 }
