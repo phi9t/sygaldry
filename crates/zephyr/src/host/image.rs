@@ -44,8 +44,7 @@ pub fn read_image_label(image: &str, label: &str) -> Option<String> {
 /// Determine if we should build the image (pure logic, no side effects).
 ///
 /// Returns `Ok(true)` to build, `Ok(false)` to skip, `Err` if Never policy + missing image.
-#[cfg(test)]
-fn should_build_decision(
+pub(crate) fn should_build_decision(
     policy: BuildPolicy,
     img_exists: bool,
     df_mtime: Option<i64>,
@@ -81,33 +80,17 @@ pub fn build_image(config: &ZephyrConfig, force: bool) -> Result<()> {
     let dockerfile = config.sygaldry_home.join("container/dev_container.dockerfile");
     let exists = image_exists(&config.image);
 
-    let should_build = match policy {
-        BuildPolicy::Never => {
-            if !exists {
-                return Err(ZephyrError::ImageNotFound {
-                    image: config.image.clone(),
-                });
-            }
-            false
-        }
-        BuildPolicy::Always => true,
-        BuildPolicy::Auto => {
-            if !exists {
-                true
-            } else if dockerfile.exists() {
-                let df_mtime = std::fs::metadata(&dockerfile)
-                    .ok()
-                    .and_then(|m| m.modified().ok())
-                    .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-                    .map(|d| d.as_secs() as i64)
-                    .unwrap_or(0);
-                let img_epoch = image_created_epoch(&config.image).unwrap_or(0);
-                df_mtime > img_epoch
-            } else {
-                false
-            }
-        }
+    let df_mtime = if dockerfile.exists() {
+        std::fs::metadata(&dockerfile)
+            .ok()
+            .and_then(|m| m.modified().ok())
+            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+            .map(|d| d.as_secs() as i64)
+    } else {
+        None
     };
+    let img_epoch = image_created_epoch(&config.image);
+    let should_build = should_build_decision(policy, exists, df_mtime, img_epoch)?;
 
     if !should_build {
         return Ok(());

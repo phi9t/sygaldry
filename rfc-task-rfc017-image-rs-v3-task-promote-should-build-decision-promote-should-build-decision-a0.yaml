@@ -1,0 +1,27 @@
+task:
+  id: "promote-should-build-decision"
+  title: "remove #[cfg(test)] from should_build_decision and call it from build_image"
+  approach: |
+    Remove `#[cfg(test)]` from the `should_build_decision` function definition (line 47)
+    and change visibility to `pub(crate)` so it compiles in production builds.
+    Then replace the inline `match policy { ... }` block in `build_image` (lines 84-110)
+    with pre-computed `df_mtime: Option<i64>` and `img_epoch: Option<i64>` values followed by
+    `let should_build = should_build_decision(policy, exists, df_mtime, img_epoch)?;`.
+    The `df_mtime` is `None` when the dockerfile doesn't exist (matching the function's Auto logic),
+    and `img_epoch` uses `image_created_epoch` directly (already returns `Option<i64>`).
+  files_to_change:
+    - path: "crates/zephyr/src/host/image.rs"
+      change: |
+        1. Line 47: replace `#[cfg(test)]` with `pub(crate)` on the `should_build_decision` fn.
+        2. In `build_image`, compute before the match:
+             let df_mtime = if dockerfile.exists() { <mtime chain>.map(|d| d.as_secs() as i64) } else { None };
+             let img_epoch = image_created_epoch(&config.image);
+        3. Replace the entire `let should_build = match policy { ... };` block (lines 84-110)
+           with `let should_build = should_build_decision(policy, exists, df_mtime, img_epoch)?;`.
+  acceptance_criteria:
+    - "grep -n 'cfg(test)' crates/zephyr/src/host/image.rs does not match should_build_decision"
+    - "cargo build succeeds in the crates/zephyr directory"
+    - "cargo test passes all 8 should_build_* tests in crates/zephyr"
+  risks:
+    - "Error message for Never policy + missing image changes from config.image to '(policy=never)'; tests only check for 'not found' substring so this is acceptable"
+    - "Auto branch: inline code used .unwrap_or(0) for both timestamps; the function uses Option properly — behavior is equivalent since None df_mtime returns false in both paths"
