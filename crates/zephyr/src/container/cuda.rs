@@ -47,7 +47,7 @@ pub fn setup_cuda_env() -> Result<()> {
 ///
 /// Parses `/usr/local/cuda/version.json` (CUDA 11.6+) or
 /// `/usr/local/cuda/version.txt` (legacy format).
-#[allow(dead_code)]
+#[cfg(test)]
 pub fn detect_cuda_version() -> Option<String> {
     let version_json = Path::new(CUDA_HOME).join("version.json");
     if version_json.is_file() {

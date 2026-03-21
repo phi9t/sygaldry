@@ -14,16 +14,6 @@ impl RuntimeContext {
             _ => Self::Host,
         }
     }
-
-    #[allow(dead_code)]
-    pub fn is_container(self) -> bool {
-        self == Self::Container
-    }
-
-    #[allow(dead_code)]
-    pub fn is_host(self) -> bool {
-        self == Self::Host
-    }
 }
 
 #[cfg(test)]
@@ -58,15 +48,4 @@ mod tests {
         std::env::remove_var("SYGALDRY_IN_CONTAINER");
     }
 
-    #[test]
-    fn is_container_returns_true_for_container() {
-        assert!(RuntimeContext::Container.is_container());
-        assert!(!RuntimeContext::Host.is_container());
-    }
-
-    #[test]
-    fn is_host_returns_true_for_host() {
-        assert!(RuntimeContext::Host.is_host());
-        assert!(!RuntimeContext::Container.is_host());
-    }
 }

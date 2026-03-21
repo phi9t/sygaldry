@@ -47,17 +47,7 @@ fn validate_layout(layout: &crate::paths::HostLayout) -> Result<()> {
     Ok(())
 }
 
-/// Print a human-readable summary of the host layout for diagnostics.
-#[allow(dead_code)]
-pub fn print_layout_summary(layout: &crate::paths::HostLayout) {
-    eprintln!("[zephyr] Host layout:");
-    eprintln!("  cache_root:   {}", layout.cache_root.display());
-    eprintln!("  project_root: {}", layout.project_root.display());
-    eprintln!("  spack_store:  {} ({})", layout.spack_store.display(), dir_status(&layout.spack_store));
-    eprintln!("  hf_cache:     {} ({})", layout.hf_cache.display(), dir_status(&layout.hf_cache));
-    eprintln!("  uv_cache:     {} ({})", layout.uv_cache.display(), dir_status(&layout.uv_cache));
-}
-
+#[cfg(test)]
 fn dir_status(path: &std::path::Path) -> &'static str {
     if !path.exists() {
         "missing"

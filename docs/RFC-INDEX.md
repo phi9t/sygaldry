@@ -1,7 +1,7 @@
 # RFC Index
 
 **Last updated:** 2026-03-21
-**Total RFCs:** 9 (44 created, 35 closed as complete or N/A)
+**Total RFCs:** 8 (44 created, 36 closed as complete or N/A)
 
 ---
 
@@ -16,7 +16,6 @@
 | RFC-012 | Orchestrate Command Decomposition | Proposed | Medium | L | temporal |
 | RFC-013 | Dockerfile Cache Layer Optimization | Proposed | Low | M | docker |
 | RFC-016 | K3s YAML Path Externalization | Proposed (on hold) | Low | M | k3s |
-| RFC-019 | Rust Dead Code Cleanup | Proposed | Low | S | rust-core |
 | RFC-031 | Add Explicit Dev-Only Unrestricted sudo Opt-In | Draft v2 | Low | S | docker |
 
 ---
@@ -37,11 +36,10 @@
 
 ### Lower priority
 
-5. **RFC-019** — Rust dead code cleanup
-6. **RFC-031** — Dev-only unrestricted sudo opt-in
-7. **RFC-004** — SAIL infrastructure simplification
-8. **RFC-013** — Dockerfile cache layer optimization
-9. **RFC-016** — K3s YAML path externalization (on hold: K3s strategic direction undecided)
+5. **RFC-031** — Dev-only unrestricted sudo opt-in
+6. **RFC-004** — SAIL infrastructure simplification
+7. **RFC-013** — Dockerfile cache layer optimization
+8. **RFC-016** — K3s YAML path externalization (on hold: K3s strategic direction undecided)
 
 ---
 
@@ -81,3 +79,4 @@
 | RFC-010 | Rust Host Module Testing | Done — `docker_args.rs`, `job.rs`, `lease.rs`, and `container/entrypoint.rs` now all carry focused unit-test modules instead of the near-zero coverage described in the RFC |
 | RFC-014 | Rust Config and Paths Cleanup | Done — `config.rs` now uses path helpers instead of repeated `.display().to_string()` conversions, `projects_root` is surfaced in effective config output, and `paths.rs` uses named layout-version constants |
 | RFC-023 | Query and Signal Handlers for Pipeline | Done — `Pipeline` now exposes a `status` query, honors a `cancel` signal, and uses named search attributes; `RFCImpl` now exposes task-progress status; `temporal/scripts/register_search_attributes.sh` registers the new search-attribute keys |
+| RFC-019 | Rust Dead Code Cleanup | Done — removed the remaining dead-code suppressions by deleting unused error variants/helpers, scoping the CUDA-version helper to tests, and dropping stale `#[allow(dead_code)]` annotations |

@@ -417,7 +417,6 @@ fn exec_shell_with_rc() -> Result<()> {
     Ok(())
 }
 
-#[allow(dead_code)]
 fn exec_shell() -> Result<()> {
     let status = Command::new("bash").arg("-i").status()?;
     if !status.success() {

@@ -3,18 +3,6 @@ use crate::error::{Result, ZephyrError};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-/// A file-based lease record.
-#[allow(dead_code)]
-#[derive(Debug, serde::Serialize, serde::Deserialize)]
-pub struct LeaseRecord {
-    pub resource: String,
-    pub owner: String,
-    pub run_id: String,
-    pub pid: u32,
-    pub created_epoch: i64,
-    pub expires_epoch: i64,
-}
-
 /// RAII guard that removes the lease file on drop.
 pub struct LeaseGuard {
     path: PathBuf,

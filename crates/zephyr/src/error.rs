@@ -33,27 +33,12 @@ pub enum ZephyrError {
     #[error("Entrypoint not found: {0}")]
     EntrypointNotFound(String),
 
-    #[allow(dead_code)]
-    #[error("Spack setup not found at {0}")]
-    SpackNotFound(PathBuf),
-
     #[error("Spack environment activation failed")]
     SpackActivationFailed,
 
     #[error("GPU validation failed: {0}")]
     GpuValidationFailed(String),
 
-    #[allow(dead_code)]
-    #[error("Repo path does not exist: {0}")]
-    RepoNotFound(PathBuf),
-
-    #[allow(dead_code)]
-    #[error("Invalid value for {field}: '{value}' (expected {expected})")]
-    InvalidConfig {
-        field: String,
-        value: String,
-        expected: String,
-    },
 
     #[error("Command failed with exit code {code}: {command}")]
     CommandFailed { command: String, code: i32 },
