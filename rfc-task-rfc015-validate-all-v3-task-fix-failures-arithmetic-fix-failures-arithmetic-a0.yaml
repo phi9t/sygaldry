@@ -1,0 +1,16 @@
+task:
+  id: "fix-failures-arithmetic"
+  title: "replace ((FAILURES++)) || true with safe arithmetic assignment"
+  approach: |
+    Replace both occurrences of `((FAILURES++)) || true` in validate_all.sh with
+    `FAILURES=$((FAILURES + 1))`. The assignment form always exits 0 under `set -e`,
+    making the `|| true` guard unnecessary. Two lines are affected: line 51 inside
+    run_check() and line 259 inside the pytest special-case block.
+  files_to_change:
+    - path: "validate_all.sh"
+      change: "Replace `((FAILURES++)) || true` with `FAILURES=$((FAILURES + 1))` at lines 51 and 259"
+  acceptance_criteria:
+    - "grep -n 'FAILURES++' validate_all.sh returns no output"
+    - "grep -n 'FAILURES=\\$' validate_all.sh returns exactly two lines (at ~51 and ~259)"
+  risks:
+    - "None — pure arithmetic equivalence; behavior is identical under set -e"

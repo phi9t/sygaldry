@@ -48,7 +48,7 @@ run_check() {
         log "PASS: ${name}"
     else
         log "FAIL: ${name}"
-        ((FAILURES++)) || true
+        FAILURES=$((FAILURES + 1))
     fi
 }
 
@@ -256,7 +256,7 @@ if [[ -d "${VENV_DIR}" ]]; then
                 log "SKIP: no host-safe Python tests collected"
             else
                 log "FAIL: pytest"
-                ((FAILURES++)) || true
+                FAILURES=$((FAILURES + 1))
             fi
         fi
     else
