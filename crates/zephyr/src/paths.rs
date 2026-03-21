@@ -48,7 +48,6 @@ pub struct HostLayout {
     pub cache_root: PathBuf,
     pub shared_root: PathBuf,
     pub build_root: PathBuf,
-    #[allow(dead_code)]
     pub projects_root: PathBuf,
     pub project_root: PathBuf,
     pub meta_root: PathBuf,
