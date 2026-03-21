@@ -1,0 +1,5 @@
+address: "localhost:7233"
+namespace: "default"
+task_queue: "orchestration"
+max_concurrent_activities: 10
+health_port: 8080

@@ -1,6 +1,6 @@
 # RFC Review, Consolidation, and Revision
 
-You are reviewing the 8 open RFC files in `docs/` against the current state of
+You are reviewing the 7 open RFC files in `docs/` against the current state of
 the Sygaldry codebase. Your job is to determine which RFCs are done, which are
 stale, which need narrowing, and which are accurate — then apply all changes and
 update the index.
