@@ -121,9 +121,7 @@ fn env_or(var: &str, default: &str) -> String {
 /// Log a deprecation warning if a legacy env var is set.
 fn warn_legacy(old: &str, new: &str) {
     if std::env::var(old).is_ok() {
-        eprintln!(
-            "[zephyr] DEPRECATED: {old} set; prefer {new}",
-        );
+        eprintln!("[zephyr] DEPRECATED: {old} set; prefer {new}",);
     }
 }
 
@@ -169,7 +167,6 @@ impl ZephyrConfig {
             layout,
         }
     }
-
 }
 
 /// Detect the sygaldry repo root from SYGALDRY_HOME or binary location.
@@ -188,18 +185,15 @@ fn resolve_sygaldry_home() -> PathBuf {
 
 /// Resolve project ID and run ID from CLI overrides and env vars.
 fn resolve_identity(cli_overrides: &CliOverrides) -> (String, String) {
-    let project_id = cli_overrides
-        .project_id
-        .clone()
-        .unwrap_or_else(|| {
-            env_or(
-                "SYGALDRY_PROJECT_ID",
-                &std::env::current_dir()
-                    .ok()
-                    .and_then(|p| p.file_name().map(|n| n.to_string_lossy().into_owned()))
-                    .unwrap_or_else(|| "unknown".to_string()),
-            )
-        });
+    let project_id = cli_overrides.project_id.clone().unwrap_or_else(|| {
+        env_or(
+            "SYGALDRY_PROJECT_ID",
+            &std::env::current_dir()
+                .ok()
+                .and_then(|p| p.file_name().map(|n| n.to_string_lossy().into_owned()))
+                .unwrap_or_else(|| "unknown".to_string()),
+        )
+    });
 
     let run_id = cli_overrides
         .run_id
@@ -221,17 +215,26 @@ fn resolve_identity(cli_overrides: &CliOverrides) -> (String, String) {
 /// Build the complete host directory layout from env vars.
 fn build_host_layout(project_id: &str) -> HostLayout {
     let cache_root = PathBuf::from(env_or("ZEPHYR_CACHE_ROOT", DEFAULT_CACHE_ROOT));
-    let shared_root =
-        PathBuf::from(env_or("ZEPHYR_SHARED_ROOT", &cache_root.join("shared").display().to_string()));
-    let build_root =
-        PathBuf::from(env_or("ZEPHYR_BUILD_ROOT", &cache_root.join("sygaldry").display().to_string()));
-    let projects_root =
-        PathBuf::from(env_or("ZEPHYR_PROJECTS_ROOT", &cache_root.join("projects").display().to_string()));
+    let shared_root = PathBuf::from(env_or(
+        "ZEPHYR_SHARED_ROOT",
+        &cache_root.join("shared").display().to_string(),
+    ));
+    let build_root = PathBuf::from(env_or(
+        "ZEPHYR_BUILD_ROOT",
+        &cache_root.join("sygaldry").display().to_string(),
+    ));
+    let projects_root = PathBuf::from(env_or(
+        "ZEPHYR_PROJECTS_ROOT",
+        &cache_root.join("projects").display().to_string(),
+    ));
     let project_root = PathBuf::from(env_or(
         "ZEPHYR_PROJECT_ROOT",
         &projects_root.join(project_id).display().to_string(),
     ));
-    let meta_root = PathBuf::from(env_or("ZEPHYR_META_ROOT", &cache_root.join("meta").display().to_string()));
+    let meta_root = PathBuf::from(env_or(
+        "ZEPHYR_META_ROOT",
+        &cache_root.join("meta").display().to_string(),
+    ));
 
     let shared_caches = build_shared_caches(&build_root, &shared_root);
 
@@ -250,22 +253,30 @@ fn build_host_layout(project_id: &str) -> HostLayout {
         runs: project_root.join("runs"),
         leases: project_root.join("leases"),
         logs: project_root.join("logs"),
-        spack_store: shared_caches.0,
-        bazel_cache: shared_caches.1,
-        hf_cache: shared_caches.2,
-        uv_cache: shared_caches.3,
-        torch_cache: shared_caches.4,
-        triton_cache: shared_caches.5,
-        nv_compute_cache: shared_caches.6,
-        jax_cache: shared_caches.7,
+        spack_store: shared_caches.spack_store,
+        bazel_cache: shared_caches.bazel_cache,
+        hf_cache: shared_caches.hf_cache,
+        uv_cache: shared_caches.uv_cache,
+        torch_cache: shared_caches.torch_cache,
+        triton_cache: shared_caches.triton_cache,
+        nv_compute_cache: shared_caches.nv_compute_cache,
+        jax_cache: shared_caches.jax_cache,
     }
 }
 
+struct SharedCaches {
+    spack_store: PathBuf,
+    bazel_cache: PathBuf,
+    hf_cache: PathBuf,
+    uv_cache: PathBuf,
+    torch_cache: PathBuf,
+    triton_cache: PathBuf,
+    nv_compute_cache: PathBuf,
+    jax_cache: PathBuf,
+}
+
 /// Resolve shared cache paths with legacy env var fallbacks.
-fn build_shared_caches(
-    build_root: &PathBuf,
-    shared_root: &PathBuf,
-) -> (PathBuf, PathBuf, PathBuf, PathBuf, PathBuf, PathBuf, PathBuf, PathBuf) {
+fn build_shared_caches(build_root: &PathBuf, shared_root: &PathBuf) -> SharedCaches {
     let spack_store = PathBuf::from(env_chain(
         &["ZEPHYR_SHARED_SPACK_STORE", "SYGALDRY_SPACK_STORE"],
         &build_root.join("spack_store").display().to_string(),
@@ -299,7 +310,16 @@ fn build_shared_caches(
         &shared_root.join("jax_cache").display().to_string(),
     ));
 
-    (spack_store, bazel_cache, hf_cache, uv_cache, torch_cache, triton_cache, nv_compute_cache, jax_cache)
+    SharedCaches {
+        spack_store,
+        bazel_cache,
+        hf_cache,
+        uv_cache,
+        torch_cache,
+        triton_cache,
+        nv_compute_cache,
+        jax_cache,
+    }
 }
 
 /// Resolve launch mode from CLI and env vars.
@@ -356,10 +376,22 @@ impl ZephyrConfig {
         eprintln!("[zephyr]   Run ID: {}", self.run_id);
         eprintln!("[zephyr]   Lease mode: {:?}", self.lease_mode);
         eprintln!("[zephyr]   Cache profile: {:?}", self.cache_profile);
-        eprintln!("[zephyr]   Cache root: {}", self.layout.cache_root.display());
-        eprintln!("[zephyr]   Shared root: {}", self.layout.shared_root.display());
-        eprintln!("[zephyr]   Build root: {}", self.layout.build_root.display());
-        eprintln!("[zephyr]   Project root: {}", self.layout.project_root.display());
+        eprintln!(
+            "[zephyr]   Cache root: {}",
+            self.layout.cache_root.display()
+        );
+        eprintln!(
+            "[zephyr]   Shared root: {}",
+            self.layout.shared_root.display()
+        );
+        eprintln!(
+            "[zephyr]   Build root: {}",
+            self.layout.build_root.display()
+        );
+        eprintln!(
+            "[zephyr]   Project root: {}",
+            self.layout.project_root.display()
+        );
         eprintln!(
             "[zephyr]   Shared caches: hf={} uv={} bazel={}",
             self.layout.hf_cache.display(),
@@ -390,20 +422,40 @@ mod tests {
     use serial_test::serial;
 
     const CONFIG_ENV_VARS: &[&str] = &[
-        "SYGALDRY_HOME", "SYGALDRY_PROJECT_ID", "SYGALDRY_RUN_ID",
-        "SYGALDRY_IMAGE", "SYGALDRY_NET", "SYGALDRY_IPC",
-        "SYGALDRY_BUILD_IMAGE", "SYGALDRY_EXTRA_DOCKER_ARGS",
-        "SYGALDRY_REQUIRED_CUDA_VERSION", "SYGALDRY_REPO",
-        "SYGALDRY_SPACK_STORE", "SYGALDRY_HF_CACHE", "SYGALDRY_UV_CACHE",
+        "SYGALDRY_HOME",
+        "SYGALDRY_PROJECT_ID",
+        "SYGALDRY_RUN_ID",
+        "SYGALDRY_IMAGE",
+        "SYGALDRY_NET",
+        "SYGALDRY_IPC",
+        "SYGALDRY_BUILD_IMAGE",
+        "SYGALDRY_EXTRA_DOCKER_ARGS",
+        "SYGALDRY_REQUIRED_CUDA_VERSION",
+        "SYGALDRY_REPO",
+        "SYGALDRY_SPACK_STORE",
+        "SYGALDRY_HF_CACHE",
+        "SYGALDRY_UV_CACHE",
         "SYGALDRY_BAZEL_CACHE",
-        "ZEPHYR_CACHE_ROOT", "ZEPHYR_SHARED_ROOT", "ZEPHYR_BUILD_ROOT",
-        "ZEPHYR_PROJECTS_ROOT", "ZEPHYR_PROJECT_ROOT", "ZEPHYR_META_ROOT",
-        "ZEPHYR_SHARED_SPACK_STORE", "ZEPHYR_SHARED_HF_CACHE",
-        "ZEPHYR_SHARED_UV_CACHE", "ZEPHYR_SHARED_BAZEL_CACHE",
-        "ZEPHYR_SHARED_TORCH_CACHE", "ZEPHYR_SHARED_TRITON_CACHE",
-        "ZEPHYR_SHARED_NV_COMPUTE_CACHE", "ZEPHYR_SHARED_JAX_CACHE",
-        "ZEPHYR_LEASE_MODE", "ZEPHYR_CACHE_PROFILE",
-        "PYTHON_VERSION", "RUST_VERSION", "GO_VERSION", "BAZEL_VERSION",
+        "ZEPHYR_CACHE_ROOT",
+        "ZEPHYR_SHARED_ROOT",
+        "ZEPHYR_BUILD_ROOT",
+        "ZEPHYR_PROJECTS_ROOT",
+        "ZEPHYR_PROJECT_ROOT",
+        "ZEPHYR_META_ROOT",
+        "ZEPHYR_SHARED_SPACK_STORE",
+        "ZEPHYR_SHARED_HF_CACHE",
+        "ZEPHYR_SHARED_UV_CACHE",
+        "ZEPHYR_SHARED_BAZEL_CACHE",
+        "ZEPHYR_SHARED_TORCH_CACHE",
+        "ZEPHYR_SHARED_TRITON_CACHE",
+        "ZEPHYR_SHARED_NV_COMPUTE_CACHE",
+        "ZEPHYR_SHARED_JAX_CACHE",
+        "ZEPHYR_LEASE_MODE",
+        "ZEPHYR_CACHE_PROFILE",
+        "PYTHON_VERSION",
+        "RUST_VERSION",
+        "GO_VERSION",
+        "BAZEL_VERSION",
     ];
 
     fn clear_config_env() {
@@ -444,7 +496,10 @@ mod tests {
     #[test]
     fn cache_profile_parse_valid() {
         assert_eq!(CacheProfile::parse("shared"), Some(CacheProfile::Shared));
-        assert_eq!(CacheProfile::parse("isolated"), Some(CacheProfile::Isolated));
+        assert_eq!(
+            CacheProfile::parse("isolated"),
+            Some(CacheProfile::Isolated)
+        );
         assert_eq!(CacheProfile::parse("hybrid"), Some(CacheProfile::Hybrid));
     }
 
@@ -644,9 +699,15 @@ mod tests {
     #[serial]
     fn config_extra_docker_args_splits_whitespace() {
         clear_config_env();
-        std::env::set_var("SYGALDRY_EXTRA_DOCKER_ARGS", "--shm-size=8g --ulimit memlock=-1");
+        std::env::set_var(
+            "SYGALDRY_EXTRA_DOCKER_ARGS",
+            "--shm-size=8g --ulimit memlock=-1",
+        );
         let config = ZephyrConfig::from_env(&CliOverrides::default());
-        assert_eq!(config.extra_docker_args, vec!["--shm-size=8g", "--ulimit", "memlock=-1"]);
+        assert_eq!(
+            config.extra_docker_args,
+            vec!["--shm-size=8g", "--ulimit", "memlock=-1"]
+        );
         std::env::remove_var("SYGALDRY_EXTRA_DOCKER_ARGS");
     }
 
@@ -657,9 +718,18 @@ mod tests {
         std::env::set_var("ZEPHYR_CACHE_ROOT", "/tmp/test-cache");
         let config = ZephyrConfig::from_env(&CliOverrides::default());
         assert_eq!(config.layout.cache_root, PathBuf::from("/tmp/test-cache"));
-        assert_eq!(config.layout.shared_root, PathBuf::from("/tmp/test-cache/shared"));
-        assert_eq!(config.layout.build_root, PathBuf::from("/tmp/test-cache/sygaldry"));
-        assert_eq!(config.layout.meta_root, PathBuf::from("/tmp/test-cache/meta"));
+        assert_eq!(
+            config.layout.shared_root,
+            PathBuf::from("/tmp/test-cache/shared")
+        );
+        assert_eq!(
+            config.layout.build_root,
+            PathBuf::from("/tmp/test-cache/sygaldry")
+        );
+        assert_eq!(
+            config.layout.meta_root,
+            PathBuf::from("/tmp/test-cache/meta")
+        );
         std::env::remove_var("ZEPHYR_CACHE_ROOT");
     }
 
@@ -694,7 +764,10 @@ mod tests {
         assert_eq!(config.layout.home, PathBuf::from("/tmp/proj/home"));
         assert_eq!(config.layout.config, PathBuf::from("/tmp/proj/config"));
         assert_eq!(config.layout.outputs, PathBuf::from("/tmp/proj/outputs"));
-        assert_eq!(config.layout.workspace, PathBuf::from("/tmp/proj/workspace"));
+        assert_eq!(
+            config.layout.workspace,
+            PathBuf::from("/tmp/proj/workspace")
+        );
         assert_eq!(config.layout.runs, PathBuf::from("/tmp/proj/runs"));
         assert_eq!(config.layout.leases, PathBuf::from("/tmp/proj/leases"));
         assert_eq!(config.layout.logs, PathBuf::from("/tmp/proj/logs"));
