@@ -464,7 +464,6 @@ the default; configurable via =config.yaml= =venv_path=.
 | =ImageBuildFailed=      | =docker build= IO error            |
 | =LeaseConflict=         | GPU lease held by another run    |
 | =EntrypointNotFound=    | entrypoint script missing        |
-| =SpackNotFound=         | Spack setup-env.sh missing       |
 | =SpackActivationFailed= | no candidate env activated       |
 | =GpuValidationFailed=   | GPU check script failed          |
 | =CommandFailed=         | subprocess non-zero exit         |
