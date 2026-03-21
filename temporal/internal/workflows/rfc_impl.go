@@ -14,6 +14,8 @@ import (
 	"temporal-orchestration/internal/activities"
 )
 
+const rfcImplWorkflowVersion = 1
+
 // ── Input / Output Types ─────────────────────────────────────────────────────
 
 // RFCImplInput parameterises the parent RFC implementation workflow.
@@ -81,6 +83,8 @@ type RFCImplResult struct {
 // RFCImpl decomposes an RFC into tasks and executes them in parallel child workflows.
 func RFCImpl(ctx workflow.Context, input RFCImplInput) (RFCImplResult, error) {
 	logger := workflow.GetLogger(ctx)
+	v := workflow.GetVersion(ctx, "initial", workflow.DefaultVersion, rfcImplWorkflowVersion)
+	_ = v
 
 	// Apply defaults.
 	if input.MaxRetriesPerTask <= 0 {
@@ -160,6 +164,8 @@ func RFCImpl(ctx workflow.Context, input RFCImplInput) (RFCImplResult, error) {
 	logger.Info("RFC decomposed", "taskCount", len(tasks))
 
 	// Step 4: Fan-out with bounded parallelism.
+	vp := workflow.GetVersion(ctx, "bounded-parallelism", workflow.DefaultVersion, rfcImplWorkflowVersion)
+	_ = vp
 	maxParallel := input.MaxParallelTasks
 	if maxParallel <= 0 || maxParallel > len(tasks) {
 		maxParallel = len(tasks)
@@ -243,6 +249,9 @@ func RFCImpl(ctx workflow.Context, input RFCImplInput) (RFCImplResult, error) {
 // RFCTaskWorkflow implements the plan→execute→review loop for a single task.
 func RFCTaskWorkflow(ctx workflow.Context, input RFCTaskInput) (RFCTaskResult, error) {
 	logger := workflow.GetLogger(ctx)
+	vt := workflow.GetVersion(ctx, "initial", workflow.DefaultVersion, rfcImplWorkflowVersion)
+	_ = vt
+
 	info := workflow.GetInfo(ctx)
 	workflowID := info.WorkflowExecution.ID
 
