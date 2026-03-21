@@ -7,12 +7,12 @@
 
 ## Problem
 
-`temporal/cmd/orchestrate/main.go` is 997 lines long and conflates four distinct
+`temporal/cmd/orchestrate/main.go` is 1003 lines long and conflates four distinct
 responsibilities in a single package:
 
 1. **CLI dispatch** (`run`, `validate`, `status` subcommands) — lines 110–141
 2. **YAML loading and template resolution** — lines 347–441
-3. **Merge functions** — 11 type-specific merge helpers spanning lines 444–784,
+3. **Merge functions** — 13 merge helpers spanning lines 444–784,
    totalling approximately 340 lines of near-identical boilerplate
 4. **Plan validation** — `validatePlan` (lines 786–884) with cycle detection
    (lines 886–952), stopping on the first error encountered
@@ -25,7 +25,7 @@ switch, and a new `mergeXxxSpec` function.
 
 ## Key Findings
 
-### 11 merge functions with identical structure
+### 13 merge functions with identical structure
 
 Every spec-level merge function follows the same pattern: nil-guard the base
 pointer, copy it, overwrite each non-zero field:
@@ -50,11 +50,12 @@ func mergeDownloadSpec(base, override *workflows.DownloadSpec) *workflows.Downlo
 }
 ```
 
-All 11 functions (`mergeRetrySpec`, `mergeDownloadSpec`, `mergeDockerBuildSpec`,
+All 13 functions (`mergeRetrySpec`, `mergeDownloadSpec`, `mergeDockerBuildSpec`,
 `mergeDockerPushSpec`, `mergePackageBuildSpec`, `mergeContainerJobSpec`,
 `mergeHFDownloadDatasetSpec`, `mergeHFDownloadModelSpec`, `mergeK8sJobSpec`,
-`mergeAgentTaskSpec`, `mergeGitOpSpec`) repeat this structure. The central
-dispatcher `mergePipelineStep` (lines 444–517) manually calls each one.
+`mergeAgentTaskSpec`, `mergeGitOpSpec`, `mergeStringMaps`, and the dispatcher
+`mergePipelineStep`) repeat this structure. The central dispatcher
+`mergePipelineStep` (lines 444–517) manually calls each one.
 
 ### Validation stops on first error
 

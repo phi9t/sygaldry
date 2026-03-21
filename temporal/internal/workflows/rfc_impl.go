@@ -418,8 +418,8 @@ func RFCTaskWorkflow(ctx workflow.Context, input RFCTaskInput) (RFCTaskResult, e
 			return result, nil
 		}
 
-		// c0. Pre-review diff gate: skip the expensive Claude call when agent made no changes.
-		// git diff --quiet HEAD exits 0=no changes, 1=changes present.
+		// c0. Pre-review diff gate: skip the expensive Claude call when the worktree
+		// has neither tracked diffs nor untracked files.
 		diffCtx := workflow.WithActivityOptions(ctx, gitAO)
 		var diffResult activities.RunCommandResult
 		_ = workflow.ExecuteActivity(diffCtx, activities.RunCommand, activities.RunCommandInput{
@@ -427,14 +427,17 @@ func RFCTaskWorkflow(ctx workflow.Context, input RFCTaskInput) (RFCTaskResult, e
 			WorkflowID: workflowID,
 			StepID:     fmt.Sprintf("check-diff-a%d", attempt),
 			LogDir:     input.LogDir,
-			Command:    "git",
-			Args:       []string{"diff", "--quiet", "HEAD"},
+			Command:    "bash",
+			Args: []string{
+				"-lc",
+				`git diff --quiet HEAD -- && test -z "$(git ls-files --others --exclude-standard)"`,
+			},
 			WorkingDir: input.WorktreePath,
 			Env:        input.Env,
 		}).Get(ctx, &diffResult)
 		if diffResult.ExitCode == 0 {
 			// No working-tree changes — agent did not edit any files.
-			prevReviewFailure = "no changes made — implementer did not modify any files (git diff HEAD is empty)"
+			prevReviewFailure = "no changes made — implementer did not modify any tracked or untracked files"
 			if attempt == maxRetries-1 {
 				result.FailReason = fmt.Sprintf("no changes after %d attempts", maxRetries)
 				result.Retries = attempt
