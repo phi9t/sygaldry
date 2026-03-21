@@ -15,8 +15,10 @@ Sygaldry is a Docker + Spack mono-repo build system for reproducible, hermetic b
 ## Quick Start
 
 ```bash
-# Launch development container (auto-builds image if needed)
-./container/launch_container.sh
+# Launch development container (preferred entry points)
+./bin/sygaldry
+# or, once built:
+zephyr shell
 
 # Inside container: activate Spack environment
 spack-env-activate
@@ -67,12 +69,18 @@ SYGALDRY_PROJECT_ID=my-project              # Per-project isolation namespace
 
 ## Commands
 
-**Container management (legacy -- sygaldry at /workspace):**
+**Container management (preferred):**
 ```bash
-./container/launch_container.sh                    # Interactive shell
-./container/launch_container.sh --entrypoint run-job.sh -- "python train.py"
-./container/launch_container.sh --entrypoint verify-gpu.sh  # GPU verification
-./container/launch_container.sh --entrypoint hf-download.sh -- model Qwen/Qwen3-0.6B-Base
+./bin/sygaldry                                   # Interactive shell
+./bin/sygaldry -- python train.py                # Run a command
+zephyr --entrypoint verify-gpu shell             # GPU verification
+zephyr --entrypoint hf-download shell -- model Qwen/Qwen3-0.6B-Base
+```
+
+**Compatibility shim (transitional only):**
+```bash
+./container/launch_container.sh                  # Delegates to zephyr shell
+./container/launch_container.sh -- python train.py
 ```
 
 **Spack environments:**
@@ -93,8 +101,8 @@ uv pip install <package>   # Install package (always use uv pip, never pip direc
 ```bash
 gpu-test    # Quick PyTorch CUDA check
 jax-test    # Quick JAX GPU check
-./container/launch_container.sh --entrypoint verify-gpu.sh    # Full verification
-./container/launch_container.sh --entrypoint verify-spack.sh  # Fast Spack verification (no rebuild)
+zephyr --entrypoint verify-gpu shell    # Full verification
+zephyr --entrypoint verify-spack shell  # Fast Spack verification (no rebuild)
 ```
 
 **Validation:**
@@ -236,7 +244,7 @@ Spack is baked into the image at `/opt/spack_src` (no host mount).
 bin/
   sygaldry                     # Host-side CLI wrapper (symlink to /usr/local/bin)
 container/
-  launch_container.sh          # Primary entry point (legacy + multi-repo modes)
+  launch_container.sh          # Deprecated compatibility shim; delegates to zephyr
   dev_container.dockerfile     # NVIDIA CUDA 12.9.1 + Ubuntu 24.04 base
   setup_user_environment.sh    # Rust, uv, bashrc configuration
   diagnose_nvidia.sh           # NVIDIA diagnostics and repair
@@ -390,7 +398,7 @@ shellcheck -s bash -S warning scripts/*.sh
 
 ## Key Files
 
-- `container/launch_container.sh` - Primary entry point
+- `container/launch_container.sh` - Deprecated compatibility shim for direct callers
 - `container/dev_container.dockerfile` - Base image definition (NVIDIA CUDA 12.9.1 + Ubuntu 24.04)
 - `container/entrypoints/` - Entrypoint scripts
 - `pkg/zephyr/spack_src.yaml` - Zephyr environment specs (PyTorch, JAX with CUDA)
