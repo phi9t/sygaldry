@@ -1,7 +1,7 @@
 # RFC Index
 
 **Last updated:** 2026-03-21
-**Total RFCs:** 7 (44 created, 37 closed as complete or N/A)
+**Total RFCs:** 6 (44 created, 38 closed as complete or N/A)
 
 ---
 
@@ -15,7 +15,6 @@
 | RFC-012 | Orchestrate Command Decomposition | Proposed | Medium | L | temporal |
 | RFC-013 | Dockerfile Cache Layer Optimization | Proposed | Low | M | docker |
 | RFC-016 | K3s YAML Path Externalization | Proposed (on hold) | Low | M | k3s |
-| RFC-031 | Add Explicit Dev-Only Unrestricted sudo Opt-In | Draft v2 | Low | S | docker |
 
 ---
 
@@ -34,10 +33,9 @@
 
 ### Lower priority
 
-4. **RFC-031** — Dev-only unrestricted sudo opt-in
-5. **RFC-004** — SAIL infrastructure simplification
-6. **RFC-013** — Dockerfile cache layer optimization
-7. **RFC-016** — K3s YAML path externalization (on hold: K3s strategic direction undecided)
+4. **RFC-004** — SAIL infrastructure simplification
+5. **RFC-013** — Dockerfile cache layer optimization
+6. **RFC-016** — K3s YAML path externalization (on hold: K3s strategic direction undecided)
 
 ---
 
@@ -79,3 +77,4 @@
 | RFC-023 | Query and Signal Handlers for Pipeline | Done — `Pipeline` now exposes a `status` query, honors a `cancel` signal, and uses named search attributes; `RFCImpl` now exposes task-progress status; `temporal/scripts/register_search_attributes.sh` registers the new search-attribute keys |
 | RFC-019 | Rust Dead Code Cleanup | Done — removed the remaining dead-code suppressions by deleting unused error variants/helpers, scoping the CUDA-version helper to tests, and dropping stale `#[allow(dead_code)]` annotations |
 | RFC-003 | Temporal Production Readiness | Done — worker config now supports YAML plus env/CLI overrides, `max_concurrent_activities`, and an HTTP `/healthz` endpoint via `temporal/cmd/worker` |
+| RFC-031 | Add Explicit Dev-Only Unrestricted sudo Opt-In | Done — `ZEPHYR_DEV_SUDO=1` now explicitly opts the Zephyr launcher into `--user=0:0` for local debugging without widening the image’s default sudoers policy |

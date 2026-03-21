@@ -335,6 +335,7 @@ Note: Always separate `declare`/`readonly`/`local` from command substitution ass
 - `ZEPHYR_MEMORY_SWAP` - Optional Docker `--memory-swap` limit
 - `ZEPHYR_PIDS_LIMIT` - Docker `--pids-limit` value (default: `4096`)
 - `ZEPHYR_ROOTLESS` - Optional `0|1` / `false|true` override for rootless Docker detection to avoid probing `docker info` on every launch
+- `ZEPHYR_DEV_SUDO` - Set to `1` for local debugging when you explicitly want the container to run as `0:0`; default remains least-privilege `kvothe`
 - `ZEPHYR_SNAPSHOT_REF` - Digest-pinned snapshot ref for validation scripts
 - `SYGALDRY_PROJECT_ID` - Project isolation namespace
 - `SYGALDRY_IMAGE` - Custom Docker image name (default `sygaldry/zephyr:base`)

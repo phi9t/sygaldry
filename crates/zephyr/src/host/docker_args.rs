@@ -88,6 +88,7 @@ pub(crate) fn build_env_args(
         "LANG",
         "LC_ALL",
         "BAZEL_VERSION",
+        "ZEPHYR_DEV_SUDO",
         "SYGALDRY_BUILD_ROLE",
         "SYGALDRY_SPACK_ENV",
         "SYGALDRY_MLSYS_ENV",
@@ -314,7 +315,11 @@ pub fn build(
     args.push(format!("--pids-limit={}", config.pids_limit));
 
     // User mapping
-    let user_spec = detect_user_spec(config.rootless_override);
+    let user_spec = if dev_sudo_enabled() {
+        "0:0".to_string()
+    } else {
+        detect_user_spec(config.rootless_override)
+    };
     args.push(format!("--user={user_spec}"));
 
     // Host identity mount (optional)
@@ -371,6 +376,13 @@ fn detect_user_spec(rootless_override: Option<bool>) -> String {
     } else {
         format!("{uid}:{gid}")
     }
+}
+
+fn dev_sudo_enabled() -> bool {
+    matches!(
+        std::env::var("ZEPHYR_DEV_SUDO").as_deref(),
+        Ok("1") | Ok("true") | Ok("TRUE")
+    )
 }
 
 /// Check if stdin is a terminal (for -it flags).
@@ -554,6 +566,16 @@ mod tests {
         let config = test_config_in(tmp.path());
         let env_args = build_env_args(&config, "/workspace");
         assert!(env_args.contains(&"--env=SYGALDRY_IN_CONTAINER=1".to_string()));
+    }
+
+    #[test]
+    fn env_args_passthrough_dev_sudo() {
+        let tmp = tempfile::tempdir().unwrap();
+        let config = test_config_in(tmp.path());
+        std::env::set_var("ZEPHYR_DEV_SUDO", "1");
+        let env_args = build_env_args(&config, "/workspace");
+        std::env::remove_var("ZEPHYR_DEV_SUDO");
+        assert!(env_args.contains(&"--env=ZEPHYR_DEV_SUDO=1".to_string()));
     }
 
     #[test]
@@ -751,6 +773,21 @@ mod tests {
             args.iter().any(|a| a.starts_with("--user=")),
             "missing --user flag"
         );
+    }
+
+    #[test]
+    fn build_dev_sudo_uses_root_user() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut config = test_config_in(tmp.path());
+        config.layout.ensure_dirs().unwrap();
+        config.sygaldry_home = tmp.path().join("sygaldry");
+        std::fs::create_dir_all(&config.sygaldry_home).unwrap();
+
+        std::env::set_var("ZEPHYR_DEV_SUDO", "1");
+        let args = build(&config, "default", false, None).unwrap();
+        std::env::remove_var("ZEPHYR_DEV_SUDO");
+
+        assert!(args.iter().any(|a| a == "--user=0:0"));
     }
 
     #[test]
