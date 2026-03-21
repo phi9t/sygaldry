@@ -218,10 +218,13 @@ RUN set -e && \
     groupadd -g ${HOST_GID} kvothe && \
     # Create kvothe user with host UID and GID
     useradd -u ${HOST_UID} -g ${HOST_GID} -m -s /bin/bash kvothe && \
-    # Add to sudo group for development convenience
-    usermod -aG sudo kvothe && \
-    # Allow passwordless sudo
-    echo 'kvothe ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
+    # Allow package-management sudo only: apt/apt-get/dpkg install packages,
+    # and ldconfig refreshes linker state after privileged installs.
+    printf '%s\n' \
+      'Cmnd_Alias ZEPHYR_PKG_CMDS = /usr/bin/apt, /usr/bin/apt-get, /usr/bin/dpkg, /usr/sbin/ldconfig' \
+      'kvothe ALL=(ALL) NOPASSWD: ZEPHYR_PKG_CMDS' \
+      > /etc/sudoers.d/kvothe-zephyr && \
+    chmod 0440 /etc/sudoers.d/kvothe-zephyr
 
 # Create mount point directories with proper ownership
 RUN mkdir -p /opt/spack_store /opt/bazel_cache /opt/bazel_cache/cuda && \

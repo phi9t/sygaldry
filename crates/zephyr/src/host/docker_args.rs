@@ -299,8 +299,19 @@ pub fn build(
     }
 
     // Network and IPC
-    args.push(format!("--net={}", config.net));
+    args.push(format!("--network={}", config.net));
     args.push(format!("--ipc={}", config.ipc));
+    args.push(format!("--shm-size={}", config.shm_size));
+    if let Some(memory_limit) = &config.memory_limit {
+        args.push(format!("--memory={memory_limit}"));
+    }
+    if let Some(cpu_limit) = &config.cpu_limit {
+        args.push(format!("--cpus={cpu_limit}"));
+    }
+    if let Some(memory_swap) = &config.memory_swap {
+        args.push(format!("--memory-swap={memory_swap}"));
+    }
+    args.push(format!("--pids-limit={}", config.pids_limit));
 
     // User mapping
     let user_spec = detect_user_spec(config.rootless_override);
@@ -487,8 +498,13 @@ mod tests {
             run_id: "run-001".into(),
             sygaldry_home: root.join("sygaldry"),
             image: "sygaldry/zephyr:test".into(),
-            net: "host".into(),
-            ipc: "host".into(),
+            net: "bridge".into(),
+            ipc: "shareable".into(),
+            shm_size: "16g".into(),
+            memory_limit: None,
+            cpu_limit: None,
+            memory_swap: None,
+            pids_limit: "4096".into(),
             build_policy: BuildPolicy::Never,
             rootless_override: None,
             extra_docker_args: vec![],
@@ -586,10 +602,48 @@ mod tests {
 
         assert!(args.contains(&"--rm".to_string()));
         assert!(args.contains(&"--init".to_string()));
-        assert!(args.contains(&"--net=host".to_string()));
-        assert!(args.contains(&"--ipc=host".to_string()));
+        assert!(args.contains(&"--network=bridge".to_string()));
+        assert!(args.contains(&"--ipc=shareable".to_string()));
+        assert!(args.contains(&"--shm-size=16g".to_string()));
+        assert!(args.contains(&"--pids-limit=4096".to_string()));
         assert!(args.contains(&"--runtime=nvidia".to_string()));
         assert!(args.contains(&"--gpus=all".to_string()));
+    }
+
+    #[test]
+    fn build_includes_optional_resource_limits() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut config = test_config_in(tmp.path());
+        config.layout.ensure_dirs().unwrap();
+        config.sygaldry_home = tmp.path().join("sygaldry");
+        config.memory_limit = Some("64g".into());
+        config.cpu_limit = Some("8".into());
+        config.memory_swap = Some("80g".into());
+        config.pids_limit = "2048".into();
+        std::fs::create_dir_all(&config.sygaldry_home).unwrap();
+
+        let args = build(&config, "default", false, None).unwrap();
+
+        assert!(args.contains(&"--memory=64g".to_string()));
+        assert!(args.contains(&"--cpus=8".to_string()));
+        assert!(args.contains(&"--memory-swap=80g".to_string()));
+        assert!(args.contains(&"--pids-limit=2048".to_string()));
+    }
+
+    #[test]
+    fn build_allows_host_network_override() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut config = test_config_in(tmp.path());
+        config.layout.ensure_dirs().unwrap();
+        config.sygaldry_home = tmp.path().join("sygaldry");
+        config.net = "host".into();
+        config.ipc = "host".into();
+        std::fs::create_dir_all(&config.sygaldry_home).unwrap();
+
+        let args = build(&config, "default", false, None).unwrap();
+
+        assert!(args.contains(&"--network=host".to_string()));
+        assert!(args.contains(&"--ipc=host".to_string()));
     }
 
     #[test]

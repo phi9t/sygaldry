@@ -1,6 +1,6 @@
 # RFC Review, Consolidation, and Revision
 
-You are reviewing the 14 open RFC files in `docs/` against the current state of
+You are reviewing the 12 open RFC files in `docs/` against the current state of
 the Sygaldry codebase. Your job is to determine which RFCs are done, which are
 stale, which need narrowing, and which are accurate — then apply all changes and
 update the index.
@@ -79,12 +79,6 @@ grep -n '"/opt\|"/mnt\|"/home\|"/tmp\|"/var' crates/zephyr/src/config.rs | head 
 # RFC-041: detect_user_spec calls docker info every invocation?
 grep -n 'detect_user_spec\|docker info\|docker.*info' crates/zephyr/src/host/docker_args.rs
 
-# RFC-032: --ipc and --net=host hardcoded or configurable?
-grep -n 'ipc\|net=host' crates/zephyr/src/host/docker_args.rs | head -10
-
-# RFC-033: any --memory / --cpus / resource limit args?
-grep -n 'memory\|cpus\|ulimit' crates/zephyr/src/host/docker_args.rs | head -10
-
 # ── Rust: dead code ───────────────────────────────────────────────────────────
 # RFC-019: how many #[allow(dead_code)] remain?
 grep -rn '#\[allow(dead_code)\]' crates/zephyr/src/ --include='*.rs' | grep -v target
@@ -127,7 +121,7 @@ grep -rn 'k3s\|K3s' temporal/ --include='*.go' | head -10
 
 ## Step 2 — Triage each RFC
 
-For **each of the 14 open RFCs**, assign one label based on what the ground-truth
+For **each of the 12 open RFCs**, assign one label based on what the ground-truth
 commands showed:
 
 | Label | Meaning | Action |

@@ -1,7 +1,7 @@
 # RFC Index
 
 **Last updated:** 2026-03-21
-**Total RFCs:** 14 (44 created, 30 closed as complete or N/A)
+**Total RFCs:** 12 (44 created, 32 closed as complete or N/A)
 
 ---
 
@@ -20,9 +20,7 @@
 | RFC-016 | K3s YAML Path Externalization | Proposed (on hold) | Low | M | k3s |
 | RFC-019 | Rust Dead Code Cleanup | Proposed | Low | S | rust-core |
 | RFC-023 | Query and Signal Handlers for Pipeline | Proposed | Medium | M | temporal |
-| RFC-031 | Scope Container User sudo Privileges | Proposed | Medium | S | docker |
-| RFC-032 | Reduce --ipc=host and --net=host Exposure | Proposed | Medium | M | docker |
-| RFC-033 | Add Resource Limits to docker run | Proposed | Low | S | docker |
+| RFC-031 | Add Explicit Dev-Only Unrestricted sudo Opt-In | Draft v2 | Low | S | docker |
 
 ---
 
@@ -32,25 +30,24 @@
 
 ### High priority (correctness / migration)
 
+1. **RFC-003** — Temporal production readiness phases 4–5
+2. **RFC-006** — Rust entrypoint consolidation (unblocks RFC-002)
+3. **RFC-002** — Rust as container foundation
+
 ### Medium priority (production readiness)
 
-1. **RFC-023** — Query/signal handlers for running pipelines
-2. **RFC-031** — Scope container sudo privileges
-3. **RFC-032** — Reduce `--ipc=host` / `--net=host` exposure
+4. **RFC-023** — Query/signal handlers for running pipelines
+5. **RFC-010** — Rust host module testing
+6. **RFC-012** — Orchestrate command decomposition
 
 ### Lower priority
 
-7. **RFC-003** — Temporal production readiness phases 4–5
-8. **RFC-006** — Rust entrypoint consolidation (M effort, prereq for RFC-002)
-9. **RFC-010** — Rust host module testing
-10. **RFC-012** — Orchestrate command decomposition (L effort)
-11. **RFC-014** — Rust config and paths cleanup
-12. **RFC-019** — Rust dead code cleanup (S effort — 8 files)
-13. **RFC-033** — Add resource limits to docker run
-14. **RFC-004** — SAIL infrastructure simplification
-15. **RFC-013** — Dockerfile cache layer optimization
-16. **RFC-016** — K3s YAML path externalization (on hold: K3s strategic direction undecided)
-17. **RFC-002** — Rust as container foundation (L effort, depends on RFC-006)
+7. **RFC-014** — Rust config and paths cleanup
+8. **RFC-019** — Rust dead code cleanup
+9. **RFC-031** — Dev-only unrestricted sudo opt-in
+10. **RFC-004** — SAIL infrastructure simplification
+11. **RFC-013** — Dockerfile cache layer optimization
+12. **RFC-016** — K3s YAML path externalization (on hold: K3s strategic direction undecided)
 
 ---
 
@@ -85,3 +82,5 @@
 | RFC-035 | Add Remaining Test Coverage for orchestrate merge* Functions | Done — `merge_test.go` now covers the remaining orchestrate merge helpers plus `safeFilename`, `writePlanManifest`, and `printOutput` |
 | RFC-022 | Workflow Versioning (GetVersion) | Done — `Pipeline`, `RFCImpl`, and `RFCTaskWorkflow` now all register inline `workflow.GetVersion` guards for replay-safe control-flow evolution |
 | RFC-015 | validate_all.sh Modernization | Done — `validate_all.sh` now warns on unknown flags and skips Go validation sections cleanly when `go` is not installed |
+| RFC-032 | Reduce --ipc=host and --net=host Exposure | Done — Zephyr now defaults to `--network=bridge`, `--ipc=shareable`, and `--shm-size=16g`, with opt-ins and legacy overrides for exceptions |
+| RFC-033 | Add Resource Limits to docker run | Done — Zephyr now supports bounded `--memory`, `--cpus`, `--memory-swap`, and `--pids-limit`, with `SAIL_RUN=1` defaulting memory to `64g` |

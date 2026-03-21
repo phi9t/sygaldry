@@ -1,54 +1,48 @@
-# RFC-031: Scope Container User sudo Privileges
+# RFC-031: Add Explicit Dev-Only Unrestricted sudo Opt-In
 
-**Status:** Proposed
-**Priority:** Medium
+**Status:** Draft — v2
+**Date:** 2026-03-21
+**Priority:** Low
 **Effort:** S
 **Area:** docker
 
 ## Problem
 
-`container/dev_container.dockerfile` grants the container user `kvothe` unrestricted passwordless sudo:
+The main security issue from the original RFC is now fixed: `container/dev_container.dockerfile:221-227`
+scopes `kvothe` to package-management commands only, using a dedicated sudoers file:
 
 ```dockerfile
-echo 'kvothe ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
+Cmnd_Alias ZEPHYR_PKG_CMDS = /usr/bin/apt, /usr/bin/apt-get, /usr/bin/dpkg, /usr/sbin/ldconfig
+kvothe ALL=(ALL) NOPASSWD: ZEPHYR_PKG_CMDS
 ```
 
-This means any process running as `kvothe` inside the container — including an LLM agent with filesystem write access — can escalate to root within the container. While the container is isolated from the host by the Docker daemon, this is still a significant blast radius: a root process in the container can modify system libraries, install packages, and (in `--net=host` or `--ipc=host` mode) affect the host.
+That removes the baked-in `NOPASSWD:ALL` blast radius. The remaining gap is developer ergonomics:
+there is still no explicit, temporary opt-in for the rare debugging session that genuinely needs
+full root inside the container.
 
 ## Evidence
 
-`container/dev_container.dockerfile` line 224:
-```dockerfile
-RUN echo 'kvothe ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
-```
+- `container/dev_container.dockerfile:221-227` limits sudo to `apt`, `apt-get`, `dpkg`, and `ldconfig`
+- No `ZEPHYR_DEV_SUDO` handling exists in `crates/zephyr/src/host/docker_args.rs` or the container entrypoint path
 
-The container also runs with `--ipc=host` and `--net=host` (see RFC-032), amplifying the risk.
+## Remaining Change
 
-## Proposed Changes
-
-1. Scope sudo to specific commands that actually require root. Based on the entrypoint scripts and Spack usage, the set is small:
-   ```
-   kvothe ALL=(ALL) NOPASSWD: /usr/bin/apt-get, /usr/bin/dpkg, /opt/spack_src/bin/spack, /usr/sbin/ldconfig
-   ```
-
-2. Add a comment in the Dockerfile explaining why each allowed command requires root.
-
-3. Run a one-time audit of all entrypoint scripts to confirm the full required-sudo command list, then lock it down.
-
-4. For development use where unrestricted sudo is needed, document the `ZEPHYR_DEV_SUDO=1` env var as an explicit opt-in that adds `NOPASSWD:ALL` during container startup (via an entrypoint check) rather than baking it into the image.
+1. Add a development-only `ZEPHYR_DEV_SUDO=1` opt-in so a caller can request unrestricted sudo
+   without baking `NOPASSWD:ALL` into the image by default.
 
 ## Files Changed
 
-- `container/dev_container.dockerfile` — replace `NOPASSWD:ALL` with scoped command list
+- `crates/zephyr/src/host/docker_args.rs` or equivalent launcher path — pass through the explicit opt-in
+- container startup path — apply the dev-only sudo override when requested
+- `CLAUDE.md` — document the escape hatch and make clear that it is for local debugging only
 
 ## Verification
 
 ```bash
-# Build the image
-docker build -f container/dev_container.dockerfile -t sygaldry/zephyr:test-sudo .
-# Verify kvothe cannot sudo arbitrary commands:
+# Default image remains least-privilege
 docker run --rm sygaldry/zephyr:test-sudo sudo id
-# Should fail with "command not in sudoers" for commands not in the allow list.
-docker run --rm sygaldry/zephyr:test-sudo sudo /usr/bin/apt-get --version
-# Should succeed.
+# Should fail.
+
+# Dev-only override restores unrestricted sudo when explicitly requested
+ZEPHYR_DEV_SUDO=1 sygaldry shell -- sudo id
 ```

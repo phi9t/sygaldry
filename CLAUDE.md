@@ -328,11 +328,22 @@ Note: Always separate `declare`/`readonly`/`local` from command substitution ass
 - `ZEPHYR_SHARED_HF_CACHE` - Shared HuggingFace cache path
 - `ZEPHYR_SHARED_UV_CACHE` - Shared UV download cache path
 - `ZEPHYR_PROJECTS_ROOT` - Per-project root (default: `<cache_root>/projects`)
+- `ZEPHYR_NET_HOST` - Set to `1` to opt back into `--network=host`; default launcher network is Docker bridge mode
+- `ZEPHYR_SHM_SIZE` - Shared-memory size passed as `--shm-size` (default: `16g`)
+- `ZEPHYR_MEMORY_LIMIT` - Optional Docker `--memory` limit; defaults to `64g` when `SAIL_RUN=1`
+- `ZEPHYR_CPU_LIMIT` - Optional Docker `--cpus` limit
+- `ZEPHYR_MEMORY_SWAP` - Optional Docker `--memory-swap` limit
+- `ZEPHYR_PIDS_LIMIT` - Docker `--pids-limit` value (default: `4096`)
 - `ZEPHYR_ROOTLESS` - Optional `0|1` / `false|true` override for rootless Docker detection to avoid probing `docker info` on every launch
 - `ZEPHYR_SNAPSHOT_REF` - Digest-pinned snapshot ref for validation scripts
 - `SYGALDRY_PROJECT_ID` - Project isolation namespace
 - `SYGALDRY_IMAGE` - Custom Docker image name (default `sygaldry/zephyr:base`)
 - `SYGALDRY_HOME` - Sygaldry repo root (auto-detected from script location)
+- `SAIL_RUN` - When set to `1`, Zephyr applies the bounded SAIL default `--memory=64g` unless `ZEPHYR_MEMORY_LIMIT` overrides it
+
+**Legacy compatibility vars (still accepted):**
+- `SYGALDRY_NET` - Explicit Docker network mode override (default is now bridge unless set)
+- `SYGALDRY_IPC` - Explicit Docker IPC mode override (default is now `shareable` unless set)
 
 **Deprecated `SYGALDRY_*` cache vars (still accepted; emit deprecation warnings):**
 Use `ZEPHYR_SHARED_*` equivalents above instead.

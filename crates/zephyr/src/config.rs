@@ -80,6 +80,11 @@ pub struct ZephyrConfig {
     pub image: String,
     pub net: String,
     pub ipc: String,
+    pub shm_size: String,
+    pub memory_limit: Option<String>,
+    pub cpu_limit: Option<String>,
+    pub memory_swap: Option<String>,
+    pub pids_limit: String,
     pub build_policy: BuildPolicy,
     pub rootless_override: Option<bool>,
     pub extra_docker_args: Vec<String>,
@@ -119,6 +124,10 @@ fn env_or(var: &str, default: &str) -> String {
     std::env::var(var).unwrap_or_else(|_| default.to_string())
 }
 
+fn env_optional(var: &str) -> Option<String> {
+    std::env::var(var).ok().filter(|val| !val.is_empty())
+}
+
 fn parse_bool_env(var: &str) -> Option<bool> {
     let val = std::env::var(var).ok()?;
     if val.is_empty() {
@@ -141,6 +150,46 @@ fn warn_legacy(old: &str, new: &str) {
     }
 }
 
+fn resolve_container_runtime() -> (
+    String,
+    String,
+    String,
+    Option<String>,
+    Option<String>,
+    Option<String>,
+    String,
+) {
+    let net = env_optional("SYGALDRY_NET").unwrap_or_else(|| {
+        if parse_bool_env("ZEPHYR_NET_HOST") == Some(true) {
+            "host".to_string()
+        } else {
+            "bridge".to_string()
+        }
+    });
+    let ipc = env_optional("SYGALDRY_IPC").unwrap_or_else(|| "shareable".to_string());
+    let shm_size = env_optional("ZEPHYR_SHM_SIZE").unwrap_or_else(|| "16g".to_string());
+    let memory_limit = env_optional("ZEPHYR_MEMORY_LIMIT").or_else(|| {
+        if parse_bool_env("SAIL_RUN") == Some(true) {
+            Some("64g".to_string())
+        } else {
+            None
+        }
+    });
+    let cpu_limit = env_optional("ZEPHYR_CPU_LIMIT");
+    let memory_swap = env_optional("ZEPHYR_MEMORY_SWAP");
+    let pids_limit = env_optional("ZEPHYR_PIDS_LIMIT").unwrap_or_else(|| "4096".to_string());
+
+    (
+        net,
+        ipc,
+        shm_size,
+        memory_limit,
+        cpu_limit,
+        memory_swap,
+        pids_limit,
+    )
+}
+
 impl ZephyrConfig {
     /// Load configuration from environment variables and CLI overrides.
     ///
@@ -155,6 +204,8 @@ impl ZephyrConfig {
         let layout = build_host_layout(&project_id);
         let launch_mode = resolve_launch_mode(cli_overrides);
         let (lease_mode, cache_profile, build_policy) = resolve_modes(cli_overrides);
+        let (net, ipc, shm_size, memory_limit, cpu_limit, memory_swap, pids_limit) =
+            resolve_container_runtime();
 
         let extra_docker_args: Vec<String> = env_or("SYGALDRY_EXTRA_DOCKER_ARGS", "")
             .split_whitespace()
@@ -167,8 +218,13 @@ impl ZephyrConfig {
             run_id,
             sygaldry_home,
             image: env_or("SYGALDRY_IMAGE", "sygaldry/zephyr:base"),
-            net: env_or("SYGALDRY_NET", "host"),
-            ipc: env_or("SYGALDRY_IPC", "host"),
+            net,
+            ipc,
+            shm_size,
+            memory_limit,
+            cpu_limit,
+            memory_swap,
+            pids_limit,
             build_policy,
             rootless_override: parse_bool_env("ZEPHYR_ROOTLESS"),
             extra_docker_args,
@@ -409,6 +465,18 @@ impl ZephyrConfig {
             "[zephyr]   Project root: {}",
             self.layout.project_root.display()
         );
+        eprintln!("[zephyr]   Network mode: {}", self.net);
+        eprintln!("[zephyr]   IPC mode: {} (shm={})", self.ipc, self.shm_size);
+        if let Some(memory_limit) = &self.memory_limit {
+            eprintln!("[zephyr]   Memory limit: {}", memory_limit);
+        }
+        if let Some(cpu_limit) = &self.cpu_limit {
+            eprintln!("[zephyr]   CPU limit: {}", cpu_limit);
+        }
+        if let Some(memory_swap) = &self.memory_swap {
+            eprintln!("[zephyr]   Memory swap: {}", memory_swap);
+        }
+        eprintln!("[zephyr]   PIDs limit: {}", self.pids_limit);
         eprintln!(
             "[zephyr]   Shared caches: hf={} uv={} bazel={}",
             self.layout.hf_cache.display(),
@@ -448,10 +516,17 @@ mod tests {
         "SYGALDRY_IMAGE",
         "SYGALDRY_NET",
         "SYGALDRY_IPC",
+        "SAIL_RUN",
         "SYGALDRY_BUILD_IMAGE",
         "SYGALDRY_EXTRA_DOCKER_ARGS",
         "SYGALDRY_REQUIRED_CUDA_VERSION",
         "SYGALDRY_REPO",
+        "ZEPHYR_NET_HOST",
+        "ZEPHYR_SHM_SIZE",
+        "ZEPHYR_MEMORY_LIMIT",
+        "ZEPHYR_CPU_LIMIT",
+        "ZEPHYR_MEMORY_SWAP",
+        "ZEPHYR_PIDS_LIMIT",
         "ZEPHYR_ROOTLESS",
         "SYGALDRY_SPACK_STORE",
         "SYGALDRY_HF_CACHE",
@@ -589,8 +664,13 @@ mod tests {
         let config = ZephyrConfig::from_env(&overrides);
 
         assert_eq!(config.image, "sygaldry/zephyr:base");
-        assert_eq!(config.net, "host");
-        assert_eq!(config.ipc, "host");
+        assert_eq!(config.net, "bridge");
+        assert_eq!(config.ipc, "shareable");
+        assert_eq!(config.shm_size, "16g");
+        assert_eq!(config.memory_limit, None);
+        assert_eq!(config.cpu_limit, None);
+        assert_eq!(config.memory_swap, None);
+        assert_eq!(config.pids_limit, "4096");
         assert_eq!(config.build_policy, BuildPolicy::Auto);
         assert_eq!(config.rootless_override, None);
         assert_eq!(config.required_cuda, "12.9");
@@ -613,6 +693,61 @@ mod tests {
         let config = ZephyrConfig::from_env(&CliOverrides::default());
         assert_eq!(config.project_id, "test-project");
         std::env::remove_var("SYGALDRY_PROJECT_ID");
+    }
+
+    #[test]
+    #[serial]
+    fn config_sail_run_applies_default_memory_limit() {
+        clear_config_env();
+        std::env::set_var("SAIL_RUN", "1");
+        let config = ZephyrConfig::from_env(&CliOverrides::default());
+        assert_eq!(config.memory_limit.as_deref(), Some("64g"));
+        std::env::remove_var("SAIL_RUN");
+    }
+
+    #[test]
+    #[serial]
+    fn config_runtime_env_overrides_are_applied() {
+        clear_config_env();
+        std::env::set_var("ZEPHYR_NET_HOST", "1");
+        std::env::set_var("ZEPHYR_SHM_SIZE", "24g");
+        std::env::set_var("ZEPHYR_MEMORY_LIMIT", "48g");
+        std::env::set_var("ZEPHYR_CPU_LIMIT", "12");
+        std::env::set_var("ZEPHYR_MEMORY_SWAP", "64g");
+        std::env::set_var("ZEPHYR_PIDS_LIMIT", "1024");
+
+        let config = ZephyrConfig::from_env(&CliOverrides::default());
+
+        assert_eq!(config.net, "host");
+        assert_eq!(config.ipc, "shareable");
+        assert_eq!(config.shm_size, "24g");
+        assert_eq!(config.memory_limit.as_deref(), Some("48g"));
+        assert_eq!(config.cpu_limit.as_deref(), Some("12"));
+        assert_eq!(config.memory_swap.as_deref(), Some("64g"));
+        assert_eq!(config.pids_limit, "1024");
+
+        std::env::remove_var("ZEPHYR_NET_HOST");
+        std::env::remove_var("ZEPHYR_SHM_SIZE");
+        std::env::remove_var("ZEPHYR_MEMORY_LIMIT");
+        std::env::remove_var("ZEPHYR_CPU_LIMIT");
+        std::env::remove_var("ZEPHYR_MEMORY_SWAP");
+        std::env::remove_var("ZEPHYR_PIDS_LIMIT");
+    }
+
+    #[test]
+    #[serial]
+    fn config_legacy_net_and_ipc_env_override_defaults() {
+        clear_config_env();
+        std::env::set_var("SYGALDRY_NET", "host");
+        std::env::set_var("SYGALDRY_IPC", "host");
+
+        let config = ZephyrConfig::from_env(&CliOverrides::default());
+
+        assert_eq!(config.net, "host");
+        assert_eq!(config.ipc, "host");
+
+        std::env::remove_var("SYGALDRY_NET");
+        std::env::remove_var("SYGALDRY_IPC");
     }
 
     #[test]
