@@ -10,6 +10,7 @@ const LEASE_TTL_SECS: u64 = 21600;
 ///
 /// This is the Rust equivalent of `main()` in `launch_container.sh`.
 pub fn launch(config: &ZephyrConfig, entrypoint_name: &str, passthrough_args: &[String]) -> Result<()> {
+    let entrypoint_name = normalize_entrypoint_name(entrypoint_name);
     eprintln!("[zephyr] Starting container launcher...");
 
     // 1. Pre-flight checks
@@ -80,6 +81,8 @@ fn resolve_entrypoint_dir(
     entrypoint_name: &str,
     config: &ZephyrConfig,
 ) -> Result<Option<String>> {
+    let entrypoint_name = normalize_entrypoint_name(entrypoint_name);
+
     // Check if entrypoints are baked via image label
     if image::read_image_label(image, "sygaldry.entrypoints.baked").as_deref() == Some("true") {
         return Ok(Some(crate::paths::container_paths::ENTRYPOINT_DIR.to_string()));
@@ -102,6 +105,10 @@ fn resolve_entrypoint_dir(
 
     // Entrypoints will be accessed via the mounted sygaldry repo
     Ok(None)
+}
+
+fn normalize_entrypoint_name(entrypoint_name: &str) -> &str {
+    entrypoint_name.strip_suffix(".sh").unwrap_or(entrypoint_name)
 }
 
 #[cfg(test)]
@@ -171,5 +178,11 @@ mod tests {
         );
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), None);
+    }
+
+    #[test]
+    fn normalize_entrypoint_name_strips_shell_suffix() {
+        assert_eq!(normalize_entrypoint_name("run-job.sh"), "run-job");
+        assert_eq!(normalize_entrypoint_name("verify-gpu"), "verify-gpu");
     }
 }

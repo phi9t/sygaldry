@@ -7,6 +7,7 @@ use std::process::Command;
 /// Each entrypoint composes init steps with its specific logic,
 /// replacing the individual bash scripts in container/entrypoints/.
 pub fn run(name: &str, args: &[String]) -> Result<()> {
+    let name = normalize_entrypoint_name(name);
     match name {
         "default" => entrypoint_default(args),
         "run-job" => entrypoint_run_job(args),
@@ -19,6 +20,10 @@ pub fn run(name: &str, args: &[String]) -> Result<()> {
         "hf-download" => entrypoint_hf_download(args),
         _ => Err(ZephyrError::EntrypointNotFound(name.to_string())),
     }
+}
+
+fn normalize_entrypoint_name(name: &str) -> &str {
+    name.strip_suffix(".sh").unwrap_or(name)
 }
 
 /// Default entrypoint: full init + GPU check + interactive shell.
@@ -506,6 +511,12 @@ mod tests {
         assert!(result.is_err());
         let err_msg = format!("{}", result.unwrap_err());
         assert!(err_msg.contains("nonexistent-entrypoint"));
+    }
+
+    #[test]
+    fn normalize_entrypoint_name_accepts_shell_suffix() {
+        assert_eq!(normalize_entrypoint_name("run-job.sh"), "run-job");
+        assert_eq!(normalize_entrypoint_name("hf-download"), "hf-download");
     }
 
     // -- entrypoint_hf_download validation --
