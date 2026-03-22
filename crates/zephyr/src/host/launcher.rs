@@ -6,6 +6,22 @@ use std::time::Duration;
 /// Default lease TTL (6 hours).
 const LEASE_TTL_SECS: u64 = 21600;
 
+/// Returns true when the in-container `zephyr` binary should be used as the
+/// Docker entrypoint instead of a bash script.
+///
+/// Activated by either:
+/// - `ZEPHYR_USE_RUST_ENTRYPOINTS=1` environment variable, or
+/// - the image carrying a `sygaldry.zephyr.version` or
+///   `sygaldry.entrypoints.baked=true` label.
+pub(crate) fn image_has_rust_entrypoints(image_name: &str) -> bool {
+    if std::env::var("ZEPHYR_USE_RUST_ENTRYPOINTS").as_deref() == Ok("1") {
+        return true;
+    }
+    image::read_image_label(image_name, "sygaldry.zephyr.version").is_some()
+        || image::read_image_label(image_name, "sygaldry.entrypoints.baked").as_deref()
+            == Some("true")
+}
+
 /// Orchestrate a full container launch.
 ///
 /// This is the Rust equivalent of `main()` in `launch_container.sh`.
@@ -30,8 +46,8 @@ pub fn launch(config: &ZephyrConfig, entrypoint_name: &str, passthrough_args: &[
         .as_deref()
         == Some("true");
 
-    // 6. Resolve entrypoint container directory
-    let entrypoint_container_dir = resolve_entrypoint_dir(&config.image, spack_baked, entrypoint_name, config)?;
+    // 6. Detect dispatch mode: Rust-native entrypoints vs legacy bash
+    let use_rust_ep = image_has_rust_entrypoints(&config.image);
 
     // 7. Acquire lease
     let _lease_guard = lease::acquire(
@@ -43,27 +59,37 @@ pub fn launch(config: &ZephyrConfig, entrypoint_name: &str, passthrough_args: &[
         &config.run_id,
     )?;
 
-    // 8. Build docker args
-    let docker_args = docker_args::build(
-        config,
-        entrypoint_name,
-        spack_baked,
-        entrypoint_container_dir.as_deref(),
-    )?;
+    // 8. Build docker args and compose final command
+    let mut cmd_args = if use_rust_ep {
+        eprintln!("[zephyr] docker run --entrypoint zephyr (rust-native entrypoints)");
+        let mut args = docker_args::build_rust_mode(config, spack_baked)?;
+        args.push(config.image.clone());
+        args.push("entrypoint".into());
+        args.push(entrypoint_name.to_string());
+        args
+    } else {
+        // Legacy bash path: resolve and validate the entrypoint script
+        let entrypoint_container_dir =
+            resolve_entrypoint_dir(&config.image, spack_baked, entrypoint_name, config)?;
+        eprintln!("[zephyr] docker run (entrypoint={entrypoint_name})");
+        let mut args = docker_args::build(
+            config,
+            entrypoint_name,
+            spack_baked,
+            entrypoint_container_dir.as_deref(),
+        )?;
+        args.push(config.image.clone());
+        args
+    };
 
-    // 9. Execute docker run
-    let mut cmd_args = docker_args;
-    cmd_args.push(config.image.clone());
     cmd_args.extend(passthrough_args.iter().cloned());
-
-    eprintln!("[zephyr] docker run (entrypoint={entrypoint_name})");
 
     let status = std::process::Command::new("docker")
         .arg("run")
         .args(&cmd_args)
         .status()?;
 
-    // 10. Lease is released via Drop of _lease_guard
+    // 9. Lease is released via Drop of _lease_guard
 
     if !status.success() {
         std::process::exit(status.code().unwrap_or(1));
@@ -114,6 +140,22 @@ fn normalize_entrypoint_name(entrypoint_name: &str) -> &str {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn image_has_rust_entrypoints_respects_env_var() {
+        std::env::set_var("ZEPHYR_USE_RUST_ENTRYPOINTS", "1");
+        assert!(image_has_rust_entrypoints("any-image"));
+        std::env::remove_var("ZEPHYR_USE_RUST_ENTRYPOINTS");
+    }
+
+    #[test]
+    fn image_has_rust_entrypoints_false_without_env_or_label() {
+        std::env::remove_var("ZEPHYR_USE_RUST_ENTRYPOINTS");
+        // Nonexistent image → read_image_label returns None for both labels → false
+        assert!(!image_has_rust_entrypoints(
+            "sygaldry/zephyr:definitely-not-real-for-rust-ep-test"
+        ));
+    }
 
     #[test]
     fn lease_ttl_secs_is_six_hours() {

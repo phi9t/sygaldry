@@ -355,6 +355,76 @@ pub fn build(
     Ok(args)
 }
 
+/// Build docker args for Rust-native entrypoint dispatch.
+///
+/// Identical to [`build`] but uses `--entrypoint zephyr` instead of a bash
+/// script path.  The caller is responsible for appending the image name,
+/// `"entrypoint"`, the entrypoint name, and any passthrough args.
+pub fn build_rust_mode(
+    config: &ZephyrConfig,
+    spack_baked: bool,
+) -> crate::error::Result<Vec<String>> {
+    let mut args: Vec<String> = Vec::with_capacity(64);
+
+    // Basic flags
+    args.extend(["--rm".into(), "--init".into()]);
+
+    // Interactive if stdin is a TTY
+    if atty_stdin() {
+        args.extend(["--interactive".into(), "--tty".into()]);
+    }
+
+    // Network and IPC
+    args.push(format!("--network={}", config.net));
+    args.push(format!("--ipc={}", config.ipc));
+    args.push(format!("--shm-size={}", config.shm_size));
+    if let Some(memory_limit) = &config.memory_limit {
+        args.push(format!("--memory={memory_limit}"));
+    }
+    if let Some(cpu_limit) = &config.cpu_limit {
+        args.push(format!("--cpus={cpu_limit}"));
+    }
+    if let Some(memory_swap) = &config.memory_swap {
+        args.push(format!("--memory-swap={memory_swap}"));
+    }
+    args.push(format!("--pids-limit={}", config.pids_limit));
+
+    // User mapping
+    let user_spec = if dev_sudo_enabled() {
+        "0:0".to_string()
+    } else {
+        detect_user_spec(config.rootless_override)
+    };
+    args.push(format!("--user={user_spec}"));
+
+    // Host identity mount (optional)
+    if std::env::var("SYGALDRY_MOUNT_HOST_IDENTITY").as_deref() == Ok("1") {
+        args.push("--volume=/etc/passwd:/etc/passwd:ro".into());
+        args.push("--volume=/etc/group:/etc/group:ro".into());
+    }
+
+    // Volume mounts (per-project + shared caches)
+    build_volume_mounts(&mut args, config, spack_baked)?;
+
+    // Mode-specific mounts and workdir (no entrypoint_container_dir needed in rust mode)
+    let sygaldry_root_in_container = build_mode_mounts(&mut args, config, Some("rust-mode"))?;
+
+    // Rust-native entrypoint: override with the in-container `zephyr` binary
+    args.push("--entrypoint".into());
+    args.push("zephyr".into());
+
+    // GPU flags
+    args.extend(["--runtime=nvidia".into(), "--gpus=all".into()]);
+
+    // Environment variables
+    args.extend(build_env_args(config, &sygaldry_root_in_container));
+
+    // Extra docker args from env
+    args.extend(config.extra_docker_args.iter().cloned());
+
+    Ok(args)
+}
+
 /// Detect user spec for --user flag.
 fn detect_user_spec(rootless_override: Option<bool>) -> String {
     // SAFETY: getuid(2) and getgid(2) have no preconditions, dereference no
@@ -804,5 +874,65 @@ mod tests {
                 .any(|a| a.contains(container_paths::HOME) && a.starts_with("--volume=")),
             "should mount HOME"
         );
+    }
+
+    // -- build_rust_mode tests --
+
+    #[test]
+    fn rust_mode_args_contain_entrypoint_zephyr() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut config = test_config_in(tmp.path());
+        config.layout.ensure_dirs().unwrap();
+        config.sygaldry_home = tmp.path().join("sygaldry");
+        std::fs::create_dir_all(&config.sygaldry_home).unwrap();
+
+        std::env::remove_var("SYGALDRY_MOUNT_HOST_IDENTITY");
+        let args = build_rust_mode(&config, false).unwrap();
+
+        // Must contain --entrypoint followed by zephyr as separate args
+        let ep_idx = args.iter().position(|a| a == "--entrypoint");
+        assert!(ep_idx.is_some(), "missing --entrypoint flag");
+        let ep_idx = ep_idx.unwrap();
+        assert_eq!(
+            args.get(ep_idx + 1).map(String::as_str),
+            Some("zephyr"),
+            "--entrypoint must be followed by 'zephyr'"
+        );
+    }
+
+    #[test]
+    fn rust_mode_args_do_not_contain_bash_entrypoint_path() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut config = test_config_in(tmp.path());
+        config.layout.ensure_dirs().unwrap();
+        config.sygaldry_home = tmp.path().join("sygaldry");
+        std::fs::create_dir_all(&config.sygaldry_home).unwrap();
+
+        std::env::remove_var("SYGALDRY_MOUNT_HOST_IDENTITY");
+        let args = build_rust_mode(&config, false).unwrap();
+
+        // No --entrypoint=<path> style arg (bash mode uses --entrypoint=/path/to/script.sh)
+        assert!(
+            !args.iter().any(|a| a.starts_with("--entrypoint=/")),
+            "rust mode must not contain a bash entrypoint path"
+        );
+    }
+
+    #[test]
+    fn rust_mode_args_contain_basic_flags() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut config = test_config_in(tmp.path());
+        config.layout.ensure_dirs().unwrap();
+        config.sygaldry_home = tmp.path().join("sygaldry");
+        std::fs::create_dir_all(&config.sygaldry_home).unwrap();
+
+        std::env::remove_var("SYGALDRY_MOUNT_HOST_IDENTITY");
+        let args = build_rust_mode(&config, false).unwrap();
+
+        assert!(args.contains(&"--rm".to_string()));
+        assert!(args.contains(&"--init".to_string()));
+        assert!(args.contains(&"--runtime=nvidia".to_string()));
+        assert!(args.contains(&"--gpus=all".to_string()));
+        assert!(args.contains(&"--network=bridge".to_string()));
     }
 }
