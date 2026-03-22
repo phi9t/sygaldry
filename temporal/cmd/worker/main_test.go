@@ -131,6 +131,11 @@ func TestResolveConfigPartialOverride(t *testing.T) {
 }
 
 func TestResolveConfigFromFile(t *testing.T) {
+	// Clear env vars that would override file values.
+	for _, key := range []string{"TEMPORAL_ADDRESS", "TEMPORAL_NAMESPACE", "TEMPORAL_TASK_QUEUE", "TEMPORAL_MAX_CONCURRENT_ACTIVITIES", "TEMPORAL_HEALTH_PORT"} {
+		t.Setenv(key, "")
+	}
+
 	configPath := filepath.Join(t.TempDir(), "worker.yaml")
 	if err := os.WriteFile(configPath, []byte(
 		"address: temporal.prod:7233\nnamespace: workers\ntask_queue: gpu\nmax_concurrent_activities: 5\nhealth_port: 7070\n",
