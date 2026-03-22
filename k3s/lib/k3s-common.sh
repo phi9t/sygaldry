@@ -27,8 +27,8 @@ die() {
 K3S_NAMESPACE="${K3S_NAMESPACE:-sygaldry}"
 readonly K3S_NAMESPACE
 
+# shellcheck disable=SC2034  # used in kentai (sourced file)
 readonly CONTAINER_IMAGE_DEFAULT="sygaldry/zephyr:base"
-readonly CONTAINER_USER="kvothe"
 
 # ---------------------------------------------------------------------------
 # Checks

@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -760,4 +761,61 @@ func TestStructuredLogContent(t *testing.T) {
 	if stderrCount < 1 {
 		t.Errorf("expected at least 1 stderr line, got %d", stderrCount)
 	}
+}
+
+func TestPythonModuleAvailable(t *testing.T) {
+	if _, err := exec.LookPath("python3"); err != nil {
+		t.Skip("python3 not available")
+	}
+	if !pythonModuleAvailable("sys") {
+		t.Error("expected stdlib module 'sys' to be available")
+	}
+	if pythonModuleAvailable("this_module_does_not_exist_xyz_12345") {
+		t.Error("expected bogus module to be unavailable")
+	}
+}
+
+func TestResolvePythonStepCommand_AllModulesPresent(t *testing.T) {
+	if _, err := exec.LookPath("python3"); err != nil {
+		t.Skip("python3 not available")
+	}
+	cmd, args := resolvePythonStepCommand([]string{"sys", "os"}, []string{"requests"})
+	if cmd != "python3" {
+		t.Errorf("expected python3 when all modules present, got %q", cmd)
+	}
+	if len(args) != 0 {
+		t.Errorf("expected no extra args when all modules present, got %v", args)
+	}
+}
+
+func TestResolvePythonStepCommand_MissingModule(t *testing.T) {
+	if _, err := exec.LookPath("python3"); err != nil {
+		t.Skip("python3 not available")
+	}
+	cmd, args := resolvePythonStepCommand(
+		[]string{"this_module_does_not_exist_xyz_12345"},
+		[]string{"some-package"},
+	)
+	// When a module is missing: prefer uv if available, else fall back to python3
+	if _, uvErr := exec.LookPath("uv"); uvErr == nil {
+		if cmd != "uv" {
+			t.Errorf("expected uv when module missing and uv available, got %q", cmd)
+		}
+		if len(args) == 0 || args[0] != "run" {
+			t.Errorf("expected uv run args, got %v", args)
+		}
+	} else {
+		if cmd != "python3" {
+			t.Errorf("expected python3 fallback when uv unavailable, got %q", cmd)
+		}
+	}
+}
+
+func TestResolveContainerLauncher_WrapperCallable(t *testing.T) {
+	// resolveContainerLauncher() is a thin wrapper around resolveContainerLauncherWith;
+	// just verify it doesn't panic and returns a consistent error or result.
+	t.Setenv("SYGALDRY_HOME", t.TempDir()) // non-existent binaries → PATH fallback
+	_, err := resolveContainerLauncher()
+	// May succeed (if zephyr or launch_container.sh is on PATH) or fail — either is valid.
+	_ = err
 }

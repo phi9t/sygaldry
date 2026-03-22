@@ -26,6 +26,7 @@ readonly SCRIPT_DIR
 DEFAULT_REPO_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 readonly DEFAULT_REPO_DIR
 CONFIG="${SCRIPT_DIR}/config.yaml"
+# shellcheck disable=SC2034  # read by sail_config.sh (sourced below)
 readonly CONFIG
 # shellcheck source=tools/agentic/lib/sail_config.sh
 source "${SCRIPT_DIR}/lib/sail_config.sh"
@@ -611,7 +612,7 @@ _run_issue() {
         return 0
     fi
 
-    local attempt=0 success=false pr_url="" landed_branch="" patch_file="" temporal_run_id="" final_workflow_id=""
+    local attempt=0 success=false pr_url="" patch_file="" temporal_run_id="" final_workflow_id=""
     while [[ ${attempt} -le ${MAX_RETRIES} ]]; do
         local attempt_number=$((attempt + 1))
         local attempt_started_at
@@ -692,7 +693,6 @@ _run_issue() {
         parsed_workflow_id="$(echo "${run_result}" | sed -n '1p')"
         parsed_run_id="$(echo "${run_result}" | sed -n '2p')"
         pr_url="$(echo "${run_result}" | sed -n '3p')"
-        landed_branch="$(echo "${run_result}" | sed -n '4p')"
         patch_file="$(echo "${run_result}" | sed -n '5p')"
         workflow_disposition="$(echo "${run_result}" | sed -n '6p')"
         final_workflow_id="${parsed_workflow_id}"

@@ -80,6 +80,7 @@ snapshot_verify() {
 # parse_snapshot_args [args...]
 # Sets globals: DRY_RUN, DO_PUSH, REGISTRY, TARGETS
 # Returns remaining args in PASSTHROUGH_ARGS.
+# shellcheck disable=SC2034  # globals DRY_RUN, DO_PUSH, REGISTRY read by callers
 parse_snapshot_args() {
     DRY_RUN=false
     DO_PUSH=false

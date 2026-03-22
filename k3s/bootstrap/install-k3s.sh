@@ -10,9 +10,6 @@
 
 set -eu -o pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-readonly SCRIPT_DIR
-
 log() {
     echo "[$(date +'%Y-%m-%d %H:%M:%S')] [install-k3s:${BASH_LINENO[0]}] $*" >&2
 }

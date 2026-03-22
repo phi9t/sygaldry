@@ -18,4 +18,5 @@
 readonly ZEPHYR_DEFAULT_SNAPSHOT_REF="ghcr.io/phi9t/sygaldry/zephyr:spack@sha256:8c9507aea53995f29a5712c0cbdb99deb3d571fb9631b3d42352b3d6d6fb668c"
 
 # Respect env var override; fall back to pinned default.
+# shellcheck disable=SC2034  # read by scripts that source this file
 SNAPSHOT_REF="${ZEPHYR_SNAPSHOT_REF:-${ZEPHYR_DEFAULT_SNAPSHOT_REF}}"

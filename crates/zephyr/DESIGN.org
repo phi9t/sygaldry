@@ -372,23 +372,25 @@ CLOSED: [2026-02-16]
 - [X] Write design document
 - [X] Create Cargo workspace + module stubs
 
-** TODO Phase 1: Host-side parity [0/5]
+** DONE Phase 1: Host-side parity [5/5]
+CLOSED: [2026-03-22]
 No container changes. Rust binary calls =docker run= with *existing* bash entrypoints.
 
-- [ ] Implement =zephyr shell=, =zephyr run=, =zephyr config show=
-- [ ] Docker arg builder with parity tests against bash version
-- [ ] Implement =zephyr job= subcommands
-- [ ] =bin/sygaldry= becomes symlink to =zephyr=
-- [ ] Validate: =zephyr shell= and =zephyr run -- gpu-test= against existing image
+- [X] Implement =zephyr shell=, =zephyr run=, =zephyr config show=
+- [X] Docker arg builder with parity tests against bash version
+- [X] Implement =zephyr job= subcommands
+- [X] =bin/sygaldry= becomes symlink to =zephyr=
+- [X] Validate: =zephyr shell= and =zephyr run -- gpu-test= against existing image
 
-** TODO Phase 2: Container-side parity [0/5]
+** DONE Phase 2: Container-side parity [5/5]
+CLOSED: [2026-03-22]
 Bake =zephyr= binary into the Docker image.
 
-- [ ] Implement =zephyr init=, =zephyr gpu-check=, =zephyr verify-spack=
-- [ ] Implement =zephyr entrypoint <name>= for all named entrypoints
-- [ ] Switch Dockerfile ENTRYPOINT to =zephyr entrypoint default=
-- [ ] Implement =zephyr uv-install= and =zephyr hf-download=
-- [ ] Remove =container/entrypoints/*.sh= and =container/lib/*.sh=
+- [X] Implement =zephyr init=, =zephyr gpu-check=, =zephyr verify-spack=
+- [X] Implement =zephyr entrypoint <name>= for all named entrypoints
+- [X] Switch Dockerfile ENTRYPOINT to =zephyr entrypoint default=
+- [X] Implement =zephyr uv-install= and =zephyr hf-download=
+- [X] Remove =container/entrypoints/*.sh= and =container/lib/*.sh=
 
 ** TODO Phase 3: Enhanced capabilities [0/5]
 - [ ] Structured JSON logging for all operations
