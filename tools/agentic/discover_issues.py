@@ -186,6 +186,7 @@ def discover_todos(repo_dir: Path, max_per_type: int) -> list[Issue]:
                 "--",
                 ".",
                 ":(exclude)tools/agentic/discover_issues.py",
+                ":(exclude)crates/zephyr/DESIGN.org",
             ],
             cwd=repo_dir,
             capture_output=True,
