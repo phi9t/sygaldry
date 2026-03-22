@@ -1,31 +1,13 @@
 # RFC Index
 
 **Last updated:** 2026-03-22
-**Total RFCs:** 2 (44 created, 42 closed as complete or N/A)
+**Total RFCs:** 0 open (44 created, 44 closed as complete or N/A)
 
 ---
 
 ## All RFCs
 
-| # | Title | Status | Priority | Effort | Area |
-|---|-------|--------|----------|--------|------|
-| RFC-013 | Dockerfile Cache Layer Optimization | Proposed | Low | M | docker |
-| RFC-016 | K3s YAML Path Externalization | Proposed (on hold) | Low | M | k3s |
-
----
-
-## Suggested Implementation Order
-
-### Immediate (XS, zero-risk)
-
-### High priority (correctness / migration)
-
-### Medium priority (production readiness)
-
-### Lower priority
-
-4. **RFC-013** — Dockerfile cache layer optimization
-6. **RFC-016** — K3s YAML path externalization (on hold: K3s strategic direction undecided)
+All 44 RFCs are closed. See Closed RFCs below.
 
 ---
 
@@ -72,3 +54,5 @@
 | RFC-006 | Rust Entrypoint Consolidation | Done — `build_rust_mode()` in `docker_args.rs` emits `--entrypoint zephyr`; `launch()` in `launcher.rs` uses it when `ZEPHYR_USE_RUST_ENTRYPOINTS=1` or image carries `sygaldry.zephyr.version` label; Dockerfile now sets both labels |
 | RFC-002 | Rust as Container Infrastructure Foundation | Done — `tools/zephyr_job` deleted; `container/entrypoints/` (9 bash scripts) deleted; `bin/sygaldry` slimmed 256→149 lines; bash `job)` fallback replaced with clear error; all 9 entrypoints verified covered by `entrypoint.rs` |
 | RFC-012 | Orchestrate Command Decomposition | Done — `internal/plan/` package created with `loader.go` (115L), `validator.go` (211L), `merger.go` (347L) and matching test files; `cmd/orchestrate/main.go` reduced 1003→372 lines; all tests pass |
+| RFC-013 | Dockerfile Cache Layer Optimization | Done — merged apt cleanup+install layers; pinned Spack to `ARG SPACK_SHA`; fixed build-breaking bug (removed deleted `container/entrypoints/` COPY); updated `ENTRYPOINT` to `["zephyr", "entrypoint", "default"]`; added `GIT_COMMIT`/`BUILD_DATE` labels |
+| RFC-016 | K3s YAML Path Externalization | Done — `k3s/lib/paths.env` defines all path defaults; `k3s-common.sh` sources and exports them; all 3 YAML templates use `${ZEPHYR_*}` variables with zero hardcoded `/mnt/data_infra` paths; `kentai` now requires explicit `--project-id` |

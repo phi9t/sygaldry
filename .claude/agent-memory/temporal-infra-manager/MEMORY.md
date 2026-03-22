@@ -50,6 +50,15 @@ Added to `git_ops.sh` and `git_op.go`: `worktree-add`, `worktree-commit`, `workt
 - AgentEngineGemini (`gemini -p "<prompt>" --yolo [--model <model>]`)
 - AgentEngineOpenCode (`opencode run "<prompt>" [--model <model>]`)
 
+## Plan Package (RFC-012)
+`temporal/internal/plan/` extracted from `cmd/orchestrate/main.go` (1003 lines → 372 lines).
+- `loader.go` — `Load(planPath) (PipelineInput, error)`, template import resolution
+- `validator.go` — `Validate(*PipelineInput) error`, `AllowedTypes() map[string]bool`, cycle detection
+- `merger.go` — `MergeStep(base, override PipelineStep) PipelineStep`, 13 unexported merge helpers
+- `cmd/orchestrate/main.go` imports `temporal-orchestration/internal/plan` and calls `plan.Load`, `plan.Validate`, `plan.MergeStep`
+- Watch out for hidden `merge_test.go` in `cmd/orchestrate/` — it calls unexported merge funcs; must be updated when functions move.
+
 ## Test Count
-After RFC impl: 6 packages pass (activities, workflows, orchestrate, worker, run, rfc cmd).
+After RFC-012: 6 packages pass (activities, workflows, orchestrate, plan, worker, rfc cmd).
 `go test ./...` from `temporal/` is the canonical verification command.
+Note: `cmd/run` no longer appears as separate — it has no test files.
