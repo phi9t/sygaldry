@@ -1,6 +1,8 @@
 # K8s Job template for batch execution.
 # Variables (envsubst): PROJECT_ID, JOB_NAME, HOST_UID, HOST_GID,
-#                       CONTAINER_IMAGE, GPU_COUNT, JOB_COMMAND
+#                       CONTAINER_IMAGE, GPU_COUNT, JOB_COMMAND,
+#                       ZEPHYR_PROJECTS_ROOT, ZEPHYR_SHARED_ROOT, ZEPHYR_BUILD_ROOT,
+#                       SYGALDRY_HOME
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -114,63 +116,63 @@ spec:
         # Per-project
         - name: home
           hostPath:
-            path: /mnt/data_infra/zephyr_container_infra/projects/${PROJECT_ID}/home
+            path: ${ZEPHYR_PROJECTS_ROOT}/${PROJECT_ID}/home
             type: DirectoryOrCreate
         - name: config
           hostPath:
-            path: /mnt/data_infra/zephyr_container_infra/projects/${PROJECT_ID}/config
+            path: ${ZEPHYR_PROJECTS_ROOT}/${PROJECT_ID}/config
             type: DirectoryOrCreate
         - name: local-share
           hostPath:
-            path: /mnt/data_infra/zephyr_container_infra/projects/${PROJECT_ID}/local_share
+            path: ${ZEPHYR_PROJECTS_ROOT}/${PROJECT_ID}/local_share
             type: DirectoryOrCreate
         - name: outputs
           hostPath:
-            path: /mnt/data_infra/zephyr_container_infra/projects/${PROJECT_ID}/outputs
+            path: ${ZEPHYR_PROJECTS_ROOT}/${PROJECT_ID}/outputs
             type: DirectoryOrCreate
         - name: workspace
           hostPath:
-            path: /mnt/data_infra/zephyr_container_infra/projects/${PROJECT_ID}/workspace
+            path: ${ZEPHYR_PROJECTS_ROOT}/${PROJECT_ID}/workspace
             type: DirectoryOrCreate
 
         # Shared caches
         - name: hf-cache
           hostPath:
-            path: /mnt/data_infra/zephyr_container_infra/shared/hf_cache
+            path: ${ZEPHYR_SHARED_ROOT}/hf_cache
             type: DirectoryOrCreate
         - name: uv-cache
           hostPath:
-            path: /mnt/data_infra/zephyr_container_infra/shared/uv_cache
+            path: ${ZEPHYR_SHARED_ROOT}/uv_cache
             type: DirectoryOrCreate
         - name: bazel-cache
           hostPath:
-            path: /mnt/data_infra/zephyr_container_infra/shared/bazel_cache
+            path: ${ZEPHYR_SHARED_ROOT}/bazel_cache
             type: DirectoryOrCreate
         - name: torch-cache
           hostPath:
-            path: /mnt/data_infra/zephyr_container_infra/shared/torch_cache
+            path: ${ZEPHYR_SHARED_ROOT}/torch_cache
             type: DirectoryOrCreate
         - name: triton-cache
           hostPath:
-            path: /mnt/data_infra/zephyr_container_infra/shared/triton_cache
+            path: ${ZEPHYR_SHARED_ROOT}/triton_cache
             type: DirectoryOrCreate
         - name: nv-compute-cache
           hostPath:
-            path: /mnt/data_infra/zephyr_container_infra/shared/nv_compute_cache
+            path: ${ZEPHYR_SHARED_ROOT}/nv_compute_cache
             type: DirectoryOrCreate
         - name: jax-cache
           hostPath:
-            path: /mnt/data_infra/zephyr_container_infra/shared/jax_cache
+            path: ${ZEPHYR_SHARED_ROOT}/jax_cache
             type: DirectoryOrCreate
 
         # Spack store
         - name: spack-store
           hostPath:
-            path: /mnt/data_infra/zephyr_container_infra/sygaldry/spack_store
+            path: ${ZEPHYR_BUILD_ROOT}/spack_store
             type: Directory
 
         # Sygaldry repo
         - name: sygaldry-repo
           hostPath:
-            path: /mnt/data_infra/workspace/sygaldry
+            path: ${SYGALDRY_HOME}
             type: Directory

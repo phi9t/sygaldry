@@ -15,6 +15,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly SCRIPT_DIR
 readonly K3S_ROOT="${SCRIPT_DIR}/.."
 
+# shellcheck source=../lib/paths.env
+source "${SCRIPT_DIR}/../lib/paths.env"
+
 log() {
     echo "[$(date +'%Y-%m-%d %H:%M:%S')] [setup-nvidia:${BASH_LINENO[0]}] $*" >&2
 }
@@ -71,8 +74,18 @@ kubectl apply -f "${K3S_ROOT}/manifests/nvidia-runtime-class.yaml"
 # 4. Deploy NVIDIA device plugin
 # ------------------------------------------------------------------
 DEVICE_PLUGIN_URL="https://raw.githubusercontent.com/NVIDIA/k8s-device-plugin/v0.17.0/deployments/static/nvidia-device-plugin.yml"
+DEVICE_PLUGIN_SHA256="PLACEHOLDER_SHA256_REPLACE_WITH_ACTUAL"
+
 log "Deploying NVIDIA k8s-device-plugin v0.17.0..."
-kubectl apply -f "${DEVICE_PLUGIN_URL}"
+tmp_manifest="$(mktemp)"
+trap 'rm -f "${tmp_manifest}"' EXIT
+curl -fsSL "${DEVICE_PLUGIN_URL}" -o "${tmp_manifest}"
+if [[ "${DEVICE_PLUGIN_SHA256}" != "PLACEHOLDER_SHA256_REPLACE_WITH_ACTUAL" ]]; then
+    echo "${DEVICE_PLUGIN_SHA256}  ${tmp_manifest}" | sha256sum -c - || {
+        echo "ERROR: device plugin manifest SHA256 mismatch" >&2; exit 1
+    }
+fi
+kubectl apply -f "${tmp_manifest}"
 
 # ------------------------------------------------------------------
 # 5. Apply environment ConfigMap

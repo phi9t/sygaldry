@@ -4,15 +4,14 @@
 #
 # USAGE
 # -----
-#   kentai                              # Create or attach to dev pod
-#   kentai --project-id my-proj         # Specific project
-#   kentai --repo /path/to/repo         # Multi-repo mode
-#   kentai --gpu 2                      # Request 2 GPUs
-#   kentai --image <image>              # Custom container image
-#   kentai exec -- nvidia-smi           # One-off command in existing pod
-#   kentai delete                       # Delete dev pod
-#   kentai status                       # Pod status
-#   kentai logs                         # Stream pod logs
+#   kentai --project-id my-proj         # Create or attach to dev pod (--project-id required)
+#   kentai --project-id my-proj --repo /path/to/repo  # Multi-repo mode
+#   kentai --project-id my-proj --gpu 2               # Request 2 GPUs
+#   kentai --project-id my-proj --image <image>        # Custom container image
+#   kentai --project-id my-proj exec -- nvidia-smi     # One-off command in existing pod
+#   kentai delete --project-id my-proj                 # Delete dev pod
+#   kentai status --project-id my-proj                 # Pod status
+#   kentai logs --project-id my-proj                   # Stream pod logs
 
 set -eu -o pipefail
 
@@ -26,7 +25,7 @@ source "${K3S_ROOT}/lib/k3s-common.sh"
 # ---------------------------------------------------------------------------
 # Defaults
 # ---------------------------------------------------------------------------
-PROJECT_ID="${SYGALDRY_PROJECT_ID:-$(basename "${PWD}")}"
+PROJECT_ID="${SYGALDRY_PROJECT_ID:-}"
 GPU_COUNT="${SYGALDRY_GPU_COUNT:-1}"
 CONTAINER_IMAGE="${SYGALDRY_IMAGE:-${CONTAINER_IMAGE_DEFAULT}}"
 REPO_PATH=""
@@ -48,17 +47,16 @@ Subcommands:
   logs              Stream pod logs
 
 Options:
-  --project-id <id>   Project ID (default: current directory name)
+  --project-id <id>   Project ID [REQUIRED] (or set SYGALDRY_PROJECT_ID)
   --repo <path>       External repo path (enables multi-repo mode)
   --gpu <n>           Number of GPUs to request (default: 1)
   --image <image>     Container image (default: sygaldry/zephyr:base)
   --help              Show this help
 
 Examples:
-  kentai                              # Interactive dev pod
-  kentai --project-id ml-train        # Named project
-  kentai --repo /path/to/repo         # Mount external repo
-  kentai exec -- nvidia-smi           # Run command in pod
+  kentai --project-id ml-train        # Interactive dev pod
+  kentai --project-id ml-train --repo /path/to/repo  # Mount external repo
+  kentai --project-id ml-train exec -- nvidia-smi     # Run command in pod
   kentai delete --project-id ml-train # Delete pod
 EOF
 }
@@ -263,6 +261,11 @@ attach_tmux() {
 # Main
 # ---------------------------------------------------------------------------
 parse_args "$@"
+
+if [[ -z "${PROJECT_ID}" ]]; then
+    echo "ERROR: --project-id is required (or set SYGALDRY_PROJECT_ID)" >&2
+    exit 1
+fi
 
 case "${SUBCOMMAND}" in
     enter)  cmd_enter ;;

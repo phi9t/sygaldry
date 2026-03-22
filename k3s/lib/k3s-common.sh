@@ -3,6 +3,12 @@
 
 set -eu -o pipefail
 
+# Source canonical path defaults
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib/paths.env
+source "${SCRIPT_DIR}/paths.env"
+export ZEPHYR_CACHE_ROOT ZEPHYR_SHARED_ROOT ZEPHYR_PROJECTS_ROOT ZEPHYR_BUILD_ROOT SYGALDRY_HOME
+
 # ---------------------------------------------------------------------------
 # Logging
 # ---------------------------------------------------------------------------
@@ -20,10 +26,6 @@ die() {
 # ---------------------------------------------------------------------------
 K3S_NAMESPACE="${K3S_NAMESPACE:-sygaldry}"
 readonly K3S_NAMESPACE
-readonly ZEPHYR_CACHE_ROOT="${ZEPHYR_CACHE_ROOT:-/mnt/data_infra/zephyr_container_infra}"
-readonly ZEPHYR_SHARED_ROOT="${ZEPHYR_SHARED_ROOT:-${ZEPHYR_CACHE_ROOT}/shared}"
-readonly ZEPHYR_PROJECTS_ROOT="${ZEPHYR_PROJECTS_ROOT:-${ZEPHYR_CACHE_ROOT}/projects}"
-readonly ZEPHYR_BUILD_ROOT="${ZEPHYR_BUILD_ROOT:-${ZEPHYR_CACHE_ROOT}/sygaldry}"
 
 readonly CONTAINER_IMAGE_DEFAULT="sygaldry/zephyr:base"
 readonly CONTAINER_USER="kvothe"
