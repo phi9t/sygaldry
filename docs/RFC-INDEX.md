@@ -1,7 +1,7 @@
 # RFC Index
 
 **Last updated:** 2026-03-22
-**Total RFCs:** 4 (44 created, 40 closed as complete or N/A)
+**Total RFCs:** 3 (44 created, 41 closed as complete or N/A)
 
 ---
 
@@ -9,7 +9,6 @@
 
 | # | Title | Status | Priority | Effort | Area |
 |---|-------|--------|----------|--------|------|
-| RFC-002 | Rust as Container Infrastructure Foundation | Draft v3 | High | L | rust-core |
 | RFC-012 | Orchestrate Command Decomposition | Proposed | Medium | L | temporal |
 | RFC-013 | Dockerfile Cache Layer Optimization | Proposed | Low | M | docker |
 | RFC-016 | K3s YAML Path Externalization | Proposed (on hold) | Low | M | k3s |
@@ -21,8 +20,6 @@
 ### Immediate (XS, zero-risk)
 
 ### High priority (correctness / migration)
-
-1. **RFC-002** — Rust as container foundation
 
 ### Medium priority (production readiness)
 
@@ -76,3 +73,4 @@
 | RFC-031 | Add Explicit Dev-Only Unrestricted sudo Opt-In | Done — `ZEPHYR_DEV_SUDO=1` now explicitly opts the Zephyr launcher into `--user=0:0` for local debugging without widening the image’s default sudoers policy |
 | RFC-004 | SAIL Supervisor Decomposition | Done — `WorkerManager` extracted to `worker_manager.py`, `TemporalProbe` to `temporal_probe.py`; `sail_supervisor.py` reduced to state-machine + CLI; all tests pass |
 | RFC-006 | Rust Entrypoint Consolidation | Done — `build_rust_mode()` in `docker_args.rs` emits `--entrypoint zephyr`; `launch()` in `launcher.rs` uses it when `ZEPHYR_USE_RUST_ENTRYPOINTS=1` or image carries `sygaldry.zephyr.version` label; Dockerfile now sets both labels |
+| RFC-002 | Rust as Container Infrastructure Foundation | Done — `tools/zephyr_job` deleted; `container/entrypoints/` (9 bash scripts) deleted; `bin/sygaldry` slimmed 256→149 lines; bash `job)` fallback replaced with clear error; all 9 entrypoints verified covered by `entrypoint.rs` |
