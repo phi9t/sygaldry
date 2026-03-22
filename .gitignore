@@ -42,3 +42,4 @@ zephyr_container_infra_verification_process.txt
 foundational_architecture_papers.md
 papers_followup_tracker.md
 .agentic/
+*.txt

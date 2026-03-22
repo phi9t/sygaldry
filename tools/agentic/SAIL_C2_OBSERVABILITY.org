@@ -1,0 +1,304 @@
+#+TITLE: SAIL C2 Observability & Fault Tolerance
+#+DATE: 2026-03-22
+#+AUTHOR: SAIL Infrastructure
+#+OPTIONS: toc:3 num:t
+
+* Overview
+
+SAIL (Self-Agentic Improvement Loop) C&C observability layer.  Provides
+live visibility into active agent sessions, aggregate metrics, and webhook
+alerts — enabling at-a-glance health monitoring of autonomous improvement
+runs.
+
+* Architecture
+
+** Data Flow
+
+#+BEGIN_SRC
+claude --output-format stream-json --verbose
+  └→ stdout → lineBufferWriter → {step}_structured.jsonl
+              (each line: {"stream":"stdout","message":"<claude NDJSON>", ...})
+                                      ↑
+                       parse_session_events.py  (every 15s)
+                                      ↓
+                       current_task.json  (session block updated live)
+                                      ↓
+sail_supervisor.py polls (every 30s) → /api/v1/status
+  includes {currentTask.session, metrics}
+                                      ↓
+sail_status.py --watch  (every 5s)
+  → ACTIVE AGENT panel  (tokens / turns / files / last message)
+  → METRICS panel       (success rate / cost / per-type bars)
+
+After each cron cycle:
+metrics_updater.py → metrics.json
+  └→ /api/v1/metrics
+  └→ METRICS panel in sail_status.py
+#+END_SRC
+
+** Structured JSONL Format
+
+Each line of a =*_structured.jsonl= file is a =structuredLogLine= wrapper
+written by the Go =lineBufferWriter=:
+
+#+BEGIN_SRC json
+{
+  "timestamp": "2026-03-22T21:00:00Z",
+  "workflowId": "sail-...",
+  "runId": "...",
+  "stepId": "implement",
+  "stepName": "Implement fix",
+  "stream": "stdout",
+  "message": "<actual claude stream-json event>",
+  "partial": false
+}
+#+END_SRC
+
+With =--output-format stream-json=, claude's stdout is NDJSON.  The =message=
+field carries one of:
+
+| Event type            | Subtype | Content                                       |
+|-----------------------+---------+-----------------------------------------------|
+| =system=              | =init=  | session_id, model                             |
+| =assistant=           | —       | content blocks (text + tool_use), usage stats |
+| =result=              | —       | total_cost_usd, cumulative usage              |
+
+* Files
+
+** New Files
+
+*** =tools/agentic/parse_session_events.py=
+
+Parses =*_structured.jsonl= files produced by the Temporal worker.
+Unwraps =structuredLogLine= envelopes, extracts claude stream-json events
+from the =message= field, and accumulates a =SessionSummary=.
+
+**** =SessionSummary= fields
+
+| Field                 | Type      | Description                             |
+|-----------------------+-----------+-----------------------------------------|
+| =session_id=          | str       | Claude session ID from system/init      |
+| =model=               | str       | Model name                              |
+| =input_tokens=        | int       | Cumulative input tokens                 |
+| =output_tokens=       | int       | Cumulative output tokens                |
+| =cache_read_tokens=   | int       | Cache read tokens (prompt caching)      |
+| =cache_creation_tokens= | int     | Cache creation tokens                   |
+| =total_cost_usd=      | float     | Total cost from result event            |
+| =tool_calls=          | list[dict]| [{name, inputSummary}] last 50          |
+| =files_touched=       | list[str] | Paths from Edit/Write/MultiEdit inputs  |
+| =last_message=        | str       | Last assistant text (≤500 chars)        |
+| =turn_count=          | int       | Number of assistant turns               |
+| =status=              | str       | "running" or "completed"                |
+
+**** CLI Usage
+
+#+BEGIN_SRC bash
+# Print session summary JSON to stdout
+parse_session_events.py --events-file <path>
+parse_session_events.py --log-dir <dir>          # auto-finds latest *_structured.jsonl
+
+# Merge session into current_task.json in place (used by live updater)
+parse_session_events.py --log-dir <dir> --update-current-task <path>
+#+END_SRC
+
+*** =tools/agentic/metrics_updater.py=
+
+Aggregates SAIL metrics from all run =issue_attempts.jsonl= files
+(last 30 days by default) and writes =metrics.json=.
+
+**** =metrics.json= Schema
+
+#+BEGIN_SRC json
+{
+  "computedAt": "...",
+  "window": { "days": 30, "runsAnalyzed": 14, "attemptsAnalyzed": 47 },
+  "successRate": 0.72,
+  "avgDurationSec": 95.4,
+  "byType": {
+    "shellcheck": { "attempts": 12, "successes": 10, "successRate": 0.83 },
+    "todo":       { "attempts":  8, "successes":  4, "successRate": 0.50 }
+  },
+  "tokens": {
+    "totalInputTokens": 450000,
+    "totalOutputTokens": 120000,
+    "totalCacheReadTokens": 80000,
+    "totalCostUsd": 1.84,
+    "avgInputTokensPerAttempt": 9574
+  },
+  "recentTrend": [
+    { "date": "2026-03-22", "attempts": 3, "successes": 2 }
+  ],
+  "topFailures": [
+    { "issueId": "go_coverage-abc", "attempts": 3 }
+  ]
+}
+#+END_SRC
+
+**** CLI Usage
+
+#+BEGIN_SRC bash
+metrics_updater.py --runs-dir <path> --output <path> [--days 30]
+#+END_SRC
+
+** Modified Files
+
+*** =temporal/internal/activities/agent_task.go=
+
+Added =--output-format stream-json --verbose= to the claude CLI args (after
+=--permission-mode acceptEdits=).  No other Go changes needed — the existing
+=lineBufferWriter= captures stdout line-by-line into =*_structured.jsonl=,
+which now contains parseable NDJSON events.
+
+*** =tools/agentic/run_improvement_loop.sh=
+
+**** =_write_current_task()=
+
+Extended with a 6th =log_dir= arg.  Initial =current_task.json= now includes:
+- =logDir= — path to the step log directory
+- =session= — empty dict, filled in by the live updater
+
+**** =_run_task_updater()= (new)
+
+Background loop that calls =parse_session_events.py --update-current-task=
+every 15 seconds while orchestrate runs.
+
+**** =_run_issue()= orchestrate invocation
+
+Changed from foreground to background execution:
+
+#+BEGIN_SRC bash
+( cd "${TEMPORAL_DIR}"; go run ./cmd/orchestrate run ... ) &
+orchestrate_pid=$!
+_run_task_updater "${log_dir}" &
+updater_pid=$!
+wait "${orchestrate_pid}" || exit_code=$?
+kill "${updater_pid}" 2>/dev/null || true
+wait "${updater_pid}" 2>/dev/null || true
+#+END_SRC
+
+*** =tools/agentic/sail_supervisor.py=
+
+- =collect_health()= — adds =currentTask= and =metrics= to the snapshot
+  (read from =current_task.json= and =metrics.json= on each poll)
+- =send_webhook()= — POSTs JSON to =SAIL_WEBHOOK_URL= (5s timeout, silent on
+  failure)
+- =Config.webhook_url= — loaded from env =SAIL_WEBHOOK_URL=
+- Webhook call sites:
+  - Fix budget exhausted → state transitions to =error=
+  - =fix_finished= with healthy result → =infra_recovered=
+- HTTP routes — all existing routes preserved; new aliases added:
+
+| Route                  | Description                                  |
+|------------------------+----------------------------------------------|
+| =GET /api/v1/status=   | Enriched snapshot (=currentTask= + =metrics=)|
+| =GET /api/v1/task=     | Full =current_task.json=                     |
+| =GET /api/v1/metrics=  | Full =metrics.json=                          |
+| =GET /api/v1/events=   | Last N lines of =supervisor_events.jsonl=    |
+| =GET /api/v1/runs=     | Runs list                                    |
+| =GET /api/v1/runs/{id}=| Run detail                                   |
+
+*** =tools/agentic/sail_status.py=
+
+- =try_http_status()= — prefers =/api/v1/status=, falls back to =/status=
+- =render_dashboard()= — reads =currentTask= and =metrics= from supervisor
+  snapshot (no separate HTTP calls needed)
+- =print_dashboard()= — new panels:
+
+**** ACTIVE AGENT panel
+
+#+BEGIN_SRC
+ACTIVE AGENT  •  3m 41s
+  shellcheck-abc123: Fix SC2155 in git_ops.sh  (attempt 2/3)
+  Run: sailrun-20260322-...
+  Session:  sess_abc  •  claude-sonnet-4-6  [running]
+  Tokens:   12,450 in / 3,210 out / 8,000 cached  •  $0.0180
+  Turns:    7  •  Files: tools/agentic/git_ops.sh
+  → "I've fixed the SC2155 warning by separating..."
+#+END_SRC
+
+**** METRICS panel
+
+#+BEGIN_SRC
+METRICS  (30d  •  14 runs  •  47 attempts)
+  Success rate:  72%  (33/47)    Avg duration:  1m 35s
+  Spend:  $1.84 total            ($0.039/attempt avg)
+  shellcheck     83% ████████░░    todo           50% █████░░░░░
+  go_coverage    60% ██████░░░░    go_vet         75% ███████░░░
+#+END_SRC
+
+**** Panel order
+
+INFRASTRUCTURE → LAST CYCLE → ACTIVE AGENT → METRICS → NEXT CYCLE → QUEUE → RECENT ATTEMPTS
+
+*** =tools/agentic/sail_cron.sh=
+
+- =_send_webhook()= — curl-based webhook helper (5s timeout, SC2155-clean)
+- Call sites:
+  - After primary run: =cycle_completed= event with =primaryExitCode=
+  - When =primary_rc != 0=: =issue_failed= event
+- =metrics_updater.py= called after =analyze_sail_run.py= step
+
+*** =tools/agentic/config.yaml=
+
+Added =alerts= section:
+
+#+BEGIN_SRC yaml
+alerts:
+  webhook_url: ""   # override with env SAIL_WEBHOOK_URL
+#+END_SRC
+
+* Webhook Events
+
+| Event              | Source             | Payload fields                          |
+|--------------------+--------------------+-----------------------------------------|
+| =cycle_completed=  | sail_cron.sh       | runId, primaryExitCode                  |
+| =issue_failed=     | sail_cron.sh       | runId, primaryExitCode                  |
+| =infra_error=      | sail_supervisor.py | state, problemKey                       |
+| =infra_recovered=  | sail_supervisor.py | problemKey                              |
+
+All events include a =timestamp= field.
+
+** Example: ntfy.sh integration
+
+#+BEGIN_SRC bash
+export SAIL_WEBHOOK_URL="https://ntfy.sh/my-sail-alerts"
+# POST body: {"event":"cycle_completed","timestamp":"...","runId":"...","primaryExitCode":"0"}
+#+END_SRC
+
+* Runtime Files
+
+| Path (relative to SAIL_RUNTIME_ROOT)  | Written by              | Content                             |
+|---------------------------------------+-------------------------+-------------------------------------|
+| =current_task.json=                   | run_improvement_loop.sh | Active issue + live session block   |
+| =metrics.json=                        | metrics_updater.py      | Aggregate 30-day metrics            |
+| =supervisor_status.json=              | sail_supervisor.py      | Full health snapshot                |
+| =supervisor_events.jsonl=             | sail_supervisor.py      | Append-only event log               |
+| =last_status.json=                    | sail_cron.sh            | Last cron cycle summary             |
+| =last_discovered.json=                | run_improvement_loop.sh | Issue queue at last discovery       |
+| =runs/{run_id}/*/issue_attempts.jsonl=| run_improvement_loop.sh | Per-attempt records (token accounting source) |
+
+* HTTP API Reference
+
+Base URL: =http://localhost:7890= (default; override =SAIL_SUPERVISOR_PORT=)
+
+#+BEGIN_SRC
+GET /api/v1/status          Full health snapshot + currentTask + metrics
+GET /api/v1/task            current_task.json (404 if no active task)
+GET /api/v1/metrics         metrics.json
+GET /api/v1/events?tail=N   Last N supervisor events
+GET /api/v1/runs?n=N        N most recent runs (summary)
+GET /api/v1/runs/{id}       Run detail (primary/selffix/major sub-dirs)
+POST /refresh               Trigger immediate poll cycle
+#+END_SRC
+
+Legacy routes (=/status=, =/runs=, =/events=, =/task=, =/queue=) remain for
+backward compatibility.
+
+* Verification Checklist
+
+1. [ ] =cd temporal && go test ./...= — no regressions from =agent_task.go= change
+2. [ ] Run =parse_session_events.py --log-dir <runs-dir>= on an existing SAIL run
+3. [ ] Run =metrics_updater.py --runs-dir ... --output /tmp/metrics.json= and inspect
+4. [ ] Start supervisor, run one SAIL cycle, watch =sail_status.py --watch= show
+       live token counts in ACTIVE AGENT panel during implement step
+5. [ ] Set =SAIL_WEBHOOK_URL=https://ntfy.sh/test-sail= and verify POST on cycle completion
