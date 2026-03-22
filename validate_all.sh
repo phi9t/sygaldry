@@ -214,6 +214,35 @@ else
     log "SKIP: go not found"
 fi
 
+# ---- Rust checks ----
+CARGO_MANIFEST="crates/zephyr/Cargo.toml"
+if command -v cargo &>/dev/null && [[ -f "${SCRIPT_DIR}/${CARGO_MANIFEST}" ]]; then
+    # In environments where Spack provides rustc but not clippy, cargo clippy picks up
+    # a different rustup-installed clippy binary, causing E0514 ABI mismatches.
+    # Resolve by using the toolchain specified in rust-toolchain.toml via rustup, if available.
+    _CARGO_CLIPPY_ENV=()
+    if command -v rustup &>/dev/null; then
+        _TC_FILE="${SCRIPT_DIR}/crates/zephyr/rust-toolchain.toml"
+        _TC_CHANNEL="$(grep -o 'channel = "[^"]*"' "${_TC_FILE}" 2>/dev/null | sed 's/.*"\(.*\)".*/\1/' || true)"
+        _TC_TRIPLE="$(rustc -vV 2>/dev/null | awk '/^host:/{print $2}' || true)"
+        _TC_BIN="${HOME}/.rustup/toolchains/${_TC_CHANNEL}-${_TC_TRIPLE}/bin"
+        if [[ -x "${_TC_BIN}/cargo" ]]; then
+            _CARGO_CLIPPY_ENV=("env" "PATH=${_TC_BIN}:${PATH}")
+        fi
+    fi
+
+    section "Rust: cargo build"
+    run_check "cargo build" cargo build --manifest-path "${SCRIPT_DIR}/${CARGO_MANIFEST}"
+
+    section "Rust: cargo test"
+    run_check "cargo test" cargo test --manifest-path "${SCRIPT_DIR}/${CARGO_MANIFEST}"
+
+    section "Rust: cargo clippy"
+    run_check "cargo clippy" "${_CARGO_CLIPPY_ENV[@]}" cargo clippy --manifest-path "${SCRIPT_DIR}/${CARGO_MANIFEST}" -- -D warnings
+else
+    log "SKIP: cargo not installed or ${CARGO_MANIFEST} not found"
+fi
+
 # ---- Python checks ----
 VENV_DIR="${SCRIPT_DIR}/.venv-lint"
 if [[ -d "${VENV_DIR}" ]]; then

@@ -45,7 +45,7 @@ fn ensure_hf_deps() -> Result<()> {
     let venv_dir = std::env::var("HF_VENV_DIR")
         .unwrap_or_else(|_| container_paths::HF_DOWNLOAD_VENV.to_string());
 
-    let check = Command::new(&format!("{venv_dir}/bin/python"))
+    let check = Command::new(format!("{venv_dir}/bin/python"))
         .args(["-c", "import datasets, huggingface_hub"])
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())

@@ -216,14 +216,12 @@ pub fn run_stage(config: &StageConfig) -> Result<()> {
     // Step 7: Python import verification
     if !config.python_imports.is_empty() {
         let imports_csv = config.python_imports.join(",");
-        let verify_script = format!(
-            r#"import importlib, os
+        let verify_script = r#"import importlib, os
 mods = [m for m in os.environ.get('PYTHON_IMPORTS_CSV', '').split(',') if m]
 for m in mods:
     mod = importlib.import_module(m)
     print(m, getattr(mod, '__version__', 'unknown'))
-"#
-        );
+"#.to_string();
         let output = Command::new("bash")
             .args(["-lc", &format!(
                 "eval \"$(spack -e {stage_env} env activate --sh)\"; python3 -c '{verify_script}'"
@@ -318,7 +316,7 @@ fn check_forbidden_guard(report_path: &Path, forbidden_names: &[String], verbose
     let forbidden_missing: Vec<_> = missing
         .iter()
         .filter(|m| {
-            m["name"].as_str().map_or(false, |n| forbidden_set.contains(n))
+            m["name"].as_str().is_some_and(|n| forbidden_set.contains(n))
         })
         .collect();
 
@@ -345,6 +343,7 @@ fn check_forbidden_guard(report_path: &Path, forbidden_names: &[String], verbose
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 fn run_step(
     program: &str,
     args: &[String],
@@ -366,6 +365,7 @@ fn run_step(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 fn run_spack_cmd(
     spack_args: &[&str],
     stage_env: &str,
@@ -398,6 +398,7 @@ fn run_spack_cmd(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 fn write_final_status(
     paths: &StagePaths,
     config: &StageConfig,

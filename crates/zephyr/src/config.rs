@@ -1,5 +1,5 @@
 use crate::paths::{HostLayout, DEFAULT_CACHE_ROOT};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 /// Docker image build policy.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -342,7 +342,7 @@ struct SharedCaches {
 }
 
 /// Resolve shared cache paths with legacy env var fallbacks.
-fn build_shared_caches(build_root: &PathBuf, shared_root: &PathBuf) -> SharedCaches {
+fn build_shared_caches(build_root: &Path, shared_root: &Path) -> SharedCaches {
     let spack_store = path_from_env_chain(
         &["ZEPHYR_SHARED_SPACK_STORE", "SYGALDRY_SPACK_STORE"],
         build_root.join("spack_store"),

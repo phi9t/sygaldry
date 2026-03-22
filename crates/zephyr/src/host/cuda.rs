@@ -18,7 +18,7 @@ fn parse_cuda_version(output: &str) -> Option<String> {
     for line in output.lines() {
         if let Some(pos) = line.find("CUDA Version:") {
             let rest = &line[pos + "CUDA Version:".len()..];
-            let version = rest.trim().split_whitespace().next()?;
+            let version = rest.split_whitespace().next()?;
             // Validate it looks like "12.9"
             let parts: Vec<&str> = version.split('.').collect();
             if parts.len() >= 2
