@@ -33,6 +33,7 @@ def make_config(module, runtime_root: Path, **overrides):
         fix_model=overrides.get("fix_model", ""),
         once=overrides.get("once", True),
         no_fix=overrides.get("no_fix", True),
+        http_port=overrides.get("http_port", 0),
     )
 
 
