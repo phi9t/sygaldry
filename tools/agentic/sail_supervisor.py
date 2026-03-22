@@ -20,6 +20,18 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+_AGENTIC_DIR = str(Path(__file__).resolve().parent)
+if _AGENTIC_DIR not in sys.path:
+    sys.path.insert(0, _AGENTIC_DIR)
+
+from worker_manager import WorkerManager  # noqa: E402
+from temporal_probe import TemporalProbe  # noqa: E402
+
+__all__ = [
+    "WorkerManager",
+    "TemporalProbe",
+]
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_RUNTIME_ROOT = Path(
     os.environ.get(

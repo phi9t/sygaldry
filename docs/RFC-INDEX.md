@@ -1,7 +1,7 @@
 # RFC Index
 
-**Last updated:** 2026-03-21
-**Total RFCs:** 6 (44 created, 38 closed as complete or N/A)
+**Last updated:** 2026-03-22
+**Total RFCs:** 5 (44 created, 39 closed as complete or N/A)
 
 ---
 
@@ -10,7 +10,6 @@
 | # | Title | Status | Priority | Effort | Area |
 |---|-------|--------|----------|--------|------|
 | RFC-002 | Rust as Container Infrastructure Foundation | Draft v3 | High | L | rust-core |
-| RFC-004 | SAIL Supervisor Decomposition | Draft v4 | Low | M | agentic |
 | RFC-006 | Rust Entrypoint Consolidation | Draft v1 | Medium | M | rust-core |
 | RFC-012 | Orchestrate Command Decomposition | Proposed | Medium | L | temporal |
 | RFC-013 | Dockerfile Cache Layer Optimization | Proposed | Low | M | docker |
@@ -33,8 +32,7 @@
 
 ### Lower priority
 
-4. **RFC-004** — SAIL infrastructure simplification
-5. **RFC-013** — Dockerfile cache layer optimization
+4. **RFC-013** — Dockerfile cache layer optimization
 6. **RFC-016** — K3s YAML path externalization (on hold: K3s strategic direction undecided)
 
 ---
@@ -78,3 +76,4 @@
 | RFC-019 | Rust Dead Code Cleanup | Done — removed the remaining dead-code suppressions by deleting unused error variants/helpers, scoping the CUDA-version helper to tests, and dropping stale `#[allow(dead_code)]` annotations |
 | RFC-003 | Temporal Production Readiness | Done — worker config now supports YAML plus env/CLI overrides, `max_concurrent_activities`, and an HTTP `/healthz` endpoint via `temporal/cmd/worker` |
 | RFC-031 | Add Explicit Dev-Only Unrestricted sudo Opt-In | Done — `ZEPHYR_DEV_SUDO=1` now explicitly opts the Zephyr launcher into `--user=0:0` for local debugging without widening the image’s default sudoers policy |
+| RFC-004 | SAIL Supervisor Decomposition | Done — `WorkerManager` extracted to `worker_manager.py`, `TemporalProbe` to `temporal_probe.py`; `sail_supervisor.py` reduced to state-machine + CLI; all tests pass |
