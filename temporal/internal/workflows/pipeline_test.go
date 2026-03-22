@@ -579,3 +579,115 @@ func TestMergeStringMaps(t *testing.T) {
 		t.Error("mergeStringMaps mutated base map")
 	}
 }
+
+// ---------------------------------------------------------------------------
+// prepareStep
+// ---------------------------------------------------------------------------
+
+func TestPrepareStepEnvMerge(t *testing.T) {
+	input := PipelineInput{
+		Env: map[string]string{"GLOBAL": "global_val", "OVERRIDE": "plan_val"},
+	}
+	step := PipelineStep{
+		ID:   "s1",
+		Type: "command",
+		Env:  map[string]string{"OVERRIDE": "step_val", "STEP_ONLY": "step_only"},
+	}
+	rendered, err := prepareStep(step, input, map[string]StepOutcome{})
+	if err != nil {
+		t.Fatalf("prepareStep error: %v", err)
+	}
+	// Step env takes precedence over plan env
+	if rendered.Env["OVERRIDE"] != "step_val" {
+		t.Errorf("OVERRIDE = %q, want step_val", rendered.Env["OVERRIDE"])
+	}
+	// Plan env is inherited
+	if rendered.Env["GLOBAL"] != "global_val" {
+		t.Errorf("GLOBAL = %q, want global_val", rendered.Env["GLOBAL"])
+	}
+	// Step-only keys present
+	if rendered.Env["STEP_ONLY"] != "step_only" {
+		t.Errorf("STEP_ONLY = %q, want step_only", rendered.Env["STEP_ONLY"])
+	}
+}
+
+func TestPrepareStepOriginalUnmodified(t *testing.T) {
+	input := PipelineInput{Env: map[string]string{"KEY": "from_plan"}}
+	step := PipelineStep{ID: "s1", Type: "command", Env: map[string]string{"A": "1"}}
+	_, err := prepareStep(step, input, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Original step and input must not be mutated
+	if _, ok := step.Env["KEY"]; ok {
+		t.Error("prepareStep mutated the original step.Env")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// consumePipelineCancel
+// ---------------------------------------------------------------------------
+
+// mockReceiveCh is a minimal workflow.ReceiveChannel mock for unit tests.
+// Only ReceiveAsync and ReceiveAsyncWithMoreFlag are used by consumePipelineCancel.
+type mockReceiveCh struct {
+	signals []struct{}
+}
+
+func (m *mockReceiveCh) Name() string { return "mock-cancel" }
+func (m *mockReceiveCh) Receive(_ workflow.Context, _ interface{}) bool { return false }
+func (m *mockReceiveCh) ReceiveWithTimeout(_ workflow.Context, _ time.Duration, _ interface{}) (bool, bool) {
+	return false, false
+}
+func (m *mockReceiveCh) ReceiveAsync(valuePtr interface{}) bool {
+	if len(m.signals) == 0 {
+		return false
+	}
+	m.signals = m.signals[1:]
+	return true
+}
+func (m *mockReceiveCh) ReceiveAsyncWithMoreFlag(valuePtr interface{}) (bool, bool) {
+	ok := m.ReceiveAsync(valuePtr)
+	return ok, len(m.signals) > 0
+}
+func (m *mockReceiveCh) Len() int { return len(m.signals) }
+
+func TestConsumePipelineCancelAlreadyCanceled(t *testing.T) {
+	status := &PipelineStatus{CancelRequested: true}
+	called := false
+	result := consumePipelineCancel(nil, status, func() { called = true })
+	if !result {
+		t.Error("expected true when already canceled")
+	}
+	if called {
+		t.Error("cancelActivities should not be called when already canceled")
+	}
+}
+
+func TestConsumePipelineCancelReceivesSignal(t *testing.T) {
+	ch := &mockReceiveCh{signals: []struct{}{{}, {}}}
+	status := &PipelineStatus{}
+	cancelCalled := false
+	result := consumePipelineCancel(ch, status, func() { cancelCalled = true })
+	if !result {
+		t.Error("expected true after receiving cancel signal")
+	}
+	if !status.CancelRequested {
+		t.Error("expected status.CancelRequested to be set")
+	}
+	if status.Phase != "cancelling" {
+		t.Errorf("status.Phase = %q, want cancelling", status.Phase)
+	}
+	if !cancelCalled {
+		t.Error("cancelActivities should have been called")
+	}
+}
+
+func TestConsumePipelineCancelNoSignal(t *testing.T) {
+	ch := &mockReceiveCh{}
+	status := &PipelineStatus{}
+	result := consumePipelineCancel(ch, status, func() { t.Error("should not call cancelActivities") })
+	if result {
+		t.Error("expected false when no signal received and not previously canceled")
+	}
+}

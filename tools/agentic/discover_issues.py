@@ -367,7 +367,7 @@ def discover_go_tests_and_coverage(repo_dir: Path, max_per_type: int) -> list[Is
         if not m:
             continue
         file_func, func_name, pct_str = m.group(1), m.group(2), m.group(3)
-        if func_name in ("total:", "init"):
+        if func_name in ("total:", "init", "main"):
             continue
         if float(pct_str) > 0:
             continue

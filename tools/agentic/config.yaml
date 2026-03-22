@@ -13,7 +13,7 @@ implementer:
 loop:
   max_tasks_per_run: 3    # cap on issues processed per outer-loop invocation
   max_retries_per_task: 2 # how many times to re-run the pipeline if validate fails
-  min_priority: 2         # 1=critical, 2=high, 3=normal; lower = more selective
+  min_priority: 3         # 1=critical, 2=high, 3=normal; lower = more selective
   interval_minutes: 360   # for cron / autoretry_tmux mode (6 h)
   max_parallel: 1         # concurrent pipelines (1 = sequential, safe default)
 
