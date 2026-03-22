@@ -1,13 +1,13 @@
 # RFC Index
 
 **Last updated:** 2026-03-22
-**Total RFCs:** 0 open (44 created, 44 closed as complete or N/A)
+**Total RFCs:** 0 open (41 created, 41 closed as complete or N/A)
 
 ---
 
 ## All RFCs
 
-All 44 RFCs are closed. See Closed RFCs below.
+All 41 RFCs are closed. See Closed RFCs below.
 
 ---
 
