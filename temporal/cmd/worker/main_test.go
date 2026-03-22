@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"sync/atomic"
 	"testing"
+
+	"temporal-orchestration/internal/config"
 )
 
 func noCLIOverrides() cliOverrides {
@@ -37,8 +39,8 @@ func TestEnvOr(t *testing.T) {
 			if tt.envValue != "" {
 				t.Setenv(tt.key, tt.envValue)
 			}
-			if got := envOr(tt.key, tt.fallback); got != tt.want {
-				t.Errorf("envOr(%q, %q) = %q, want %q", tt.key, tt.fallback, got, tt.want)
+			if got := config.EnvOr(tt.key, tt.fallback); got != tt.want {
+				t.Errorf("config.EnvOr(%q, %q) = %q, want %q", tt.key, tt.fallback, got, tt.want)
 			}
 		})
 	}

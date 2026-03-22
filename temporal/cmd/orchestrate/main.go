@@ -17,6 +17,7 @@ import (
 	"go.temporal.io/sdk/client"
 	"gopkg.in/yaml.v3"
 
+	"temporal-orchestration/internal/config"
 	"temporal-orchestration/internal/plan"
 	"temporal-orchestration/internal/workflows"
 )
@@ -128,9 +129,9 @@ func runCommand(args []string) error {
 
 	workflowID := flags.String("workflow-id", "pipeline-"+time.Now().Format("20060102-150405"), "Workflow ID")
 	planPath := flags.String("plan", "", "Path to YAML plan")
-	taskQueue := flags.String("task-queue", envOr("TEMPORAL_TASK_QUEUE", "orchestration"), "Task queue")
-	address := flags.String("address", envOr("TEMPORAL_ADDRESS", "localhost:7233"), "Temporal host:port")
-	namespace := flags.String("namespace", envOr("TEMPORAL_NAMESPACE", "default"), "Temporal namespace")
+	taskQueue := flags.String("task-queue", config.EnvOr("TEMPORAL_TASK_QUEUE", config.DefaultTaskQueue), "Task queue")
+	address := flags.String("address", config.EnvOr("TEMPORAL_ADDRESS", config.DefaultAddress), "Temporal host:port")
+	namespace := flags.String("namespace", config.EnvOr("TEMPORAL_NAMESPACE", config.DefaultNamespace), "Temporal namespace")
 	logDir := flags.String("log-dir", "", "Log directory for step outputs (overrides plan and TEMPORAL_LOG_DIR)")
 	async := flags.Bool("async", false, "Start workflow and return immediately")
 	output := flags.String("output", "yaml", "Output format: yaml|json")
@@ -256,8 +257,8 @@ func statusCommand(args []string) error {
 
 	workflowID := flags.String("workflow-id", "", "Workflow ID")
 	runID := flags.String("run-id", "", "Run ID (optional)")
-	address := flags.String("address", envOr("TEMPORAL_ADDRESS", "localhost:7233"), "Temporal host:port")
-	namespace := flags.String("namespace", envOr("TEMPORAL_NAMESPACE", "default"), "Temporal namespace")
+	address := flags.String("address", config.EnvOr("TEMPORAL_ADDRESS", config.DefaultAddress), "Temporal host:port")
+	namespace := flags.String("namespace", config.EnvOr("TEMPORAL_NAMESPACE", config.DefaultNamespace), "Temporal namespace")
 	output := flags.String("output", "yaml", "Output format: yaml|json")
 	if err := flags.Parse(args); err != nil {
 		return err
@@ -364,9 +365,3 @@ func safeFilename(value string) string {
 	return replacer.Replace(strings.TrimSpace(value))
 }
 
-func envOr(key, fallback string) string {
-	if value := os.Getenv(key); value != "" {
-		return value
-	}
-	return fallback
-}

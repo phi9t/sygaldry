@@ -8,7 +8,6 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
-	"strconv"
 	"sync/atomic"
 	"time"
 
@@ -17,6 +16,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"temporal-orchestration/internal/activities"
+	"temporal-orchestration/internal/config"
 	"temporal-orchestration/internal/workflows"
 )
 
@@ -39,9 +39,9 @@ type cliOverrides struct {
 
 func defaultConfig() workerConfig {
 	return workerConfig{
-		Address:                 "localhost:7233",
-		Namespace:               "default",
-		TaskQueue:               "orchestration",
+		Address:                 config.DefaultAddress,
+		Namespace:               config.DefaultNamespace,
+		TaskQueue:               config.DefaultTaskQueue,
 		MaxConcurrentActivities: 10,
 		HealthPort:              8080,
 	}
@@ -71,12 +71,12 @@ func resolveConfig(configPath string, overrides cliOverrides) (workerConfig, err
 	if value := os.Getenv("TEMPORAL_TASK_QUEUE"); value != "" {
 		cfg.TaskQueue = value
 	}
-	if value, ok, err := envOrInt("TEMPORAL_MAX_CONCURRENT_ACTIVITIES"); err != nil {
+	if value, ok, err := config.EnvOrInt("TEMPORAL_MAX_CONCURRENT_ACTIVITIES"); err != nil {
 		return workerConfig{}, err
 	} else if ok {
 		cfg.MaxConcurrentActivities = value
 	}
-	if value, ok, err := envOrInt("TEMPORAL_HEALTH_PORT"); err != nil {
+	if value, ok, err := config.EnvOrInt("TEMPORAL_HEALTH_PORT"); err != nil {
 		return workerConfig{}, err
 	} else if ok {
 		cfg.HealthPort = value
@@ -198,21 +198,3 @@ func healthHandler(workerReady *atomic.Bool) http.Handler {
 	})
 }
 
-func envOr(key, fallback string) string {
-	if value := os.Getenv(key); value != "" {
-		return value
-	}
-	return fallback
-}
-
-func envOrInt(key string) (int, bool, error) {
-	value := os.Getenv(key)
-	if value == "" {
-		return 0, false, nil
-	}
-	parsed, err := strconv.Atoi(value)
-	if err != nil {
-		return 0, false, fmt.Errorf("%s: %w", key, err)
-	}
-	return parsed, true, nil
-}

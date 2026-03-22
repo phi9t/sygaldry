@@ -15,6 +15,7 @@ import (
 	"go.temporal.io/sdk/client"
 	"gopkg.in/yaml.v3"
 
+	"temporal-orchestration/internal/config"
 	"temporal-orchestration/internal/workflows"
 )
 
@@ -46,9 +47,9 @@ func run(args []string) error {
 	asyncMode := flags.Bool("async", false, "Return immediately without waiting for completion")
 	logDir := flags.String("log-dir", "", "Override log directory")
 	tempDir := flags.String("temp-dir", "", "Directory for RFC workflow temp files and worktrees (default: os temp dir)")
-	address := flags.String("address", envOr("TEMPORAL_ADDRESS", "localhost:7233"), "Temporal host:port")
-	namespace := flags.String("namespace", envOr("TEMPORAL_NAMESPACE", "default"), "Temporal namespace")
-	taskQueue := flags.String("task-queue", envOr("TEMPORAL_TASK_QUEUE", "orchestration"), "Task queue")
+	address := flags.String("address", config.EnvOr("TEMPORAL_ADDRESS", config.DefaultAddress), "Temporal host:port")
+	namespace := flags.String("namespace", config.EnvOr("TEMPORAL_NAMESPACE", config.DefaultNamespace), "Temporal namespace")
+	taskQueue := flags.String("task-queue", config.EnvOr("TEMPORAL_TASK_QUEUE", config.DefaultTaskQueue), "Task queue")
 	output := flags.String("output", "yaml", "Output format: yaml|json")
 
 	if err := flags.Parse(args); err != nil {
@@ -174,9 +175,3 @@ func printRFCOutput(mode string, payload any) error {
 	}
 }
 
-func envOr(key, fallback string) string {
-	if v := os.Getenv(key); v != "" {
-		return v
-	}
-	return fallback
-}

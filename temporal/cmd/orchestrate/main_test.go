@@ -5,15 +5,17 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"temporal-orchestration/internal/config"
 )
 
 func TestEnvOr(t *testing.T) {
 	t.Setenv("TEST_ENV_OR_KEY", "from_env")
-	if got := envOr("TEST_ENV_OR_KEY", "fallback"); got != "from_env" {
-		t.Errorf("envOr with set var = %q, want 'from_env'", got)
+	if got := config.EnvOr("TEST_ENV_OR_KEY", "fallback"); got != "from_env" {
+		t.Errorf("config.EnvOr with set var = %q, want 'from_env'", got)
 	}
-	if got := envOr("TEST_ENV_OR_MISSING_KEY_XYZ", "fallback"); got != "fallback" {
-		t.Errorf("envOr with missing var = %q, want 'fallback'", got)
+	if got := config.EnvOr("TEST_ENV_OR_MISSING_KEY_XYZ", "fallback"); got != "fallback" {
+		t.Errorf("config.EnvOr with missing var = %q, want 'fallback'", got)
 	}
 }
 
