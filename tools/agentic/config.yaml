@@ -21,3 +21,8 @@ repo:
   dir: /mnt/data_infra/workspace/sygaldry  # absolute path to the sygaldry repo
   base_branch: main
   landing_mode: direct                     # direct | pull_request
+
+alerts:
+  webhook_url: ""   # POST JSON events here on cycle_completed / issue_failed / infra_error
+                    # e.g. https://ntfy.sh/your-topic or a Slack/Discord webhook URL
+                    # Override with env var SAIL_WEBHOOK_URL

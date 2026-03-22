@@ -15,10 +15,14 @@ import socket
 import subprocess
 import sys
 import tempfile
+import threading
 import time
+import urllib.request
 from dataclasses import dataclass
+from http.server import BaseHTTPRequestHandler, HTTPServer as _HTTPServer
 from pathlib import Path
 from typing import Any
+from urllib.parse import parse_qs, urlparse
 
 _AGENTIC_DIR = str(Path(__file__).resolve().parent)
 if _AGENTIC_DIR not in sys.path:
@@ -41,6 +45,16 @@ DEFAULT_RUNTIME_ROOT = Path(
 )
 FIXABLE_STATES = {"stalled", "worker_dead", "temporal_dead"}
 HEALTHY_STATES = {"idle", "running"}
+PAUSED_STATES = {"paused"}
+_MAX_EVENTS_BYTES = int(
+    os.environ.get("SAIL_SUPERVISOR_MAX_EVENTS_BYTES", str(10 * 1024 * 1024))
+)
+_DEFAULT_HTTP_PORT = int(os.environ.get("SAIL_SUPERVISOR_PORT", "7890"))
+
+# Shared state for HTTP handler (read from any thread, written from poll thread)
+_http_lock = threading.Lock()
+_current_snapshot: dict[str, Any] = {}
+_refresh_event: threading.Event | None = None
 
 
 def utc_now() -> dt.datetime:
@@ -72,6 +86,8 @@ class Config:
     fix_model: str
     once: bool
     no_fix: bool
+    http_port: int
+    webhook_url: str = ""
 
     @property
     def heartbeat_file(self) -> Path:
@@ -139,7 +155,28 @@ def parse_args() -> Config:
         fix_model=os.environ.get("SAIL_SUPERVISOR_FIX_MODEL", "").strip(),
         once=args.once,
         no_fix=args.no_fix,
+        http_port=_DEFAULT_HTTP_PORT,
+        webhook_url=os.environ.get("SAIL_WEBHOOK_URL", "").strip(),
     )
+
+
+def send_webhook(config: Config, event: str, **details: Any) -> None:
+    """POST a JSON event to the configured webhook URL (fire-and-forget, silent on failure)."""
+    if not config.webhook_url:
+        return
+    payload = {"event": event, "timestamp": iso_now(), **details}
+    data = json.dumps(payload).encode("utf-8")
+    try:
+        req = urllib.request.Request(
+            config.webhook_url,
+            data=data,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=5):
+            pass
+    except Exception:
+        pass
 
 
 def ensure_runtime_root(path: Path) -> None:
@@ -303,6 +340,8 @@ def classify_state(
     config: Config, raw: dict[str, Any], temporal_failures: int
 ) -> tuple[str, list[dict[str, str]]]:
     issues: list[dict[str, str]] = []
+    if (config.runtime_root / "cron.pause").exists():
+        return "paused", []
     if temporal_failures >= 3:
         issues.append(
             {
@@ -395,6 +434,8 @@ def collect_health(
         "currentRunDir": str(latest_run) if latest_run else "",
         "runTreeAgeSec": latest_tree_age(latest_run) if latest_run else None,
         "lastCronStatus": last_status,
+        "currentTask": safe_json_load(config.runtime_root / "current_task.json", {}),
+        "metrics": safe_json_load(config.runtime_root / "metrics.json", {}),
         "issues": [],
         "lastFix": {},
     }
@@ -546,6 +587,160 @@ def run_fix_engine(
     )
 
 
+class HttpServer:
+    """Minimal HTTP API for the supervisor. Runs as a daemon thread."""
+
+    def __init__(self, config: Config) -> None:
+        self._config = config
+
+    def start(self, refresh_event: threading.Event) -> None:
+        global _refresh_event
+        _refresh_event = refresh_event
+        config = self._config
+
+        class Handler(BaseHTTPRequestHandler):
+            def log_message(self, format: str, *args: Any) -> None:  # noqa: A002
+                pass  # suppress default HTTP logging
+
+            def do_GET(self) -> None:  # noqa: N802
+                parsed = urlparse(self.path)
+                path = parsed.path.rstrip("/")
+                qs = parse_qs(parsed.query)
+
+                if path in ("/status", "/api/v1/status"):
+                    with _http_lock:
+                        body = json.dumps(
+                            _current_snapshot, indent=2, sort_keys=True, default=str
+                        )
+                    self._send_json(body)
+                elif path in ("/api/v1/task", "/task"):
+                    task_file = config.runtime_root / "current_task.json"
+                    if not task_file.exists():
+                        self.send_response(404)
+                        self.end_headers()
+                        self.wfile.write(b'{"error": "no active task"}')
+                    else:
+                        self._handle_file_json(task_file)
+                elif path == "/api/v1/metrics":
+                    self._handle_file_json(config.runtime_root / "metrics.json")
+                elif path in ("/api/v1/events", "/events"):
+                    tail = int(qs.get("tail", ["100"])[0])
+                    self._handle_events(tail, config)
+                elif (
+                    path in ("/api/v1/runs", "/runs")
+                    or path.startswith("/api/v1/runs/")
+                    or path.startswith("/runs/")
+                ):
+                    # strip /api/v1 prefix if present
+                    bare = path.removeprefix("/api/v1")
+                    parts = bare.split("/")
+                    if len(parts) >= 3 and parts[2]:
+                        self._handle_run_detail(parts[2], config)
+                    else:
+                        n = int(qs.get("n", ["20"])[0])
+                        self._handle_runs_list(n, config)
+                elif path == "/queue":
+                    self._handle_file_json(config.runtime_root / "last_discovered.json")
+                else:
+                    self.send_response(404)
+                    self.end_headers()
+
+            def do_POST(self) -> None:  # noqa: N802
+                if self.path == "/refresh":
+                    if _refresh_event is not None:
+                        _refresh_event.set()
+                    self.send_response(200)
+                    self.end_headers()
+                    self.wfile.write(b'{"status": "refresh triggered"}')
+                else:
+                    self.send_response(404)
+                    self.end_headers()
+
+            def _send_json(self, body: str) -> None:
+                encoded = body.encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(encoded)))
+                self.end_headers()
+                self.wfile.write(encoded)
+
+            def _handle_file_json(self, path: Path) -> None:
+                data = safe_json_load(path, {})
+                self._send_json(json.dumps(data, indent=2, sort_keys=True, default=str))
+
+            def _handle_runs_list(self, n: int, cfg: Config) -> None:
+                runs_dir = cfg.runs_dir
+                if not runs_dir.exists():
+                    self._send_json("[]")
+                    return
+                dirs = sorted(
+                    (p for p in runs_dir.iterdir() if p.is_dir()),
+                    key=lambda p: p.name,
+                    reverse=True,
+                )[:n]
+                result = [
+                    {
+                        "runId": d.name,
+                        "summary": safe_json_load(d / "primary" / "run.json", {}),
+                    }
+                    for d in dirs
+                ]
+                self._send_json(
+                    json.dumps(result, indent=2, sort_keys=True, default=str)
+                )
+
+            def _handle_run_detail(self, run_id: str, cfg: Config) -> None:
+                run_dir = cfg.runs_dir / run_id
+                if not run_dir.exists():
+                    self.send_response(404)
+                    self.end_headers()
+                    return
+                result: dict[str, Any] = {}
+                for sub in ("primary", "selffix", "major"):
+                    sub_dir = run_dir / sub
+                    run_json = safe_json_load(sub_dir / "run.json", {})
+                    attempts: list[dict[str, Any]] = []
+                    jsonl = sub_dir / "issue_attempts.jsonl"
+                    if jsonl.exists():
+                        for line in jsonl.read_text(
+                            encoding="utf-8", errors="replace"
+                        ).splitlines():
+                            line = line.strip()
+                            if not line:
+                                continue
+                            try:
+                                attempts.append(json.loads(line))
+                            except json.JSONDecodeError:
+                                pass
+                    if run_json or attempts:
+                        result[sub] = {"run": run_json, "attempts": attempts}
+                self._send_json(
+                    json.dumps(result, indent=2, sort_keys=True, default=str)
+                )
+
+            def _handle_events(self, tail: int, cfg: Config) -> None:
+                events: list[Any] = []
+                if cfg.events_file.exists():
+                    for line in cfg.events_file.read_text(
+                        encoding="utf-8", errors="replace"
+                    ).splitlines():
+                        line = line.strip()
+                        if not line:
+                            continue
+                        try:
+                            events.append(json.loads(line))
+                        except json.JSONDecodeError:
+                            events.append({"raw": line})
+                self._send_json(
+                    json.dumps(events[-tail:], indent=2, sort_keys=True, default=str)
+                )
+
+        server = _HTTPServer(("", config.http_port), Handler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        log(f"HTTP API listening on port {config.http_port}")
+
+
 class StopSignal(Exception):
     pass
 
@@ -561,11 +756,18 @@ def install_signal_handlers() -> dict[str, bool]:
     return state
 
 
-def sleep_or_stop(seconds: int, stop_state: dict[str, bool]) -> None:
+def sleep_or_stop(
+    seconds: int,
+    stop_state: dict[str, bool],
+    refresh_event: threading.Event | None = None,
+) -> None:
     deadline = time.time() + seconds
     while time.time() < deadline:
         if stop_state["stop"]:
             raise StopSignal
+        if refresh_event is not None and refresh_event.is_set():
+            refresh_event.clear()
+            return
         time.sleep(min(0.5, max(deadline - time.time(), 0.0)))
 
 
@@ -583,7 +785,13 @@ def append_event(
         ),
         "details": details or short_health_details(snapshot),
     }
-    append_jsonl(config.events_file, payload)
+    events_file = config.events_file
+    try:
+        if events_file.exists() and events_file.stat().st_size > _MAX_EVENTS_BYTES:
+            events_file.rename(events_file.parent / "supervisor_events.jsonl.1")
+    except OSError:
+        pass
+    append_jsonl(events_file, payload)
 
 
 def run_fix_cycle(
@@ -660,9 +868,16 @@ def run_fix_cycle(
 
 
 def main() -> int:
+    global _current_snapshot
+
     config = parse_args()
     ensure_runtime_root(config.runtime_root)
     stop_state = install_signal_handlers()
+
+    refresh_event: threading.Event | None = None
+    if config.http_port != 0 and not config.once:
+        refresh_event = threading.Event()
+        HttpServer(config).start(refresh_event)
 
     temporal_failures = 0
     previous_state = ""
@@ -678,6 +893,8 @@ def main() -> int:
             return 0
 
         snapshot, temporal_failures = collect_health(config, temporal_failures)
+        with _http_lock:
+            _current_snapshot = snapshot
         state = snapshot["state"]
         problem_key = health_problem_key(snapshot) if state in FIXABLE_STATES else ""
 
@@ -699,6 +916,7 @@ def main() -> int:
             ]
             snapshot["state"] = "error"
             state = "error"
+            send_webhook(config, "infra_error", state=state, problemKey=problem_key)
 
         snapshot["lastFix"] = last_fix
         atomic_write_json(config.status_file, snapshot_for_status(snapshot, last_fix))
@@ -746,11 +964,14 @@ def main() -> int:
             last_fix_finished_at = time.time()
 
             snapshot, temporal_failures = collect_health(config, temporal_failures)
+            with _http_lock:
+                _current_snapshot = snapshot
             if snapshot["state"] in HEALTHY_STATES:
                 fix_failures = 0
                 fix_problem_key = ""
                 last_fix["status"] = "succeeded"
                 append_event(config, "fix_finished", snapshot, result="healthy")
+                send_webhook(config, "infra_recovered", problemKey=problem_key)
             else:
                 fix_failures += 1
                 last_fix["status"] = "failed"
@@ -788,7 +1009,7 @@ def main() -> int:
             return 0
 
         try:
-            sleep_or_stop(config.poll_secs, stop_state)
+            sleep_or_stop(config.poll_secs, stop_state, refresh_event)
         except StopSignal:
             log("shutdown requested")
             return 0

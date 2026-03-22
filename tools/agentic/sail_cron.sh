@@ -42,6 +42,24 @@ WORKER_TEMPORAL_LOG_DIR="${INFRA_DIR}/worker-temporal-logs"
 log() { echo "[$(date +'%Y-%m-%d %H:%M:%S')] [sail-cron] $*" >&2; }
 die() { log "ERROR: $*"; exit 1; }
 
+_send_webhook() {
+    local event="$1"
+    shift
+    local webhook_url="${SAIL_WEBHOOK_URL:-$(_cfg_section alerts webhook_url '')}"
+    if [[ -z "${webhook_url}" ]]; then
+        return 0
+    fi
+    local payload
+    payload="{\"event\":\"${event}\",\"timestamp\":\"$(date -u +'%Y-%m-%dT%H:%M:%SZ')\""
+    while [[ $# -gt 1 ]]; do
+        payload="${payload},\"$1\":\"$2\""
+        shift 2
+    done
+    payload="${payload}}"
+    curl -s -m 5 -X POST -H "Content-Type: application/json" -d "${payload}" "${webhook_url}" \
+        >/dev/null 2>&1 || true
+}
+
 BASE_BRANCH="${SAIL_BASE_BRANCH:-$(_cfg_section repo base_branch main)}"
 PLANNER_ENGINE="${SAIL_PLANNER_ENGINE:-$(_cfg_section planner engine local)}"
 IMPLEMENTER_ENGINE="${SAIL_IMPLEMENTER_ENGINE:-$(_cfg_section implementer engine claude)}"
@@ -344,6 +362,11 @@ main() {
         exit 0
     fi
 
+    if [[ -f "${RUNTIME_ROOT}/cron.pause" ]]; then
+        log "SAIL is paused — remove ${RUNTIME_ROOT}/cron.pause to resume"
+        exit 0
+    fi
+
     require_clean_main_checkout
     sync_main
 
@@ -374,8 +397,18 @@ main() {
         log "Primary SAIL run exited with ${primary_rc}"
     fi
 
+    _send_webhook "cycle_completed" "runId" "${run_id}" "primaryExitCode" "${primary_rc}"
+    if [[ ${primary_rc} -ne 0 ]]; then
+        _send_webhook "issue_failed" "runId" "${run_id}" "primaryExitCode" "${primary_rc}"
+    fi
+
     log "Analyzing primary run ${run_id}"
     python3 "${SCRIPT_DIR}/analyze_sail_run.py" --run-dir "${primary_dir}" --output-dir "${analysis_dir}"
+
+    log "Updating aggregate metrics"
+    python3 "${SCRIPT_DIR}/metrics_updater.py" \
+        --runs-dir "${RUNS_DIR}" \
+        --output "${RUNTIME_ROOT}/metrics.json" || true
 
     local synthetic_issues_file="${analysis_dir}/self_improvement_issues.json"
     local synthetic_count

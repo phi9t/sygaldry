@@ -484,6 +484,97 @@ _append_retry_patch_context() {
     } >> "${failure_context_file}"
 }
 
+_write_current_task() {
+    local issue_json="$1" issue_id="$2" issue_title="$3" issue_type="$4" attempt_number="$5"
+    local log_dir="${6:-}"
+    python3 - "${RUNTIME_ROOT}/current_task.json" \
+        "${issue_json}" "${issue_id}" "${issue_title}" "${issue_type}" \
+        "${attempt_number}" "$((MAX_RETRIES + 1))" "${RUN_ID}" "${RUN_KIND}" "${log_dir}" <<'PY'
+import datetime as dt
+import json
+import sys
+from pathlib import Path
+
+(
+    path,
+    _issue_raw,
+    issue_id,
+    issue_title,
+    issue_type,
+    attempt,
+    max_attempts,
+    run_id,
+    run_kind,
+    log_dir,
+) = sys.argv[1:11]
+payload = {
+    "issueId": issue_id,
+    "issueTitle": issue_title,
+    "issueType": issue_type,
+    "attempt": int(attempt),
+    "maxAttempts": int(max_attempts),
+    "startedAt": dt.datetime.now(dt.UTC).isoformat().replace("+00:00", "Z"),
+    "runId": run_id,
+    "runKind": run_kind,
+    "logDir": log_dir,
+    "session": {},
+}
+Path(path).parent.mkdir(parents=True, exist_ok=True)
+Path(path).write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+PY
+}
+
+_run_task_updater() {
+    local log_dir="$1"
+    local current_task_file="${RUNTIME_ROOT}/current_task.json"
+    while true; do
+        sleep 15
+        python3 "${SCRIPT_DIR}/parse_session_events.py" \
+            --log-dir "${log_dir}" \
+            --update-current-task "${current_task_file}" 2>/dev/null || true
+    done
+}
+
+_write_last_discovered() {
+    local stats_raw="{}"
+    if [[ -f "${DISCOVERY_STATS_FILE}" ]]; then
+        stats_raw="$(cat "${DISCOVERY_STATS_FILE}")"
+    fi
+    python3 - "${RUNTIME_ROOT}/last_discovered.json" "${DISCOVERED_ISSUES_FILE}" "${stats_raw}" <<'PY'
+import datetime as dt
+import json
+import sys
+from pathlib import Path
+
+out_path, issues_file, stats_raw = sys.argv[1:4]
+issues = []
+if Path(issues_file).exists():
+    try:
+        issues = json.loads(Path(issues_file).read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        pass
+try:
+    stats = json.loads(stats_raw)
+except (json.JSONDecodeError, TypeError):
+    stats = {}
+source_stats = stats.get("sources", [])
+payload = {
+    "issues": issues,
+    "discoveredAt": dt.datetime.now(dt.UTC).isoformat().replace("+00:00", "Z"),
+    "sourceStats": [
+        {
+            "name": s.get("name", ""),
+            "count": s.get("count", 0),
+            "durationSec": s.get("durationSec", 0.0),
+        }
+        for s in source_stats
+    ],
+}
+Path(out_path).parent.mkdir(parents=True, exist_ok=True)
+Path(out_path).write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+PY
+}
+
 _restore_repo_state() {
     local branch="$1"
     if [[ ! -d "${REPO_DIR}/.git" ]]; then
@@ -637,6 +728,7 @@ _run_issue() {
         fi
 
         log "   attempt ${attempt_number}/$((MAX_RETRIES + 1))"
+        _write_current_task "${issue_json}" "${issue_id}" "${issue_title}" "${issue_type}" "${attempt_number}" "${log_dir}"
 
         local prompt_file="${SCRIPT_DIR}/generate_plan.py"
         if [[ "${issue_type}" == "major_challenge" ]]; then
@@ -676,7 +768,13 @@ _run_issue() {
                 -set "major_max_changed_lines=${MAJOR_MAX_CHANGED_LINES}" \
                 -set "failure_context_file=${failure_ctx_flag}" \
                 >"${stdout_file}" 2>"${stderr_file}"
-        ) || exit_code=$?
+        ) &
+        local orchestrate_pid=$!
+        _run_task_updater "${log_dir}" &
+        local updater_pid=$!
+        wait "${orchestrate_pid}" || exit_code=$?
+        kill "${updater_pid}" 2>/dev/null || true
+        wait "${updater_pid}" 2>/dev/null || true
         _touch_heartbeat
 
         local workflow_manifest_ids
@@ -718,6 +816,7 @@ _run_issue() {
     done
 
     _restore_repo_state "${branch_name}"
+    rm -f "${RUNTIME_ROOT}/current_task.json"
 
     if [[ "${success}" == "true" ]]; then
         log "   ✓ issue ${issue_id} handled"
@@ -802,7 +901,7 @@ touch "${ATTEMPTED_FILE}" "${ISSUE_ATTEMPTS_FILE}"
 _touch_heartbeat
 
 _write_run_metadata "running"
-trap '_write_run_metadata "${FINAL_STATUS}"' EXIT
+trap '_write_run_metadata "${FINAL_STATUS}"; rm -f "${RUNTIME_ROOT}/current_task.json"' EXIT
 
 log "SAIL starting (run_id=${RUN_ID}, run_kind=${RUN_KIND}, dry_run=${DRY_RUN}, max_tasks=${MAX_TASKS}, max_retries=${MAX_RETRIES})"
 log "planner: engine=${PLANNER_ENGINE} model=${PLANNER_MODEL}"
@@ -821,6 +920,7 @@ if [[ "${DRY_RUN}" != "true" ]]; then
 fi
 
 _load_issues
+_write_last_discovered
 _touch_heartbeat
 log "discovered ${TOTAL} issues (min_priority<=${MIN_PRIORITY})"
 

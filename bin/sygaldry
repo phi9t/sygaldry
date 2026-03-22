@@ -18,6 +18,24 @@ if [[ -x "${ZEPHYR_BIN}" ]]; then
         sail)
             shift
             case "${1:-}" in
+                status)
+                    shift
+                    exec python3 "${SYGALDRY_HOME}/tools/agentic/sail_status.py" \
+                        --runtime-root "${SAIL_RUNTIME_ROOT:-/mnt/data_infra/zephyr_container_infra/sygaldry/logs/sail}" "$@"
+                    ;;
+                pause)
+                    shift
+                    _SAIL_RUNTIME_ROOT="${SAIL_RUNTIME_ROOT:-/mnt/data_infra/zephyr_container_infra/sygaldry/logs/sail}"
+                    mkdir -p "${_SAIL_RUNTIME_ROOT}"
+                    touch "${_SAIL_RUNTIME_ROOT}/cron.pause"
+                    echo "SAIL paused"
+                    ;;
+                resume)
+                    shift
+                    _SAIL_RUNTIME_ROOT="${SAIL_RUNTIME_ROOT:-/mnt/data_infra/zephyr_container_infra/sygaldry/logs/sail}"
+                    rm -f "${_SAIL_RUNTIME_ROOT}/cron.pause"
+                    echo "SAIL resumed"
+                    ;;
                 discover)
                     shift
                     exec python3 "${SYGALDRY_HOME}/tools/agentic/discover_issues.py" \
@@ -137,7 +155,7 @@ _sygaldry_completions() {
             mapfile -t COMPREPLY < <(compgen -W "enter job setup" -- "${cur}")
             return ;;
         sail)
-            mapfile -t COMPREPLY < <(compgen -W "discover discover-major worker cron ensure-infra supervisor analyze-run validate-plan --dry-run --repo-dir --run-id --artifacts-dir --issues-file --run-dir --output-dir --once --no-fix --runtime-root --poll-secs --stall-secs --empty-streak --min-empty-streak --backlog-file" -- "${cur}")
+            mapfile -t COMPREPLY < <(compgen -W "status pause resume discover discover-major worker cron ensure-infra supervisor analyze-run validate-plan --dry-run --repo-dir --run-id --artifacts-dir --issues-file --run-dir --output-dir --once --no-fix --runtime-root --poll-secs --stall-secs --empty-streak --min-empty-streak --backlog-file --watch --json --runs" -- "${cur}")
             return ;;
         validate)
             mapfile -t COMPREPLY < <(compgen -W "--quick --verify-only --infra --infra-full --snapshot --snapshot-no-gpu --uv-layering --multi-repo" -- "${cur}")
