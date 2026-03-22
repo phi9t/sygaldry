@@ -25,6 +25,7 @@ coverage.xml
 temporal/internal/activities/logs/
 temporal/orchestrate
 temporal/worker
+temporal/rfc
 temporal/logs/
 
 crates/zephyr/target
