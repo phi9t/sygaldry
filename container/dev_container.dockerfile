@@ -5,7 +5,6 @@ FROM nvidia/cuda:12.9.1-cudnn-devel-ubuntu24.04
 # Build arguments
 ARG BAZEL_VERSION=6.4.0
 ARG PYTHON_VERSION=3.13
-ARG RUST_VERSION=1.79.0
 ARG GO_VERSION=1.21.5
 ARG SPACK_VERSION=v1.1.0
 ARG HOST_UID=1000
@@ -266,7 +265,6 @@ LABEL version="1.0"
 LABEL cuda.version="12.9.1"
 LABEL bazel.version="${BAZEL_VERSION}"
 LABEL python.version="${PYTHON_VERSION}"
-LABEL rust.version="${RUST_VERSION}"
 LABEL go.version="${GO_VERSION}"
 LABEL sygaldry.entrypoints.baked="true"
 LABEL spack.version="${SPACK_VERSION}"
