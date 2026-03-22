@@ -8,6 +8,7 @@ ARG PYTHON_VERSION=3.13
 ARG RUST_VERSION=1.79.0
 ARG GO_VERSION=1.21.5
 ARG SPACK_VERSION=v1.1.0
+ARG SPACK_SHA=1f59de09df90aa5e9ac5f37e7dda84e43d02fd3d
 ARG HOST_UID=1000
 ARG HOST_GID=1000
 
@@ -26,17 +27,14 @@ ENV CUDA_CACHE_PATH=/opt/bazel_cache/cuda
 # System Dependencies and Base Tools
 # ============================================================================
 
-# Clean up any problematic repository configurations first
+# Clean up any problematic repository configurations and install base tools
 RUN rm -f /etc/apt/sources.list.d/kubernetes.list \
     /etc/apt/sources.list.d/google-cloud-sdk.list \
     /etc/apt/sources.list.d/cuda*.list \
     /etc/apt/sources.list.d/nvidia*.list \
     /etc/apt/trusted.gpg.d/kubernetes.gpg \
     /etc/apt/trusted.gpg.d/google-cloud-sdk.gpg \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
-
-RUN apt-get update && apt-get install -y --no-install-recommends \
+    && apt-get update && apt-get install -y --no-install-recommends \
     # Essential build tools
     build-essential \
     cmake \
@@ -187,9 +185,11 @@ RUN /bin/bash -lc "set -euo pipefail && \
         echo 'WARNING: cudnn_version.h not found'; \
     fi"
 
-# Install Spack (pinned to release)
+# Install Spack (pinned to release and SHA)
 RUN git clone -c feature.manyFiles=true --branch "${SPACK_VERSION}" --depth 1 \
-    https://github.com/spack/spack.git /opt/spack_src
+    https://github.com/spack/spack.git /opt/spack_src \
+    && git -C /opt/spack_src fetch --depth=1 origin "${SPACK_SHA}" \
+    && git -C /opt/spack_src checkout "${SPACK_SHA}"
 
 # Configure ccache
 RUN /usr/sbin/update-ccache-symlinks && \
@@ -230,14 +230,12 @@ RUN set -e && \
 RUN mkdir -p /opt/spack_store /opt/bazel_cache /opt/bazel_cache/cuda && \
     chown -R kvothe:kvothe /opt/spack_store /opt/bazel_cache /opt/spack_src
 
-# Bake default Spack env metadata and entrypoints into the image so runtime does
+# Bake default Spack env metadata into the image so runtime does
 # not depend on any specific host repository layout.
-RUN mkdir -p /opt/spack_env/default /opt/container_entrypoints
+RUN mkdir -p /opt/spack_env/default
 COPY --chown=kvothe:kvothe pkg/zephyr /opt/spack_env/default
-COPY --chown=kvothe:kvothe container/entrypoints /opt/container_entrypoints
-COPY --chown=kvothe:kvothe container/spack_owned_packages.conf /opt/container_entrypoints/spack_owned_packages.conf
-COPY --chown=kvothe:kvothe container/nvidia_overrides.txt /opt/container_entrypoints/nvidia_overrides.txt
-RUN chmod +x /opt/container_entrypoints/*.sh
+COPY --chown=kvothe:kvothe container/spack_owned_packages.conf /opt/spack_owned_packages.conf
+COPY --chown=kvothe:kvothe container/nvidia_overrides.txt /opt/nvidia_overrides.txt
 
 # ============================================================================
 # Environment Configuration
@@ -256,8 +254,11 @@ WORKDIR /workspace
 
 ENV SYGALDRY_SPACK_ENV=/opt/spack_env/default
 ENV SYGALDRY_IN_CONTAINER=1
-ENTRYPOINT ["/opt/container_entrypoints/default.sh"]
+ENTRYPOINT ["zephyr", "entrypoint", "default"]
 CMD ["bash", "--login"]
+
+ARG GIT_COMMIT=unknown
+ARG BUILD_DATE=unknown
 
 # Labels for metadata
 LABEL maintainer="Sygaldry Development Team"
@@ -271,3 +272,5 @@ LABEL go.version="${GO_VERSION}"
 LABEL sygaldry.entrypoints.baked="true"
 LABEL sygaldry.zephyr.version="1.0"
 LABEL spack.version="${SPACK_VERSION}"
+LABEL git.commit="${GIT_COMMIT}"
+LABEL build.date="${BUILD_DATE}"
