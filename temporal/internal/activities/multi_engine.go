@@ -3,6 +3,7 @@ package activities
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -95,9 +96,9 @@ func MultiEngineAgentTask(ctx context.Context, input MultiEngineAgentTaskInput) 
 			if err != nil {
 				stderr := err.Error()
 				if p := detectQuotaPattern(stderr); p != "" {
-					fmt.Printf("[multi_engine] engine %s quota/credits issue (%q)\n", engine, p)
+					slog.Warn("multi_engine: quota/credits issue", "engine", engine, "pattern", p)
 				} else {
-					fmt.Printf("[multi_engine] engine %s error: %s\n", engine, stderr)
+					slog.Warn("multi_engine: engine error", "engine", engine, "stderr", stderr)
 				}
 				continue
 			}
@@ -109,15 +110,15 @@ func MultiEngineAgentTask(ctx context.Context, input MultiEngineAgentTaskInput) 
 				combined = combined[:200]
 			}
 			if p := detectQuotaPattern(combined); p != "" {
-				fmt.Printf("[multi_engine] engine %s quota/credits issue (%q)\n", engine, p)
+				slog.Warn("multi_engine: quota/credits issue", "engine", engine, "pattern", p)
 			} else {
-				fmt.Printf("[multi_engine] engine %s failed (exit %d): %s\n", engine, result.ExitCode, combined)
+				slog.Warn("multi_engine: engine failed", "engine", engine, "exitCode", result.ExitCode, "combined", combined)
 			}
 		}
 
 		if round < maxRounds-1 {
 			wait := backoffBase * (1 << uint(round)) // 30, 60, 120...
-			fmt.Printf("[multi_engine] all engines failed round %d; sleeping %ds before retry\n", round, wait)
+			slog.Info("multi_engine: all engines failed this round, sleeping", "round", round, "sleepSeconds", wait)
 			select {
 			case <-ctx.Done():
 				return lastResult, ctx.Err()
