@@ -516,3 +516,66 @@ func TestResolveStepOutcomeActivityErrorAllowed(t *testing.T) {
 		t.Error("should NOT early return when AllowFailure is true")
 	}
 }
+
+func TestSortedStepIDs(t *testing.T) {
+	steps := map[string]PipelineStep{
+		"b-step": {ID: "b-step"},
+		"a-step": {ID: "a-step"},
+		"c-step": {ID: "c-step"},
+	}
+	ids := sortedStepIDs(steps)
+	if len(ids) != 3 {
+		t.Fatalf("want 3 IDs, got %d", len(ids))
+	}
+	for i, want := range []string{"a-step", "b-step", "c-step"} {
+		if ids[i] != want {
+			t.Errorf("ids[%d] = %q, want %q", i, ids[i], want)
+		}
+	}
+}
+
+func TestSortedStepIDsEmpty(t *testing.T) {
+	ids := sortedStepIDs(map[string]PipelineStep{})
+	if len(ids) != 0 {
+		t.Errorf("expected empty slice, got %v", ids)
+	}
+}
+
+func TestCloneMap(t *testing.T) {
+	orig := map[string]string{"a": "1", "b": "2"}
+	clone := cloneMap(orig)
+	if clone["a"] != "1" || clone["b"] != "2" {
+		t.Errorf("cloneMap content mismatch: %v", clone)
+	}
+	// Mutations to clone must not affect original
+	clone["a"] = "mutated"
+	if orig["a"] != "1" {
+		t.Error("cloneMap shared backing storage with original")
+	}
+}
+
+func TestCloneMapEmpty(t *testing.T) {
+	result := cloneMap(nil)
+	if result == nil || len(result) != 0 {
+		t.Errorf("cloneMap(nil) = %v, want empty map", result)
+	}
+}
+
+func TestMergeStringMaps(t *testing.T) {
+	base := map[string]string{"a": "1", "b": "2"}
+	override := map[string]string{"b": "override", "c": "3"}
+	result := mergeStringMaps(base, override)
+	if result["a"] != "1" {
+		t.Errorf("a = %q, want 1", result["a"])
+	}
+	if result["b"] != "override" {
+		t.Errorf("b = %q, want override", result["b"])
+	}
+	if result["c"] != "3" {
+		t.Errorf("c = %q, want 3", result["c"])
+	}
+	// Original base must not be mutated
+	if base["b"] != "2" {
+		t.Error("mergeStringMaps mutated base map")
+	}
+}
