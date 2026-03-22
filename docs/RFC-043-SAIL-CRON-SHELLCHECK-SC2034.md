@@ -1,8 +1,8 @@
 # RFC-043: Suppress SC2034 False Positive in sail_cron.sh
 
-**Status:** Draft — v1
+**Status:** Draft — v2
 **Date:** 2026-03-22
-**Priority:** Low
+**Priority:** Medium
 **Effort:** XS
 
 ---
@@ -30,7 +30,14 @@ It IS consumed by `tools/agentic/lib/sail_config.sh:5`:
 local config_file="${CONFIG:-${CONFIG_FILE:-}}"
 ```
 
-ShellCheck cannot track cross-file variable usage through `source`, so the warning is a false positive. However, the CI shellcheck step runs at warning level (`-S warning`) and this spurious finding obscures real issues.
+ShellCheck cannot track cross-file variable usage through `source`, so the warning is a false positive.
+
+**Note:** `validate_all.sh:315` suppresses SC2034 globally via `-e SC2034` across all shell files,
+so the CI run is currently clean. However:
+1. The standalone shellcheck invocation (`shellcheck -s bash -S warning tools/agentic/sail_cron.sh`) still emits the warning.
+2. The global suppression in `validate_all.sh` hides all SC2034 findings, including real unused-variable bugs in other shell scripts. RFC-050 addresses that broader issue.
+
+This RFC fixes `sail_cron.sh` so the global suppression can eventually be removed.
 
 ---
 
@@ -52,3 +59,4 @@ No logic changes. The comment documents why the variable appears unused to shell
 
 1. `shellcheck -s bash -S warning tools/agentic/sail_cron.sh` exits 0 with no output.
 2. `grep 'shellcheck disable=SC2034' tools/agentic/sail_cron.sh` returns the new line.
+3. This RFC is a prerequisite for RFC-050 (remove global SC2034 suppression from validate_all.sh).

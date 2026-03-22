@@ -1,8 +1,8 @@
 # RFC-048: Replace log.Fatal / log.Printf with slog in cmd/orchestrate and cmd/rfc
 
-**Status:** Draft — v1
+**Status:** Draft — v2
 **Date:** 2026-03-22
-**Priority:** Low
+**Priority:** Medium
 **Effort:** XS
 
 ---

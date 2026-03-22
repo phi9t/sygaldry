@@ -1,8 +1,8 @@
 # RFC-047: Replace fmt.Printf with slog in multi_engine.go
 
-**Status:** Draft — v1
+**Status:** Draft — v2
 **Date:** 2026-03-22
-**Priority:** Low
+**Priority:** Medium
 **Effort:** XS
 
 ---

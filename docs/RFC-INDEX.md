@@ -1,35 +1,43 @@
 # RFC Index
 
 **Last updated:** 2026-03-22
-**Total RFCs:** 8 open (49 created, 41 closed as complete or N/A)
+**Total RFCs:** 12 open (53 created, 41 closed as complete or N/A)
 
 ---
 
 ## Open RFCs
 
-| # | Title | Status | Priority | Effort |
-|---|-------|--------|----------|--------|
-| RFC-042 | Extract Duplicated envOr Helper to Internal Package | Draft — v1 | Medium | S |
-| RFC-043 | Suppress SC2034 False Positive in sail_cron.sh | Draft — v1 | Low | XS |
-| RFC-044 | Handle Activity Errors in RFCTaskWorkflow Review and Diff Gates | Draft — v1 | High | S |
-| RFC-045 | Parse TEMPORAL_LOG_MAX_BYTES Once at Worker Startup | Draft — v1 | Low | S |
-| RFC-046 | Extract Duplicated mergeStringMaps Helper to Internal Package | Draft — v1 | Low | S |
-| RFC-047 | Replace fmt.Printf with slog in multi_engine.go | Draft — v1 | Low | XS |
-| RFC-048 | Replace log.Fatal / log.Printf with slog in cmd/orchestrate and cmd/rfc | Draft — v1 | Low | XS |
-| RFC-049 | Add Rust Validation Section to validate_all.sh | Draft — v1 | Medium | S |
+| # | Title | Status | Priority | Effort | Blocked By |
+|---|-------|--------|----------|--------|------------|
+| RFC-042 | Extract Duplicated envOr Helper to Internal Package | Draft — v1 | Medium | S | |
+| RFC-043 | Suppress SC2034 False Positive in sail_cron.sh | Draft — v2 | Medium | XS | |
+| RFC-044 | Handle Activity Errors in RFCTaskWorkflow Review and Diff Gates | Draft — v1 | High | S | |
+| RFC-045 | Parse TEMPORAL_LOG_MAX_BYTES Once at Worker Startup | Draft — v1 | Low | S | |
+| RFC-046 | Extract Duplicated mergeStringMaps Helper to Internal Package | Draft — v1 | Low | S | |
+| RFC-047 | Replace fmt.Printf with slog in multi_engine.go | Draft — v2 | Medium | XS | |
+| RFC-048 | Replace log.Fatal / log.Printf with slog in cmd/orchestrate and cmd/rfc | Draft — v2 | Medium | XS | |
+| RFC-049 | Add Rust Validation Section to validate_all.sh | Draft — v1 | Medium | S | |
+| RFC-050 | Remove Global SC2034 Suppression from validate_all.sh | Draft — v1 | Medium | S | RFC-043 |
+| RFC-051 | Deduplicate Default Exec Engine List in rfc_impl.go | Draft — v1 | Medium | XS | |
+| RFC-052 | Add Unit Tests for sail_status.py | Draft — v1 | Medium | S | |
+| RFC-053 | Align discover_issues.py Shellcheck Invocation with validate_all.sh | Draft — v1 | Low | XS | |
 
 ---
 
 ## Suggested Implementation Order
 
-1. **RFC-044** — High priority correctness fix: swallowed activity errors cause silent misclassification (diff-gate infra failure treated as "no changes made").
-2. **RFC-049** — Medium priority gap: `validate_all.sh` has no Rust section; the `zephyr` binary can break silently in CI.
-3. **RFC-042** — Medium priority: `envOr` duplicated in 3 packages; extract to `temporal/internal/config`; unblocks consistent default constants.
-4. **RFC-047** — Low priority: `fmt.Printf` in `multi_engine.go` bypasses structured logging; 5 sites to convert.
-5. **RFC-048** — Low priority: `log.Fatal`/`log.Printf` in `cmd/orchestrate` and `cmd/rfc`; 3 sites to convert.
-6. **RFC-046** — Low priority: `mergeStringMaps` duplicated in `pipeline.go` and `plan/merger.go`; extract to `maputil`.
-7. **RFC-045** — Low priority cleanup: `TEMPORAL_LOG_MAX_BYTES` re-parsed per `runCommand` call; move to package-level initializer.
-8. **RFC-043** — Low priority lint hygiene: one-line shellcheck disable comment for SC2034 false positive in `sail_cron.sh`.
+1. **RFC-044** — High priority correctness: swallowed activity errors cause silent misclassification (diff-gate treats infra failures as "no changes made").
+2. **RFC-043** — Medium priority, XS effort, prerequisite for RFC-050: inline SC2034 disable in `sail_cron.sh`.
+3. **RFC-047** — Medium priority, XS effort: 5 `fmt.Printf` → `slog` in `multi_engine.go`; fixes invisible Temporal activity logging.
+4. **RFC-048** — Medium priority, XS effort: 3 `log.Fatal`/`log.Printf` → `slog` in `cmd/orchestrate` and `cmd/rfc`.
+5. **RFC-051** — Medium priority, XS effort: export `defaultExecEngines` in `multi_engine.go`; remove duplicate engine list from `rfc_impl.go`.
+6. **RFC-049** — Medium priority: `validate_all.sh` has no Rust section; `zephyr` binary can break silently.
+7. **RFC-052** — Medium priority: `sail_status.py` has zero tests; add unit tests for helper functions.
+8. **RFC-042** — Medium priority: `envOr` duplicated in 3 packages; extract to `temporal/internal/config`.
+9. **RFC-050** — Medium priority, depends on RFC-043: remove global `-e SC2034` from `validate_all.sh`.
+10. **RFC-046** — Low priority: `mergeStringMaps` duplicated in `pipeline.go` and `plan/merger.go`.
+11. **RFC-053** — Low priority, temporary fix: align `discover_issues.py` shellcheck with `validate_all.sh` SC2034 suppression.
+12. **RFC-045** — Low priority cleanup: `TEMPORAL_LOG_MAX_BYTES` re-parsed per `runCommand` call.
 
 ---
 

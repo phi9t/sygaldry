@@ -102,6 +102,8 @@ func AgentTask(ctx context.Context, input AgentTaskInput) (RunCommandResult, err
 			"-p", prompt,
 			"--allowedTools", "Edit,Read,Write,Bash,Glob,Grep",
 			"--permission-mode", "acceptEdits",
+			"--output-format", "stream-json",
+			"--verbose",
 		}
 		if input.Model != "" {
 			args = append(args, "--model", input.Model)
