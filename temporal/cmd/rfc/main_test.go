@@ -39,3 +39,11 @@ func TestPrintRFCOutput_UnsupportedFormat(t *testing.T) {
 		t.Error("expected error for unsupported format")
 	}
 }
+
+func TestRunMissingRFC(t *testing.T) {
+	// run() should return an error immediately when -rfc is not provided
+	// (no Temporal connection required).
+	if err := run([]string{}); err == nil {
+		t.Error("run() with no args should return error for missing -rfc flag")
+	}
+}
