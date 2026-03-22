@@ -83,4 +83,5 @@ def test_stats_file_is_written(monkeypatch, tmp_path, capsys):
         "todo",
         "ruff",
         "foundation_drift",
+        "rust_coverage",
     }

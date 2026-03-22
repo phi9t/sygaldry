@@ -153,7 +153,7 @@ def build_title(issue: Issue, files: list[str]) -> str:
 def build_approach(issue: Issue, files: list[str], failure_context: str) -> str:
     issue_type = str(issue.get("type", "issue"))
     issue_title = str(issue.get("title", "")).strip()
-    if not files and issue_type not in {"go_test", "foundation_drift"}:
+    if not files and issue_type not in {"go_test", "foundation_drift", "rfc"}:
         return "SKIP: This issue does not identify a concrete repository file to change safely."
 
     file_list = ", ".join(files) if files else "the affected repository files"
@@ -191,6 +191,17 @@ def build_approach(issue: Issue, files: list[str], failure_context: str) -> str:
         lines = [
             f"Add a focused unit test around {file_list} so the uncovered function gains meaningful execution coverage.",
             "Keep the new test tight and avoid broad fixture churn.",
+        ]
+    elif issue_type == "rfc":
+        rfc_doc = (
+            issue.get("context", "")
+            .replace("See ", "")
+            .replace(" in docs/ for full spec and acceptance criteria.", "")
+        )
+        lines = [
+            f"Read the RFC specification in docs/{rfc_doc} and implement exactly the changes described in the 'Proposed Solution' and 'Acceptance Criteria' sections.",
+            "Make only the changes specified by the RFC. Do not add unrelated improvements.",
+            "After implementing, verify ./validate_all.sh --quick passes.",
         ]
     else:
         lines = [
