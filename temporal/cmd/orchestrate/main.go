@@ -6,7 +6,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"sort"
@@ -92,7 +92,8 @@ type planManifestStep struct {
 
 func main() {
 	if err := run(os.Args[1:]); err != nil {
-		log.Fatal(err)
+		slog.Error("fatal error", "error", err)
+		os.Exit(1)
 	}
 }
 
@@ -194,7 +195,7 @@ func runCommand(args []string) error {
 		manifestLogDir = "logs"
 	}
 	if err := writePlanManifest(manifestLogDir, we.GetID(), runID, input.Steps); err != nil {
-		log.Printf("warning: unable to write run manifest: %v", err)
+		slog.Warn("unable to write run manifest", "error", err)
 	}
 
 	if *async {
