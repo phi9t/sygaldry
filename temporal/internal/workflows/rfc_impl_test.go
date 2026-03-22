@@ -153,3 +153,17 @@ func TestToAgentTaskEnginesEmpty(t *testing.T) {
 		t.Errorf("expected nil for empty input, got %v", got)
 	}
 }
+
+func TestSetRFCImplTaskState(t *testing.T) {
+	status := &RFCImplStatus{}
+	setRFCImplTaskState(status, "task-1", "running")
+	if status.TaskStates["task-1"] != "running" {
+		t.Errorf("TaskStates[task-1] = %q, want running", status.TaskStates["task-1"])
+	}
+	// Map must be initialized if nil
+	status2 := &RFCImplStatus{TaskStates: nil}
+	setRFCImplTaskState(status2, "task-2", "done")
+	if status2.TaskStates["task-2"] != "done" {
+		t.Errorf("TaskStates[task-2] = %q after nil init, want done", status2.TaskStates["task-2"])
+	}
+}
