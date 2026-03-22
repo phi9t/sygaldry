@@ -8,6 +8,7 @@ readonly SCRIPT_DIR
 ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 readonly ROOT_DIR
 CONFIG_FILE="${SCRIPT_DIR}/config.yaml"
+# shellcheck disable=SC2034  # used by sourced lib/sail_config.sh
 readonly CONFIG_FILE
 # shellcheck source=tools/agentic/lib/sail_config.sh
 source "${SCRIPT_DIR}/lib/sail_config.sh"
