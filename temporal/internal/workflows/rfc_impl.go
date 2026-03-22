@@ -422,7 +422,7 @@ func RFCTaskWorkflow(ctx workflow.Context, input RFCTaskInput) (RFCTaskResult, e
 		// has neither tracked diffs nor untracked files.
 		diffCtx := workflow.WithActivityOptions(ctx, gitAO)
 		var diffResult activities.RunCommandResult
-		_ = workflow.ExecuteActivity(diffCtx, activities.RunCommand, activities.RunCommandInput{
+		if err := workflow.ExecuteActivity(diffCtx, activities.RunCommand, activities.RunCommandInput{
 			Name:       fmt.Sprintf("check-diff-%s-a%d", input.Task.ID, attempt),
 			WorkflowID: workflowID,
 			StepID:     fmt.Sprintf("check-diff-a%d", attempt),
@@ -434,8 +434,10 @@ func RFCTaskWorkflow(ctx workflow.Context, input RFCTaskInput) (RFCTaskResult, e
 			},
 			WorkingDir: input.WorktreePath,
 			Env:        input.Env,
-		}).Get(ctx, &diffResult)
-		if diffResult.ExitCode == 0 {
+		}).Get(ctx, &diffResult); err != nil {
+			// Infrastructure error: assume changes exist and proceed to review.
+			logger.Warn("diff-check activity failed, proceeding to review", "error", err)
+		} else if diffResult.ExitCode == 0 {
 			// No working-tree changes — agent did not edit any files.
 			prevReviewFailure = "no changes made — implementer did not modify any tracked or untracked files"
 			if attempt == maxRetries-1 {
@@ -456,7 +458,7 @@ func RFCTaskWorkflow(ctx workflow.Context, input RFCTaskInput) (RFCTaskResult, e
 			"base_branch":      input.BaseBranch,
 		}
 		var specResult activities.RunCommandResult
-		_ = workflow.ExecuteActivity(reviewCtx, activities.AgentTask, activities.AgentTaskInput{
+		if err := workflow.ExecuteActivity(reviewCtx, activities.AgentTask, activities.AgentTaskInput{
 			Name:       fmt.Sprintf("review-spec-%s-a%d", input.Task.ID, attempt),
 			WorkflowID: workflowID,
 			StepID:     fmt.Sprintf("review-spec-a%d", attempt),
@@ -467,7 +469,14 @@ func RFCTaskWorkflow(ctx workflow.Context, input RFCTaskInput) (RFCTaskResult, e
 			WorkingDir: input.WorktreePath,
 			Params:     reviewParams,
 			Env:        input.Env,
-		}).Get(ctx, &specResult)
+		}).Get(ctx, &specResult); err != nil {
+			prevReviewFailure = fmt.Sprintf("spec review activity error: %v", err)
+			if attempt == maxRetries-1 {
+				result.FailReason = fmt.Sprintf("spec review failed after %d attempts: %s", maxRetries, prevReviewFailure)
+				result.Retries = attempt
+			}
+			continue
+		}
 
 		if extractSetOutput(specResult.Stdout, "review_passed") != "true" {
 			prevReviewFailure = extractSetOutput(specResult.Stdout, "review_failure")
@@ -483,7 +492,7 @@ func RFCTaskWorkflow(ctx workflow.Context, input RFCTaskInput) (RFCTaskResult, e
 
 		// c2. Review — Stage 2: Code Quality (only runs when spec compliance passes)
 		var qualResult activities.RunCommandResult
-		_ = workflow.ExecuteActivity(reviewCtx, activities.AgentTask, activities.AgentTaskInput{
+		if err := workflow.ExecuteActivity(reviewCtx, activities.AgentTask, activities.AgentTaskInput{
 			Name:       fmt.Sprintf("review-qual-%s-a%d", input.Task.ID, attempt),
 			WorkflowID: workflowID,
 			StepID:     fmt.Sprintf("review-qual-a%d", attempt),
@@ -494,7 +503,14 @@ func RFCTaskWorkflow(ctx workflow.Context, input RFCTaskInput) (RFCTaskResult, e
 			WorkingDir: input.WorktreePath,
 			Params:     reviewParams,
 			Env:        input.Env,
-		}).Get(ctx, &qualResult)
+		}).Get(ctx, &qualResult); err != nil {
+			prevReviewFailure = fmt.Sprintf("quality review activity error: %v", err)
+			if attempt == maxRetries-1 {
+				result.FailReason = fmt.Sprintf("quality review failed after %d attempts: %s", maxRetries, prevReviewFailure)
+				result.Retries = attempt
+			}
+			continue
+		}
 
 		if extractSetOutput(qualResult.Stdout, "review_passed") == "true" {
 			result.Succeeded = true
