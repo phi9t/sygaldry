@@ -1,13 +1,41 @@
 # RFC Index
 
 **Last updated:** 2026-03-22
-**Total RFCs:** 0 open (41 created, 41 closed as complete or N/A)
+**Total RFCs:** 8 open (49 created, 41 closed as complete or N/A)
+
+---
+
+## Open RFCs
+
+| # | Title | Status | Priority | Effort |
+|---|-------|--------|----------|--------|
+| RFC-042 | Extract Duplicated envOr Helper to Internal Package | Draft — v1 | Medium | S |
+| RFC-043 | Suppress SC2034 False Positive in sail_cron.sh | Draft — v1 | Low | XS |
+| RFC-044 | Handle Activity Errors in RFCTaskWorkflow Review and Diff Gates | Draft — v1 | High | S |
+| RFC-045 | Parse TEMPORAL_LOG_MAX_BYTES Once at Worker Startup | Draft — v1 | Low | S |
+| RFC-046 | Extract Duplicated mergeStringMaps Helper to Internal Package | Draft — v1 | Low | S |
+| RFC-047 | Replace fmt.Printf with slog in multi_engine.go | Draft — v1 | Low | XS |
+| RFC-048 | Replace log.Fatal / log.Printf with slog in cmd/orchestrate and cmd/rfc | Draft — v1 | Low | XS |
+| RFC-049 | Add Rust Validation Section to validate_all.sh | Draft — v1 | Medium | S |
+
+---
+
+## Suggested Implementation Order
+
+1. **RFC-044** — High priority correctness fix: swallowed activity errors cause silent misclassification (diff-gate infra failure treated as "no changes made").
+2. **RFC-049** — Medium priority gap: `validate_all.sh` has no Rust section; the `zephyr` binary can break silently in CI.
+3. **RFC-042** — Medium priority: `envOr` duplicated in 3 packages; extract to `temporal/internal/config`; unblocks consistent default constants.
+4. **RFC-047** — Low priority: `fmt.Printf` in `multi_engine.go` bypasses structured logging; 5 sites to convert.
+5. **RFC-048** — Low priority: `log.Fatal`/`log.Printf` in `cmd/orchestrate` and `cmd/rfc`; 3 sites to convert.
+6. **RFC-046** — Low priority: `mergeStringMaps` duplicated in `pipeline.go` and `plan/merger.go`; extract to `maputil`.
+7. **RFC-045** — Low priority cleanup: `TEMPORAL_LOG_MAX_BYTES` re-parsed per `runCommand` call; move to package-level initializer.
+8. **RFC-043** — Low priority lint hygiene: one-line shellcheck disable comment for SC2034 false positive in `sail_cron.sh`.
 
 ---
 
 ## All RFCs
 
-All 41 RFCs are closed. See Closed RFCs below.
+All 41 prior RFCs are closed. See Closed RFCs below.
 
 ---
 
@@ -49,7 +77,7 @@ All 41 RFCs are closed. See Closed RFCs below.
 | RFC-023 | Query and Signal Handlers for Pipeline | Done — `Pipeline` now exposes a `status` query, honors a `cancel` signal, and uses named search attributes; `RFCImpl` now exposes task-progress status; `temporal/scripts/register_search_attributes.sh` registers the new search-attribute keys |
 | RFC-019 | Rust Dead Code Cleanup | Done — removed the remaining dead-code suppressions by deleting unused error variants/helpers, scoping the CUDA-version helper to tests, and dropping stale `#[allow(dead_code)]` annotations |
 | RFC-003 | Temporal Production Readiness | Done — worker config now supports YAML plus env/CLI overrides, `max_concurrent_activities`, and an HTTP `/healthz` endpoint via `temporal/cmd/worker` |
-| RFC-031 | Add Explicit Dev-Only Unrestricted sudo Opt-In | Done — `ZEPHYR_DEV_SUDO=1` now explicitly opts the Zephyr launcher into `--user=0:0` for local debugging without widening the image’s default sudoers policy |
+| RFC-031 | Add Explicit Dev-Only Unrestricted sudo Opt-In | Done — `ZEPHYR_DEV_SUDO=1` now explicitly opts the Zephyr launcher into `--user=0:0` for local debugging without widening the image's default sudoers policy |
 | RFC-004 | SAIL Supervisor Decomposition | Done — `WorkerManager` extracted to `worker_manager.py`, `TemporalProbe` to `temporal_probe.py`; `sail_supervisor.py` reduced to state-machine + CLI; all tests pass |
 | RFC-006 | Rust Entrypoint Consolidation | Done — `build_rust_mode()` in `docker_args.rs` emits `--entrypoint zephyr`; `launch()` in `launcher.rs` uses it when `ZEPHYR_USE_RUST_ENTRYPOINTS=1` or image carries `sygaldry.zephyr.version` label; Dockerfile now sets both labels |
 | RFC-002 | Rust as Container Infrastructure Foundation | Done — `tools/zephyr_job` deleted; `container/entrypoints/` (9 bash scripts) deleted; `bin/sygaldry` slimmed 256→149 lines; bash `job)` fallback replaced with clear error; all 9 entrypoints verified covered by `entrypoint.rs` |
