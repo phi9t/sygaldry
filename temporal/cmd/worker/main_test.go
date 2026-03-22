@@ -255,3 +255,10 @@ func TestWorkerConfigFields(t *testing.T) {
 		t.Errorf("workerConfig numeric fields not correctly set: %+v", cfg)
 	}
 }
+
+func TestStartHealthServerZeroPort(t *testing.T) {
+	// port <= 0 → function returns immediately (no listener started)
+	var ready atomic.Bool
+	startHealthServer(0, &ready)
+	startHealthServer(-1, &ready)
+}

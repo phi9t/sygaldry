@@ -238,3 +238,22 @@ func TestValidateDependencyCycle(t *testing.T) {
 		t.Fatalf("expected cycle error, got: %v", err)
 	}
 }
+
+func TestAllowedTypes(t *testing.T) {
+	types := AllowedTypes()
+	if len(types) == 0 {
+		t.Fatal("AllowedTypes returned empty map")
+	}
+	// Known required types
+	for _, required := range []string{"command", "container_job", "hf_download_model"} {
+		if !types[required] {
+			t.Errorf("AllowedTypes missing expected type %q", required)
+		}
+	}
+	// Returned map must be a copy — mutations must not affect subsequent calls
+	types["injected_fake_type"] = true
+	fresh := AllowedTypes()
+	if fresh["injected_fake_type"] {
+		t.Error("AllowedTypes returned the internal map instead of a copy")
+	}
+}

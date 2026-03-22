@@ -66,6 +66,7 @@ EOF
     return ${rc}
 }
 
+# shellcheck disable=SC2120  # accepts optional passthrough args like run_with_mock_zephyr
 run_without_zephyr() {
     local empty_dir
     empty_dir="$(mktemp -d)"

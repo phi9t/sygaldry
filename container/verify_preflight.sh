@@ -6,7 +6,6 @@ set -euo pipefail
 
 PROJECT_ID="${SYGALDRY_PROJECT_ID:-zephyr-verify}"
 FIX_GPU="${SYGALDRY_FIX_GPU:-false}"
-REQUIRED_CUDA_VERSION="${SYGALDRY_REQUIRED_CUDA_VERSION:-12.9}"
 
 usage() {
   cat <<'USAGE'
