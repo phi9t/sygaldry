@@ -236,7 +236,7 @@ def discover_shellcheck(repo_dir: Path, max_per_type: int) -> list[Issue]:
         for f in sh_files
         if not any(
             part.startswith(".")
-            or part in ("node_modules", "vendor", "portable", "assets")
+            or part in ("node_modules", "vendor")
             for part in f.parts
         )
     ]
