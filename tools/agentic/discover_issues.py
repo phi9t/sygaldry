@@ -251,6 +251,8 @@ def discover_shellcheck(repo_dir: Path, max_per_type: int) -> list[Issue]:
                 "json",
                 "-S",
                 "warning",
+                "-e",
+                "SC2034",  # temporary: aligns with validate_all.sh -e SC2034 until RFC-043+050 land
                 "--",
                 *[str(f) for f in sh_files],
             ],
