@@ -1,6 +1,6 @@
 # RFC-056: Temporal Worker Startup Config Validation
 
-**Status:** Draft — v1
+**Status:** Done — SAIL (commit 2dd7f37)
 **Date:** 2026-03-23
 **Priority:** Medium
 **Effort:** S

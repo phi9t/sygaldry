@@ -1,7 +1,7 @@
 # RFC Index
 
 **Last updated:** 2026-03-23
-**Total RFCs:** 9 open (64 created, 55 closed as complete or N/A)
+**Total RFCs:** 8 open (64 created, 56 closed as complete or N/A)
 
 ---
 
@@ -10,7 +10,6 @@
 | # | Title | Status | Priority | Effort | Blocked By |
 |---|-------|--------|----------|--------|------------|
 | RFC-055 | Auto-Close RFC Documents When SAIL Lands a Fix | Draft — v1 | Medium | S | |
-| RFC-056 | Temporal Worker Startup Config Validation | Draft — v1 | Medium | S | |
 | RFC-057 | Add `--dry-run` Flag to `zephyr shell` | Draft — v1 | Medium | M | |
 | RFC-059 | Remove Deprecated NVIDIA Diagnostic Shims | Draft — v1 | Low | XS | |
 | RFC-060 | Remove Deprecated Autobuild/Autoretry Shell Scripts | Draft — v1 | Low | S | |
@@ -23,21 +22,20 @@
 
 ## Suggested Implementation Order
 
-1. **RFC-056** — Medium priority: worker startup validation; add `validateWorkerConfig()` to `temporal/cmd/worker/main.go`.
-2. **RFC-055** — Medium priority: auto-close RFCs on SAIL landing; adds `close_rfc.py` + step to `improvement_loop.yaml`.
-3. **RFC-063** — Medium priority: stale lease auto-recovery; prevents user lockout after container crashes.
-4. **RFC-057** — Medium priority, larger effort: `zephyr shell --dry-run` for debugging.
-5. **RFC-059** — Low priority, XS: remove `inspect_nvidia_setup.sh` and `fix_nvidia_setup.sh` shims.
-6. **RFC-060** — Low priority: delete `tools/zephyr_autobuild.sh`, `zephyr_autoretry.sh`, `zephyr_autoretry_tmux.sh`.
-7. **RFC-061** — Low priority: remove unused `k8s_job` step type from Temporal activities.
-8. **RFC-062** — Low priority, depends on RFC-059: delete `launch_container.sh` shim and Go fallback.
-9. **RFC-064** — Low priority: add `version: 1` field to plan YAML schema.
+1. **RFC-055** — Medium priority: auto-close RFCs on SAIL landing; adds `close_rfc.py` + step to `improvement_loop.yaml`.
+2. **RFC-063** — Medium priority: stale lease auto-recovery; prevents user lockout after container crashes.
+3. **RFC-057** — Medium priority, larger effort: `zephyr shell --dry-run` for debugging.
+4. **RFC-059** — Low priority, XS: remove `inspect_nvidia_setup.sh` and `fix_nvidia_setup.sh` shims.
+5. **RFC-060** — Low priority: delete `tools/zephyr_autobuild.sh`, `zephyr_autoretry.sh`, `zephyr_autoretry_tmux.sh`.
+6. **RFC-061** — Low priority: remove unused `k8s_job` step type from Temporal activities.
+7. **RFC-062** — Low priority, depends on RFC-059: delete `launch_container.sh` shim and Go fallback.
+8. **RFC-064** — Low priority: add `version: 1` field to plan YAML schema.
 
 ---
 
 ## All RFCs
 
-All 55 prior RFCs are closed. See Closed RFCs below.
+All 56 prior RFCs are closed. See Closed RFCs below.
 
 ---
 
@@ -99,4 +97,5 @@ All 55 prior RFCs are closed. See Closed RFCs below.
 | RFC-052 | Add Unit Tests for sail_status.py | Done — SAIL |
 | RFC-053 | Align discover_issues.py Shellcheck Invocation with validate_all.sh | Done — SAIL |
 | RFC-054 | Add discover_open_rfcs Source to SAIL Issue Discovery | Done — SAIL (commit d845dd8) |
+| RFC-056 | Temporal Worker Startup Config Validation | Done — SAIL (commit 2dd7f37) |
 | RFC-058 | Remove Stale SC2034 Workaround from discover_issues.py | Done — SAIL (commit 923b1a1) |
