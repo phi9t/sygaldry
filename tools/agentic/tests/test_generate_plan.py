@@ -98,3 +98,22 @@ def test_generate_plan_includes_retry_failure_context(tmp_path: Path) -> None:
         in plan_text
     )
     assert "missing quote" in plan_text
+
+
+def test_generate_plan_rfc_title_extraction(tmp_path: Path) -> None:
+    stdout, _ = run_generate_plan(
+        tmp_path,
+        {
+            "id": "rfc-042",
+            "priority": 3,
+            "type": "rfc",
+            "title": "RFC-042: Extract Duplicated envOr Helper to Internal Package",
+            "description": "See RFC-042-*.md in docs/ for full spec...",
+            "files": [],
+            "context": "See RFC-042-*.md in docs/ for full spec...",
+        },
+    )
+    assert (
+        "::set-output name=task_title::extract duplicated envor helper to internal package"
+        in stdout
+    )

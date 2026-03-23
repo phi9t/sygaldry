@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 from pathlib import Path
 from typing import Any
 
@@ -147,6 +148,11 @@ def build_title(issue: Issue, files: list[str]) -> str:
         return trim_title(
             f"add test coverage for {coverage_target(issue, display_path)}"
         )
+    if issue_type == "rfc":
+        issue_title = str(issue.get("title", ""))
+        m = re.match(r"RFC-\d+[:\s]+(.+)", issue_title, re.I)
+        description = m.group(1) if m else issue_title
+        return trim_title(description.lower())
     return trim_title(f"resolve {issue_type} issue {issue.get('id', 'unknown')}")
 
 
