@@ -1,7 +1,7 @@
 # RFC Index
 
-**Last updated:** 2026-03-22
-**Total RFCs:** 12 open (53 created, 41 closed as complete or N/A)
+**Last updated:** 2026-03-23
+**Total RFCs:** 12 open (54 created, 42 closed as complete or N/A)
 
 ---
 
@@ -92,3 +92,4 @@ All 41 prior RFCs are closed. See Closed RFCs below.
 | RFC-012 | Orchestrate Command Decomposition | Done — `internal/plan/` package created with `loader.go` (115L), `validator.go` (211L), `merger.go` (347L) and matching test files; `cmd/orchestrate/main.go` reduced 1003→372 lines; all tests pass |
 | RFC-013 | Dockerfile Cache Layer Optimization | Done — merged apt cleanup+install layers; pinned Spack to `ARG SPACK_SHA`; fixed build-breaking bug (removed deleted `container/entrypoints/` COPY); updated `ENTRYPOINT` to `["zephyr", "entrypoint", "default"]`; added `GIT_COMMIT`/`BUILD_DATE` labels |
 | RFC-016 | K3s YAML Path Externalization | Done — `k3s/lib/paths.env` defines all path defaults; `k3s-common.sh` sources and exports them; all 3 YAML templates use `${ZEPHYR_*}` variables with zero hardcoded `/mnt/data_infra` paths; `kentai` now requires explicit `--project-id` |
+| RFC-054 | Add discover_open_rfcs Source to SAIL Issue Discovery | Done — `discover_open_rfcs()` function implemented in `tools/agentic/discover_issues.py`; parses `docs/RFC-INDEX.md` "## Open RFCs" section and emits `type: "rfc"` issues; registered as `open_rfcs` source in the sources list |
