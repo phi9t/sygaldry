@@ -629,6 +629,7 @@ main() {
         else
             CFG[entrypoint_path]="${CONTAINER_WORKSPACE}/container/entrypoints/${entrypoint_name}.sh"
         fi
+        # shellcheck disable=SC2034  # CFG is passed by nameref to build_docker_args
         CFG[project_root]="$(resolve_mount_path "${SYGALDRY_WORKSPACE_SOURCE:-${PWD}}")"
 
         readarray -t docker_args < <(build_docker_args CFG)

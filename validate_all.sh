@@ -340,8 +340,7 @@ if [[ "${QUICK}" == "false" ]]; then
         fi
 
         if [[ ${#shell_files[@]} -gt 0 ]]; then
-            run_check "shellcheck" "${SHELLCHECK}" -s bash -S warning "${shell_files[@]}" \
-                -e SC2034 # Ignore unused variable warnings for config constants
+            run_check "shellcheck" "${SHELLCHECK}" -s bash -S warning "${shell_files[@]}"
         fi
     else
         log "SKIP: shellcheck not found"
