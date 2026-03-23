@@ -8,6 +8,8 @@ import (
 
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
+
+	"temporal-orchestration/internal/maputil"
 )
 
 func TestNewPipelineStatusStartsPending(t *testing.T) {
@@ -564,7 +566,7 @@ func TestCloneMapEmpty(t *testing.T) {
 func TestMergeStringMaps(t *testing.T) {
 	base := map[string]string{"a": "1", "b": "2"}
 	override := map[string]string{"b": "override", "c": "3"}
-	result := mergeStringMaps(base, override)
+	result := maputil.MergeStringMaps(base, override)
 	if result["a"] != "1" {
 		t.Errorf("a = %q, want 1", result["a"])
 	}

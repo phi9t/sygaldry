@@ -4,6 +4,7 @@ import (
 	"reflect"
 	"testing"
 
+	"temporal-orchestration/internal/maputil"
 	"temporal-orchestration/internal/workflows"
 )
 
@@ -467,7 +468,7 @@ func TestMergeStringMaps(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := mergeStringMaps(tt.base, tt.override)
+			got := maputil.MergeStringMaps(tt.base, tt.override)
 			if !reflect.DeepEqual(got, tt.want) {
 				t.Fatalf("mergeStringMaps() = %#v, want %#v", got, tt.want)
 			}

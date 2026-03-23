@@ -1,6 +1,7 @@
 package plan
 
 import (
+	"temporal-orchestration/internal/maputil"
 	"temporal-orchestration/internal/workflows"
 )
 
@@ -33,7 +34,7 @@ func MergeStep(base, override workflows.PipelineStep) workflows.PipelineStep {
 		merged.Args = append([]string(nil), override.Args...)
 	}
 	if override.Env != nil {
-		merged.Env = mergeStringMaps(merged.Env, override.Env)
+		merged.Env = maputil.MergeStringMaps(merged.Env, override.Env)
 	}
 	if override.WorkingDir != "" {
 		merged.WorkingDir = override.WorkingDir
@@ -80,17 +81,6 @@ func MergeStep(base, override workflows.PipelineStep) workflows.PipelineStep {
 	}
 
 	return merged
-}
-
-func mergeStringMaps(base map[string]string, override map[string]string) map[string]string {
-	result := map[string]string{}
-	for key, value := range base {
-		result[key] = value
-	}
-	for key, value := range override {
-		result[key] = value
-	}
-	return result
 }
 
 func mergeRetrySpec(base, override *workflows.RetrySpec) *workflows.RetrySpec {
@@ -145,10 +135,10 @@ func mergeDockerBuildSpec(base, override *workflows.DockerBuildSpec) *workflows.
 		merged.Dockerfile = override.Dockerfile
 	}
 	if override.BuildArgs != nil {
-		merged.BuildArgs = mergeStringMaps(merged.BuildArgs, override.BuildArgs)
+		merged.BuildArgs = maputil.MergeStringMaps(merged.BuildArgs, override.BuildArgs)
 	}
 	if override.Labels != nil {
-		merged.Labels = mergeStringMaps(merged.Labels, override.Labels)
+		merged.Labels = maputil.MergeStringMaps(merged.Labels, override.Labels)
 	}
 	if override.Platform != "" {
 		merged.Platform = override.Platform
@@ -182,7 +172,7 @@ func mergePackageBuildSpec(base, override *workflows.PackageBuildSpec) *workflow
 		merged.Args = append([]string(nil), override.Args...)
 	}
 	if override.Env != nil {
-		merged.Env = mergeStringMaps(merged.Env, override.Env)
+		merged.Env = maputil.MergeStringMaps(merged.Env, override.Env)
 	}
 	if override.WorkingDir != "" {
 		merged.WorkingDir = override.WorkingDir
@@ -205,7 +195,7 @@ func mergeContainerJobSpec(base, override *workflows.ContainerJobSpec) *workflow
 		merged.Command = override.Command
 	}
 	if override.Env != nil {
-		merged.Env = mergeStringMaps(merged.Env, override.Env)
+		merged.Env = maputil.MergeStringMaps(merged.Env, override.Env)
 	}
 	if override.GPU {
 		merged.GPU = true
@@ -262,7 +252,7 @@ func mergeK8sJobSpec(base, override *workflows.K8sJobSpec) *workflows.K8sJobSpec
 		merged.Command = override.Command
 	}
 	if override.Env != nil {
-		merged.Env = mergeStringMaps(merged.Env, override.Env)
+		merged.Env = maputil.MergeStringMaps(merged.Env, override.Env)
 	}
 	if override.GPU {
 		merged.GPU = true
@@ -303,10 +293,10 @@ func mergeAgentTaskSpec(base, override *workflows.AgentTaskSpec) *workflows.Agen
 		merged.Sandbox = override.Sandbox
 	}
 	if override.Env != nil {
-		merged.Env = mergeStringMaps(merged.Env, override.Env)
+		merged.Env = maputil.MergeStringMaps(merged.Env, override.Env)
 	}
 	if override.Params != nil {
-		merged.Params = mergeStringMaps(merged.Params, override.Params)
+		merged.Params = maputil.MergeStringMaps(merged.Params, override.Params)
 	}
 	return &merged
 }
@@ -341,7 +331,7 @@ func mergeGitOpSpec(base, override *workflows.GitOpSpec) *workflows.GitOpSpec {
 		merged.GitOpsScript = override.GitOpsScript
 	}
 	if override.Env != nil {
-		merged.Env = mergeStringMaps(merged.Env, override.Env)
+		merged.Env = maputil.MergeStringMaps(merged.Env, override.Env)
 	}
 	return &merged
 }

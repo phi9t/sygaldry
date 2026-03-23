@@ -13,6 +13,7 @@ import (
 	"go.temporal.io/sdk/workflow"
 
 	"temporal-orchestration/internal/activities"
+	"temporal-orchestration/internal/maputil"
 )
 
 type When struct {
@@ -495,39 +496,39 @@ func prepareStep(step PipelineStep, input PipelineInput, outcomes map[string]Ste
 	rendered := step
 
 	planEnv := cloneMap(input.Env)
-	rendered.Env = mergeStringMaps(planEnv, rendered.Env)
+	rendered.Env = maputil.MergeStringMaps(planEnv, rendered.Env)
 	if rendered.PackageBuild != nil {
-		rendered.PackageBuild.Env = mergeStringMaps(planEnv, rendered.PackageBuild.Env)
+		rendered.PackageBuild.Env = maputil.MergeStringMaps(planEnv, rendered.PackageBuild.Env)
 	}
 	if rendered.ContainerJob != nil {
-		rendered.ContainerJob.Env = mergeStringMaps(planEnv, rendered.ContainerJob.Env)
+		rendered.ContainerJob.Env = maputil.MergeStringMaps(planEnv, rendered.ContainerJob.Env)
 	}
 	if rendered.K8sJob != nil {
-		rendered.K8sJob.Env = mergeStringMaps(planEnv, rendered.K8sJob.Env)
+		rendered.K8sJob.Env = maputil.MergeStringMaps(planEnv, rendered.K8sJob.Env)
 	}
 	if rendered.AgentTask != nil {
-		rendered.AgentTask.Env = mergeStringMaps(planEnv, rendered.AgentTask.Env)
+		rendered.AgentTask.Env = maputil.MergeStringMaps(planEnv, rendered.AgentTask.Env)
 	}
 	if rendered.GitOp != nil {
-		rendered.GitOp.Env = mergeStringMaps(planEnv, rendered.GitOp.Env)
+		rendered.GitOp.Env = maputil.MergeStringMaps(planEnv, rendered.GitOp.Env)
 	}
 
 	envLookup := cloneMap(planEnv)
-	envLookup = mergeStringMaps(envLookup, rendered.Env)
+	envLookup = maputil.MergeStringMaps(envLookup, rendered.Env)
 	if rendered.PackageBuild != nil {
-		envLookup = mergeStringMaps(envLookup, rendered.PackageBuild.Env)
+		envLookup = maputil.MergeStringMaps(envLookup, rendered.PackageBuild.Env)
 	}
 	if rendered.ContainerJob != nil {
-		envLookup = mergeStringMaps(envLookup, rendered.ContainerJob.Env)
+		envLookup = maputil.MergeStringMaps(envLookup, rendered.ContainerJob.Env)
 	}
 	if rendered.K8sJob != nil {
-		envLookup = mergeStringMaps(envLookup, rendered.K8sJob.Env)
+		envLookup = maputil.MergeStringMaps(envLookup, rendered.K8sJob.Env)
 	}
 	if rendered.AgentTask != nil {
-		envLookup = mergeStringMaps(envLookup, rendered.AgentTask.Env)
+		envLookup = maputil.MergeStringMaps(envLookup, rendered.AgentTask.Env)
 	}
 	if rendered.GitOp != nil {
-		envLookup = mergeStringMaps(envLookup, rendered.GitOp.Env)
+		envLookup = maputil.MergeStringMaps(envLookup, rendered.GitOp.Env)
 	}
 
 	if err := expandStepTemplates(&rendered, outcomes, input.Params, envLookup); err != nil {
@@ -692,14 +693,6 @@ func cloneMap(in map[string]string) map[string]string {
 		out[k] = v
 	}
 	return out
-}
-
-func mergeStringMaps(base map[string]string, override map[string]string) map[string]string {
-	result := cloneMap(base)
-	for k, v := range override {
-		result[k] = v
-	}
-	return result
 }
 
 func startActivity(ctx workflow.Context, info *workflow.Info, logDir string, step PipelineStep) workflow.Future {
