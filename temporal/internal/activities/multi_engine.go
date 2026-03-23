@@ -31,7 +31,9 @@ type MultiEngineAgentTaskInput struct {
 	BackoffBase int               `json:"backoffBase"` // seconds for first inter-round sleep; default: 30
 }
 
-var defaultExecEngines = []AgentTaskEngine{
+// DefaultExecEngines is the ordered list of engines tried by MultiEngineAgentTask
+// when no explicit engine list is provided.
+var DefaultExecEngines = []AgentTaskEngine{
 	AgentEngineCursor,
 	AgentEngineGemini,
 	AgentEngineOpenCode,
@@ -62,7 +64,7 @@ func detectQuotaPattern(text string) string {
 func MultiEngineAgentTask(ctx context.Context, input MultiEngineAgentTaskInput) (RunCommandResult, error) {
 	engines := input.Engines
 	if len(engines) == 0 {
-		engines = defaultExecEngines
+		engines = DefaultExecEngines
 	}
 	maxRounds := input.MaxRounds
 	if maxRounds <= 0 {

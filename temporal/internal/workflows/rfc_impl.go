@@ -345,12 +345,7 @@ func RFCTaskWorkflow(ctx workflow.Context, input RFCTaskInput) (RFCTaskResult, e
 	}
 	engines := input.ExecEngines
 	if len(engines) == 0 {
-		engines = []activities.AgentTaskEngine{
-			activities.AgentEngineCursor,
-			activities.AgentEngineGemini,
-			activities.AgentEngineOpenCode,
-			activities.AgentEngineCodex,
-		}
+		engines = activities.DefaultExecEngines
 	}
 
 	var prevReviewFailure string

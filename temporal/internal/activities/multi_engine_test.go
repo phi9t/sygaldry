@@ -14,19 +14,19 @@ func TestMultiEngineDefaultEngines(t *testing.T) {
 	if len(engines) != 0 {
 		t.Errorf("input.Engines should be empty by default, got %v", engines)
 	}
-	// Verify defaultExecEngines has expected entries
+	// Verify DefaultExecEngines has expected entries
 	expected := []AgentTaskEngine{
 		AgentEngineCursor,
 		AgentEngineGemini,
 		AgentEngineOpenCode,
 		AgentEngineCodex,
 	}
-	if len(defaultExecEngines) != len(expected) {
-		t.Fatalf("defaultExecEngines len=%d, want %d", len(defaultExecEngines), len(expected))
+	if len(DefaultExecEngines) != len(expected) {
+		t.Fatalf("DefaultExecEngines len=%d, want %d", len(DefaultExecEngines), len(expected))
 	}
 	for i, e := range expected {
-		if defaultExecEngines[i] != e {
-			t.Errorf("defaultExecEngines[%d]=%s, want %s", i, defaultExecEngines[i], e)
+		if DefaultExecEngines[i] != e {
+			t.Errorf("DefaultExecEngines[%d]=%s, want %s", i, DefaultExecEngines[i], e)
 		}
 	}
 }
