@@ -619,10 +619,18 @@ func TestRunCommandEnvOverride(t *testing.T) {
 	}
 }
 
+func TestMaxLogBytesDefault(t *testing.T) {
+	if maxLogBytes != 10_000 {
+		t.Errorf("expected default maxLogBytes=10000, got %d", maxLogBytes)
+	}
+}
+
 func TestRunCommandTruncation(t *testing.T) {
 	dir := t.TempDir()
-	// Set low max bytes
-	t.Setenv("TEMPORAL_LOG_MAX_BYTES", "10")
+	// Set low max bytes directly (package-level var is initialized once at startup)
+	orig := maxLogBytes
+	maxLogBytes = 10
+	t.Cleanup(func() { maxLogBytes = orig })
 
 	result, err := RunCommand(context.Background(), RunCommandInput{
 		Command:    "bash",

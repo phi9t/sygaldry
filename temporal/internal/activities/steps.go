@@ -23,6 +23,21 @@ import (
 	"go.temporal.io/sdk/activity"
 )
 
+var maxLogBytes = func() int64 {
+	const defaultMaxBytes = int64(10_000)
+	v := os.Getenv("TEMPORAL_LOG_MAX_BYTES")
+	if v == "" {
+		return defaultMaxBytes
+	}
+	n, err := strconv.ParseInt(v, 10, 64)
+	if err != nil || n <= 0 {
+		slog.Warn("TEMPORAL_LOG_MAX_BYTES invalid, using default",
+			"value", v, "default", defaultMaxBytes)
+		return defaultMaxBytes
+	}
+	return n
+}()
+
 type RunCommandInput struct {
 	Name        string            `json:"name"`
 	Command     string            `json:"command"`
@@ -965,16 +980,9 @@ func runCommand(ctx context.Context, input RunCommandInput) (RunCommandResult, e
 		StructuredPath: lw.structuredPath,
 	}
 
-	maxBytes := int64(10_000)
-	if value := os.Getenv("TEMPORAL_LOG_MAX_BYTES"); value != "" {
-		if parsed, parseErr := strconv.ParseInt(value, 10, 64); parseErr == nil && parsed > 0 {
-			maxBytes = parsed
-		}
-	}
-
-	if maxBytes > 0 {
-		result.Stdout, result.StdoutTruncated = truncate(result.Stdout, maxBytes)
-		result.Stderr, result.StderrTruncated = truncate(result.Stderr, maxBytes)
+	if maxLogBytes > 0 {
+		result.Stdout, result.StdoutTruncated = truncate(result.Stdout, maxLogBytes)
+		result.Stderr, result.StderrTruncated = truncate(result.Stderr, maxLogBytes)
 	}
 
 	emitEvent(lw.logDir, StepEvent{
