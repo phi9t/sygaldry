@@ -264,3 +264,55 @@ func TestStartHealthServerZeroPort(t *testing.T) {
 	startHealthServer(0, &ready)
 	startHealthServer(-1, &ready)
 }
+
+// ---------------------------------------------------------------------------
+// validateConfig
+// ---------------------------------------------------------------------------
+
+func TestValidateConfigValid(t *testing.T) {
+	cfg := workerConfig{
+		Address:                 "localhost:7233",
+		Namespace:               "default",
+		TaskQueue:               "orchestration",
+		MaxConcurrentActivities: 10,
+		HealthPort:              8080,
+	}
+	if err := validateConfig(cfg); err != nil {
+		t.Errorf("validateConfig() unexpected error = %v", err)
+	}
+}
+
+func TestValidateConfigEmptyAddress(t *testing.T) {
+	cfg := workerConfig{Namespace: "default", TaskQueue: "q", MaxConcurrentActivities: 1}
+	if err := validateConfig(cfg); err == nil {
+		t.Error("validateConfig() error = nil, want error for empty address")
+	}
+}
+
+func TestValidateConfigEmptyNamespace(t *testing.T) {
+	cfg := workerConfig{Address: "localhost:7233", TaskQueue: "q", MaxConcurrentActivities: 1}
+	if err := validateConfig(cfg); err == nil {
+		t.Error("validateConfig() error = nil, want error for empty namespace")
+	}
+}
+
+func TestValidateConfigEmptyTaskQueue(t *testing.T) {
+	cfg := workerConfig{Address: "localhost:7233", Namespace: "default", MaxConcurrentActivities: 1}
+	if err := validateConfig(cfg); err == nil {
+		t.Error("validateConfig() error = nil, want error for empty task_queue")
+	}
+}
+
+func TestValidateConfigZeroMaxConcurrentActivities(t *testing.T) {
+	cfg := workerConfig{Address: "localhost:7233", Namespace: "default", TaskQueue: "q", MaxConcurrentActivities: 0}
+	if err := validateConfig(cfg); err == nil {
+		t.Error("validateConfig() error = nil, want error for max_concurrent_activities=0")
+	}
+}
+
+func TestValidateConfigNegativeMaxConcurrentActivities(t *testing.T) {
+	cfg := workerConfig{Address: "localhost:7233", Namespace: "default", TaskQueue: "q", MaxConcurrentActivities: -1}
+	if err := validateConfig(cfg); err == nil {
+		t.Error("validateConfig() error = nil, want error for max_concurrent_activities=-1")
+	}
+}

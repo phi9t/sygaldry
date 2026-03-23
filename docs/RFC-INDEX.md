@@ -1,7 +1,7 @@
 # RFC Index
 
 **Last updated:** 2026-03-23
-**Total RFCs:** 12 open (54 created, 42 closed as complete or N/A)
+**Total RFCs:** 16 open (58 created, 42 closed as complete or N/A)
 
 ---
 
@@ -21,6 +21,10 @@
 | RFC-051 | Deduplicate Default Exec Engine List in rfc_impl.go | Draft — v1 | Medium | XS | |
 | RFC-052 | Add Unit Tests for sail_status.py | Draft — v1 | Medium | S | |
 | RFC-053 | Align discover_issues.py Shellcheck Invocation with validate_all.sh | Draft — v1 | Low | XS | |
+| RFC-059 | Remove Deprecated NVIDIA Diagnostic Shims | Draft — v1 | Low | XS | |
+| RFC-060 | Remove Deprecated Autobuild/Autoretry Shell Scripts | Draft — v1 | Low | S | |
+| RFC-061 | Remove Unused k8s_job Step Type | Draft — v1 | Low | S | |
+| RFC-062 | Remove launch_container.sh Shim and Legacy Fallback | Draft — v1 | Low | M | RFC-059 |
 
 ---
 
@@ -38,12 +42,16 @@
 10. **RFC-046** — Low priority: `mergeStringMaps` duplicated in `pipeline.go` and `plan/merger.go`.
 11. **RFC-053** — Low priority, temporary fix: align `discover_issues.py` shellcheck with `validate_all.sh` SC2034 suppression.
 12. **RFC-045** — Low priority cleanup: `TEMPORAL_LOG_MAX_BYTES` re-parsed per `runCommand` call.
+13. **RFC-059** — Low priority, XS effort: delete two deprecated NVIDIA diagnostic shims; update `verify_preflight.sh`.
+14. **RFC-060** — Low priority: delete three deprecated autobuild/autoretry scripts; migrate `verify_build.sh` to Temporal.
+15. **RFC-061** — Low priority: remove the dead `k8s_job` step type from activities, pipeline, and validator.
+16. **RFC-062** — Low priority, depends on RFC-059: delete `launch_container.sh` shim and remove fallback from Go activity.
 
 ---
 
 ## All RFCs
 
-All 41 prior RFCs are closed. See Closed RFCs below.
+All 42 prior RFCs are closed. See Closed RFCs below.
 
 ---
 

@@ -101,6 +101,22 @@ func resolveConfig(configPath string, overrides cliOverrides) (workerConfig, err
 	return cfg, nil
 }
 
+func validateConfig(cfg workerConfig) error {
+	if cfg.Address == "" {
+		return fmt.Errorf("worker config: address must not be empty")
+	}
+	if cfg.Namespace == "" {
+		return fmt.Errorf("worker config: namespace must not be empty")
+	}
+	if cfg.TaskQueue == "" {
+		return fmt.Errorf("worker config: task_queue must not be empty")
+	}
+	if cfg.MaxConcurrentActivities <= 0 {
+		return fmt.Errorf("worker config: max_concurrent_activities must be > 0, got %d", cfg.MaxConcurrentActivities)
+	}
+	return nil
+}
+
 func main() {
 	configPath := flag.String("config", "", "Path to worker YAML config file")
 	address := flag.String("address", "", "Temporal frontend address")
@@ -119,6 +135,10 @@ func main() {
 	})
 	if err != nil {
 		slog.Error("unable to resolve worker config", "config", *configPath, "error", err)
+		os.Exit(1)
+	}
+	if err := validateConfig(cfg); err != nil {
+		slog.Error("invalid worker config", "error", err)
 		os.Exit(1)
 	}
 
