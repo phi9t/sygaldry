@@ -1,7 +1,7 @@
 # RFC Index
 
 **Last updated:** 2026-03-23
-**Total RFCs:** 7 open (64 created, 57 closed as complete or N/A)
+**Total RFCs:** 10 open (67 created, 57 closed as complete or N/A)
 
 ---
 
@@ -16,18 +16,24 @@
 | RFC-062 | Remove launch_container.sh Shim and Legacy Fallback | Draft — v1 | Low | M | RFC-059 |
 | RFC-063 | Stale Lease Auto-Recovery in Zephyr Launcher | Draft — v1 | Medium | S | |
 | RFC-064 | Add `version` Field to Temporal YAML Plan Schema | Draft — v1 | Low | S | |
+| RFC-065 | Remove steps.json Legacy Pipeline Format Artifact | Draft — v1 | Low | XS | |
+| RFC-066 | Drop validate_all.sh launch_container.sh Dependency | Draft — v1 | Low | XS | RFC-062 |
+| RFC-067 | Update skills/zephyr Documentation to Reference zephyr Binary | Draft — v1 | Low | S | RFC-062 |
 
 ---
 
 ## Suggested Implementation Order
 
 1. **RFC-063** — Medium priority: stale lease auto-recovery; prevents user lockout after container crashes.
-3. **RFC-057** — Medium priority, larger effort: `zephyr shell --dry-run` for debugging.
-4. **RFC-059** — Low priority, XS: remove `inspect_nvidia_setup.sh` and `fix_nvidia_setup.sh` shims.
-5. **RFC-060** — Low priority: delete `tools/zephyr_autobuild.sh`, `zephyr_autoretry.sh`, `zephyr_autoretry_tmux.sh`.
-6. **RFC-061** — Low priority: remove unused `k8s_job` step type from Temporal activities.
-7. **RFC-062** — Low priority, depends on RFC-059: delete `launch_container.sh` shim and Go fallback.
+2. **RFC-057** — Medium priority, larger effort: `zephyr shell --dry-run` for debugging.
+3. **RFC-059** — Low priority, XS: remove `inspect_nvidia_setup.sh` and `fix_nvidia_setup.sh` shims.
+4. **RFC-060** — Low priority: delete `tools/zephyr_autobuild.sh`, `zephyr_autoretry.sh`, `zephyr_autoretry_tmux.sh`.
+5. **RFC-061** — Low priority: remove unused `k8s_job` step type from Temporal activities.
+6. **RFC-062** — Low priority, depends on RFC-059: delete `launch_container.sh` shim and Go fallback.
+7. **RFC-065** — Low priority, XS: delete `temporal/examples/steps.json` legacy JSON artifact.
 8. **RFC-064** — Low priority: add `version: 1` field to plan YAML schema.
+9. **RFC-066** — Low priority, XS, depends on RFC-062: drop `validate_all.sh` launch_container.sh calls.
+10. **RFC-067** — Low priority, depends on RFC-062: update `skills/zephyr/SKILL.md` and `run_specdec.sh`.
 
 ---
 
