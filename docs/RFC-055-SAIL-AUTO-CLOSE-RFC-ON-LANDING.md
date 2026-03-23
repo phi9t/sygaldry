@@ -1,6 +1,6 @@
 # RFC-055: Auto-Close RFC Documents When SAIL Lands a Fix
 
-**Status:** Draft — v1
+**Status:** Done — SAIL (commit 0bb556d)
 **Date:** 2026-03-23
 **Priority:** Medium
 **Effort:** S

@@ -1,7 +1,7 @@
 # RFC Index
 
 **Last updated:** 2026-03-23
-**Total RFCs:** 8 open (64 created, 56 closed as complete or N/A)
+**Total RFCs:** 7 open (64 created, 57 closed as complete or N/A)
 
 ---
 
@@ -9,7 +9,6 @@
 
 | # | Title | Status | Priority | Effort | Blocked By |
 |---|-------|--------|----------|--------|------------|
-| RFC-055 | Auto-Close RFC Documents When SAIL Lands a Fix | Draft — v1 | Medium | S | |
 | RFC-057 | Add `--dry-run` Flag to `zephyr shell` | Draft — v1 | Medium | M | |
 | RFC-059 | Remove Deprecated NVIDIA Diagnostic Shims | Draft — v1 | Low | XS | |
 | RFC-060 | Remove Deprecated Autobuild/Autoretry Shell Scripts | Draft — v1 | Low | S | |
@@ -22,8 +21,7 @@
 
 ## Suggested Implementation Order
 
-1. **RFC-055** — Medium priority: auto-close RFCs on SAIL landing; adds `close_rfc.py` + step to `improvement_loop.yaml`.
-2. **RFC-063** — Medium priority: stale lease auto-recovery; prevents user lockout after container crashes.
+1. **RFC-063** — Medium priority: stale lease auto-recovery; prevents user lockout after container crashes.
 3. **RFC-057** — Medium priority, larger effort: `zephyr shell --dry-run` for debugging.
 4. **RFC-059** — Low priority, XS: remove `inspect_nvidia_setup.sh` and `fix_nvidia_setup.sh` shims.
 5. **RFC-060** — Low priority: delete `tools/zephyr_autobuild.sh`, `zephyr_autoretry.sh`, `zephyr_autoretry_tmux.sh`.
@@ -35,7 +33,7 @@
 
 ## All RFCs
 
-All 56 prior RFCs are closed. See Closed RFCs below.
+All 57 prior RFCs are closed. See Closed RFCs below.
 
 ---
 
@@ -97,5 +95,6 @@ All 56 prior RFCs are closed. See Closed RFCs below.
 | RFC-052 | Add Unit Tests for sail_status.py | Done — SAIL |
 | RFC-053 | Align discover_issues.py Shellcheck Invocation with validate_all.sh | Done — SAIL |
 | RFC-054 | Add discover_open_rfcs Source to SAIL Issue Discovery | Done — SAIL (commit d845dd8) |
+| RFC-055 | Auto-Close RFC Documents When SAIL Lands a Fix | Done — SAIL (commit 0bb556d) |
 | RFC-056 | Temporal Worker Startup Config Validation | Done — SAIL (commit 2dd7f37) |
 | RFC-058 | Remove Stale SC2034 Workaround from discover_issues.py | Done — SAIL (commit 923b1a1) |
