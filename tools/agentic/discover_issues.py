@@ -11,13 +11,14 @@ Sources:
   6. go vet ./... warnings
   7. Go functions with 0% test coverage
   8. Rust functions with 0 execution count via cargo-llvm-cov
+  9. Open RFCs listed in docs/RFC-INDEX.md
 
 Output: JSON array of issues sorted by priority (1=critical, 2=high, 3=normal),
         printed to stdout. Each issue has the shape:
         {
           "id":          "<type>-<hash>",
           "priority":    1|2|3,
-          "type":        "todo|shellcheck|go_test|ruff|foundation_drift|go_vet|go_coverage|rust_coverage",
+          "type":        "todo|shellcheck|go_test|ruff|foundation_drift|go_vet|go_coverage|rust_coverage|rfc",
           "title":       "<short description>",
           "description": "<detail>",
           "files":       ["<path>", ...],
@@ -235,8 +236,7 @@ def discover_shellcheck(repo_dir: Path, max_per_type: int) -> list[Issue]:
         f
         for f in sh_files
         if not any(
-            part.startswith(".")
-            or part in ("node_modules", "vendor")
+            part.startswith(".") or part in ("node_modules", "vendor")
             for part in f.parts
         )
     ]
@@ -251,8 +251,6 @@ def discover_shellcheck(repo_dir: Path, max_per_type: int) -> list[Issue]:
                 "json",
                 "-S",
                 "warning",
-                "-e",
-                "SC2034",  # temporary: aligns with validate_all.sh -e SC2034 until RFC-043+050 land
                 "--",
                 *[str(f) for f in sh_files],
             ],
@@ -628,6 +626,72 @@ def discover_go_vet(repo_dir: Path, max_per_type: int) -> list[Issue]:
 
 
 # ---------------------------------------------------------------------------
+# Source 9: Open RFCs from docs/RFC-INDEX.md
+# ---------------------------------------------------------------------------
+
+_RFC_ROW_RE = re.compile(
+    r"^\|\s*RFC-(\d+)\s*\|([^|]+)\|([^|]+)\|([^|]+)\|",
+)
+_RFC_PRIORITY_MAP = {
+    "high": 1,
+    "medium": 2,
+    "low": 3,
+}
+
+
+def discover_open_rfcs(repo_dir: Path, max_per_type: int) -> list[Issue]:
+    index_file = repo_dir / "docs" / "RFC-INDEX.md"
+    if not index_file.exists():
+        return []
+
+    text = index_file.read_text(errors="replace")
+
+    in_open_section = False
+    issues: list[Issue] = []
+    for line in text.splitlines():
+        if "## Open RFCs" in line:
+            in_open_section = True
+            continue
+        if in_open_section and line.startswith("## "):
+            break
+        if not in_open_section:
+            continue
+
+        m = _RFC_ROW_RE.match(line)
+        if not m:
+            continue
+
+        rfc_num = m.group(1).strip()
+        title_text = m.group(2).strip()
+        priority_text = m.group(4).strip().lower()
+        priority = _RFC_PRIORITY_MAP.get(priority_text, 2)
+
+        rfc_id = f"RFC-{rfc_num}"
+        rfc_files = sorted(repo_dir.glob(f"docs/{rfc_id}-*.md"))
+        rfc_file = (
+            str(rfc_files[0].relative_to(repo_dir))
+            if rfc_files
+            else f"docs/{rfc_id}-*.md"
+        )
+
+        issues.append(
+            {
+                "id": f"rfc-{rfc_num}",
+                "priority": priority,
+                "type": "rfc",
+                "title": f"{rfc_id}: {title_text}",
+                "description": f"Open RFC — implement as described in {rfc_file}",
+                "files": ["tools/agentic/discover_issues.py"],
+                "context": f"See {rfc_file} for full spec and acceptance criteria.",
+            }
+        )
+        if len(issues) >= max_per_type:
+            break
+
+    return issues
+
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
@@ -676,6 +740,7 @@ def main() -> None:
         ("todo", discover_todos),
         ("ruff", discover_ruff),
         ("foundation_drift", discover_foundation_drift),
+        ("open_rfcs", discover_open_rfcs),
     ]
 
     if args.sources:
