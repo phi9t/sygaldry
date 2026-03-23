@@ -107,7 +107,13 @@ steps:
       op: commit
       repo_dir: ${{ params.repo_dir }}
       branch: ${{ params.branch_name }}
-      commit_message: "agentic(${{ params.issue_type }}): ${{ steps.plan.outputs.task_title }}"
+      commit_message: |-
+        agentic(${{ params.issue_type }}): ${{ steps.plan.outputs.task_title }}
+
+        ${{ params.issue_title }}
+
+        Generated-by: SAIL autonomous improvement loop
+        Temporal-workflow-id: ${{ params.workflow_id }}
 
   - id: push_branch
     name: Push branch to origin
