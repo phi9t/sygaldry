@@ -22,10 +22,41 @@ pub(crate) fn image_has_rust_entrypoints(image_name: &str) -> bool {
             == Some("true")
 }
 
+/// Print the full `docker run` command, one argument per line, and exit without
+/// starting the container.
+pub(crate) fn print_docker_run_command(args: &[String]) {
+    println!("docker run \\");
+    for (i, arg) in args.iter().enumerate() {
+        let quoted = shell_quote(arg);
+        if i + 1 < args.len() {
+            println!("  {} \\", quoted);
+        } else {
+            println!("  {}", quoted);
+        }
+    }
+}
+
+/// Shell-quote a single token if it contains characters that would be
+/// misinterpreted by a shell.
+fn shell_quote(s: &str) -> String {
+    let needs_quoting = s.chars().any(|c| {
+        matches!(
+            c,
+            ' ' | '\t' | '"' | '\'' | '\\' | '$' | '(' | ')' | '!' | ';' | '&' | '|' | '<'
+                | '>'
+        )
+    });
+    if needs_quoting {
+        format!("'{}'", s.replace('\'', "'\\''"))
+    } else {
+        s.to_string()
+    }
+}
+
 /// Orchestrate a full container launch.
 ///
 /// This is the Rust equivalent of `main()` in `launch_container.sh`.
-pub fn launch(config: &ZephyrConfig, entrypoint_name: &str, passthrough_args: &[String]) -> Result<()> {
+pub fn launch(config: &ZephyrConfig, entrypoint_name: &str, passthrough_args: &[String], dry_run: bool) -> Result<()> {
     let entrypoint_name = normalize_entrypoint_name(entrypoint_name);
     eprintln!("[zephyr] Starting container launcher...");
 
@@ -84,6 +115,11 @@ pub fn launch(config: &ZephyrConfig, entrypoint_name: &str, passthrough_args: &[
 
     cmd_args.extend(passthrough_args.iter().cloned());
 
+    if dry_run {
+        print_docker_run_command(&cmd_args);
+        return Ok(());
+    }
+
     let status = std::process::Command::new("docker")
         .arg("run")
         .args(&cmd_args)
@@ -140,6 +176,43 @@ fn normalize_entrypoint_name(entrypoint_name: &str) -> &str {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn shell_quote_plain_token_unchanged() {
+        assert_eq!(shell_quote("--gpus"), "--gpus");
+        assert_eq!(shell_quote("all"), "all");
+        assert_eq!(shell_quote("sygaldry/zephyr:base"), "sygaldry/zephyr:base");
+    }
+
+    #[test]
+    fn shell_quote_token_with_space_gets_single_quotes() {
+        assert_eq!(shell_quote("hello world"), "'hello world'");
+    }
+
+    #[test]
+    fn shell_quote_token_with_dollar_gets_quoted() {
+        assert_eq!(shell_quote("$HOME"), "'$HOME'");
+    }
+
+    #[test]
+    fn print_docker_run_command_single_arg() {
+        // Just verify the function runs without panicking for a single-arg case.
+        print_docker_run_command(&["sygaldry/zephyr:base".to_string()]);
+    }
+
+    #[test]
+    fn print_docker_run_command_multiple_args_does_not_panic() {
+        let args: Vec<String> = vec![
+            "--rm".to_string(),
+            "--gpus".to_string(),
+            "all".to_string(),
+            "--user".to_string(),
+            "1000:1000".to_string(),
+            "sygaldry/zephyr:base".to_string(),
+        ];
+        // Smoke test: ensure it runs without panicking.
+        print_docker_run_command(&args);
+    }
 
     #[test]
     fn image_has_rust_entrypoints_respects_env_var() {

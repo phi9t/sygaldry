@@ -44,6 +44,10 @@ pub enum Command {
     // ── Host-side subcommands ──
     /// Launch an interactive container shell.
     Shell {
+        /// Print the docker run command and exit without starting the container.
+        #[arg(long)]
+        dry_run: bool,
+
         /// Arguments passed through to the shell.
         #[arg(last = true)]
         args: Vec<String>,
@@ -316,10 +320,28 @@ mod tests {
     }
 
     #[test]
+    fn parse_shell_dry_run() {
+        let cli = parse(&["shell", "--dry-run"]);
+        match cli.command {
+            Some(Command::Shell { dry_run, .. }) => assert!(dry_run),
+            _ => panic!("expected Shell command"),
+        }
+    }
+
+    #[test]
+    fn parse_shell_dry_run_false_by_default() {
+        let cli = parse(&["shell"]);
+        match cli.command {
+            Some(Command::Shell { dry_run, .. }) => assert!(!dry_run),
+            _ => panic!("expected Shell command"),
+        }
+    }
+
+    #[test]
     fn parse_shell_with_args() {
         let cli = parse(&["shell", "--", "echo", "hello"]);
         match cli.command {
-            Some(Command::Shell { args }) => {
+            Some(Command::Shell { args, .. }) => {
                 assert_eq!(args, vec!["echo", "hello"]);
             }
             _ => panic!("expected Shell command"),

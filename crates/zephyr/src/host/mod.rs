@@ -30,22 +30,22 @@ pub fn dispatch(cli: &Cli) -> Result<()> {
                 config.print_effective();
             }
             let ep = cli.entrypoint.as_deref().unwrap_or("default");
-            launcher::launch(&config, ep, &cli.passthrough)
+            launcher::launch(&config, ep, &cli.passthrough, false)
         }
 
-        Some(Command::Shell { args }) => {
+        Some(Command::Shell { args, dry_run }) => {
             let config = ZephyrConfig::from_env(&overrides);
             if cli.print_effective_config {
                 config.print_effective();
             }
             let ep = cli.entrypoint.as_deref().unwrap_or("default");
-            launcher::launch(&config, ep, args)
+            launcher::launch(&config, ep, args, *dry_run)
         }
 
         Some(Command::Run { args }) => {
             let config = ZephyrConfig::from_env(&overrides);
             let ep = cli.entrypoint.as_deref().unwrap_or("run-job");
-            launcher::launch(&config, ep, args)
+            launcher::launch(&config, ep, args, false)
         }
 
         Some(Command::Job { action }) => {
