@@ -57,7 +57,11 @@ grep -rn '#\[allow(' crates/zephyr/src/ --include='*.rs' | grep -v target | head
 grep -rn 'TODO\|FIXME\|HACK' crates/zephyr/src/ --include='*.rs' | grep -v target | head -20
 
 # Rust: unit test count
-grep -rn '^#\[test\]\|fn test_' crates/zephyr/src/ --include='*.rs' | grep -v target | wc -l
+grep -rn '^#\[test\]' crates/zephyr/src/ --include='*.rs' | grep -v target | wc -l
+
+# Rust: unwrap() in non-test production code (test code is OK)
+grep -rn '\.unwrap()' crates/zephyr/src/ --include='*.rs' | grep -v target \
+  | grep -v 'fn test_\|#\[test\]\|#\[cfg(test)\]' | head -10
 
 # Go: unit test count
 grep -rn '^func Test' temporal/ --include='*_test.go' | wc -l
@@ -66,11 +70,14 @@ grep -rn '^func Test' temporal/ --include='*_test.go' | wc -l
 wc -l tools/agentic/*.py | sort -n | tail -15
 
 # Python: missing test files for large Python tools
+# Note: tests may be split across multiple files (e.g. test_discover_issues_todos.py),
+# so check whether any test file imports or references the module name, not just exact filename.
 for f in tools/agentic/*.py; do
   base=$(basename "${f%.py}")
-  if ! ls "tools/agentic/tests/test_${base}.py" 2>/dev/null >/dev/null; then
-    lines=$(wc -l < "$f" 2>/dev/null)
-    [[ $lines -gt 100 ]] && echo "NO TESTS: $f (${lines} lines)"
+  lines=$(wc -l < "$f" 2>/dev/null)
+  [[ $lines -le 100 ]] && continue
+  if ! grep -rl "${base}" tools/agentic/tests/ --include="*.py" >/dev/null 2>&1; then
+    echo "NO TESTS: $f (${lines} lines)"
   fi
 done
 
@@ -182,7 +189,7 @@ Then rewrite `docs/RFC-INDEX.md`:
   1. Unblocks other open RFCs (prerequisite RFCs go first)
   2. Correctness/safety > performance > cosmetic
   3. Lower effort wins ties
-  4. XS effort + Low priority → upgrade to Medium priority (quick wins should not sit idle)
+  4. XS effort + Low priority and **unblocked** → upgrade to Medium priority (quick wins should not sit idle; skip this upgrade for blocked RFCs)
 - Bump the "Last updated" date
 
 ---

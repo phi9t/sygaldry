@@ -1,7 +1,7 @@
 # RFC Index
 
-**Last updated:** 2026-03-23
-**Total RFCs:** 10 open (67 created, 57 closed as complete or N/A)
+**Last updated:** 2026-03-24
+**Total RFCs:** 17 open (76 created, 59 closed as complete or N/A)
 
 ---
 
@@ -9,37 +9,51 @@
 
 | # | Title | Status | Priority | Effort | Blocked By |
 |---|-------|--------|----------|--------|------------|
-| RFC-057 | Add `--dry-run` Flag to `zephyr shell` | Draft — v1 | Medium | M | |
-| RFC-059 | Remove Deprecated NVIDIA Diagnostic Shims | Draft — v1 | Low | XS | |
 | RFC-060 | Remove Deprecated Autobuild/Autoretry Shell Scripts | Draft — v1 | Low | S | |
 | RFC-061 | Remove Unused k8s_job Step Type | Draft — v1 | Low | S | |
-| RFC-062 | Remove launch_container.sh Shim and Legacy Fallback | Draft — v1 | Low | M | RFC-059 |
+| RFC-062 | Remove launch_container.sh Shim and Legacy Fallback | Draft — v1 | Low | M | |
 | RFC-063 | Stale Lease Auto-Recovery in Zephyr Launcher | Draft — v1 | Medium | S | |
 | RFC-064 | Add `version` Field to Temporal YAML Plan Schema | Draft — v1 | Low | S | |
-| RFC-065 | Remove steps.json Legacy Pipeline Format Artifact | Draft — v1 | Low | XS | |
+| RFC-065 | Remove steps.json Legacy Pipeline Format Artifact | Draft — v1 | Medium | XS | |
 | RFC-066 | Drop validate_all.sh launch_container.sh Dependency | Draft — v1 | Low | XS | RFC-062 |
 | RFC-067 | Update skills/zephyr Documentation to Reference zephyr Binary | Draft — v1 | Low | S | RFC-062 |
+| RFC-068 | Remove k3s/ Directory | Draft — v1 | Low | XS | RFC-061 |
+| RFC-069 | Remove example_repo_scoped_zephyr_skill/ Directory | Draft — v1 | Medium | XS | |
+| RFC-070 | Remove run-qwen-demo.sh Demo Script | Draft — v1 | Medium | XS | |
+| RFC-071 | Deduplicate client.Dial in cmd/ Packages | Draft — v1 | Medium | XS | |
+| RFC-072 | Add Unit Tests for metrics_updater.py | Draft — v1 | Medium | S | |
+| RFC-073 | Add Unit Tests for parse_session_events.py | Draft — v1 | Medium | S | |
+| RFC-074 | Refactor staging.rs Private Functions to Use StageContext Struct | Draft — v1 | Medium | S | |
+| RFC-075 | Extract Log-Writer Infrastructure from steps.go to logging.go | Draft — v1 | Medium | S | |
+| RFC-076 | Add Unit Tests for update_major_challenge_state.py | Draft — v1 | Medium | S | |
 
 ---
 
 ## Suggested Implementation Order
 
-1. **RFC-063** — Medium priority: stale lease auto-recovery; prevents user lockout after container crashes.
-2. **RFC-057** — Medium priority, larger effort: `zephyr shell --dry-run` for debugging.
-3. **RFC-059** — Low priority, XS: remove `inspect_nvidia_setup.sh` and `fix_nvidia_setup.sh` shims.
-4. **RFC-060** — Low priority: delete `tools/zephyr_autobuild.sh`, `zephyr_autoretry.sh`, `zephyr_autoretry_tmux.sh`.
-5. **RFC-061** — Low priority: remove unused `k8s_job` step type from Temporal activities.
-6. **RFC-062** — Low priority, depends on RFC-059: delete `launch_container.sh` shim and Go fallback.
-7. **RFC-065** — Low priority, XS: delete `temporal/examples/steps.json` legacy JSON artifact.
-8. **RFC-064** — Low priority: add `version: 1` field to plan YAML schema.
-9. **RFC-066** — Low priority, XS, depends on RFC-062: drop `validate_all.sh` launch_container.sh calls.
-10. **RFC-067** — Low priority, depends on RFC-062: update `skills/zephyr/SKILL.md` and `run_specdec.sh`.
+1. **RFC-065** — Medium, XS: delete `temporal/examples/steps.json` legacy JSON artifact.
+2. **RFC-069** — Medium, XS: delete orphaned `example_repo_scoped_zephyr_skill/` directory.
+3. **RFC-070** — Medium, XS: delete `temporal/scripts/run-qwen-demo.sh` demo script.
+4. **RFC-071** — Medium, XS: extract `dialTemporal` helper; dedup 4 `client.Dial` call sites.
+5. **RFC-063** — Medium, S: stale lease auto-recovery; prevents user lockout after container crashes.
+6. **RFC-072** — Medium, S: add ≥5 unit tests for `metrics_updater.py`.
+7. **RFC-073** — Medium, S: add ≥5 unit tests for `parse_session_events.py`.
+8. **RFC-076** — Medium, S: add ≥7 unit tests for `update_major_challenge_state.py`.
+9. **RFC-074** — Medium, S: refactor `staging.rs` private fns to use `StageContext`; drop 3 `#[allow]` annotations.
+10. **RFC-075** — Medium, S: extract log-writer block from `steps.go` → `logging.go`.
+11. **RFC-060** — Low, S: delete three deprecated autobuild/autoretry scripts; migrate `verify_build.sh`.
+12. **RFC-061** — Low, S: remove unused `k8s_job` step type from Temporal activities; unblocks RFC-068.
+13. **RFC-062** — Low, M: delete `launch_container.sh` shim and Go fallback; unblocks RFC-066, RFC-067.
+14. **RFC-064** — Low, S: add `version: 1` field to plan YAML schema.
+15. **RFC-066** — Low, XS, depends on RFC-062: drop `validate_all.sh` `launch_container.sh` calls.
+16. **RFC-067** — Low, S, depends on RFC-062: update `skills/zephyr/SKILL.md` and `run_specdec.sh`.
+17. **RFC-068** — Low, XS, depends on RFC-061: delete `k3s/` directory.
 
 ---
 
 ## All RFCs
 
-All 57 prior RFCs are closed. See Closed RFCs below.
+All 59 prior RFCs are closed. See Closed RFCs below.
 
 ---
 
@@ -103,4 +117,6 @@ All 57 prior RFCs are closed. See Closed RFCs below.
 | RFC-054 | Add discover_open_rfcs Source to SAIL Issue Discovery | Done — SAIL (commit d845dd8) |
 | RFC-055 | Auto-Close RFC Documents When SAIL Lands a Fix | Done — SAIL (commit 0bb556d) |
 | RFC-056 | Temporal Worker Startup Config Validation | Done — SAIL (commit 2dd7f37) |
+| RFC-057 | Add `--dry-run` Flag to `zephyr shell` | Done — SAIL (commit f912081) |
 | RFC-058 | Remove Stale SC2034 Workaround from discover_issues.py | Done — SAIL (commit 923b1a1) |
+| RFC-059 | Remove Deprecated NVIDIA Diagnostic Shims | Done — SAIL (commit 34353b6) |
