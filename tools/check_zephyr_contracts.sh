@@ -51,7 +51,6 @@ fi
 # Stale token guardrails in remaining docs.
 DOC_SCOPE=(
     "foundation.org"
-    "example_repo_scoped_zephyr_skill/SKILL.md"
     "skills/zephyr/SKILL.md"
     "skills/nvidia-container-troubleshooting/SKILL.md"
     "temporal/skills/temporal-orchestration/SKILL.md"
