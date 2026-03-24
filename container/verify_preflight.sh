@@ -69,7 +69,7 @@ for d in "${DIRS[@]}"; do
  done
 
 # Host GPU diagnostics (GPU is always required)
-"$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/inspect_nvidia_setup.sh" || true
+"$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/diagnose_nvidia.sh"
 if ! "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/diagnose_nvidia.sh" --test; then
   log "Host GPU diagnostics failed"
   if [[ "${FIX_GPU}" == "true" ]]; then
