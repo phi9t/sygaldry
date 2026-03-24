@@ -1,7 +1,7 @@
 # RFC Index
 
 **Last updated:** 2026-03-24
-**Total RFCs:** 17 open (76 created, 59 closed as complete or N/A)
+**Total RFCs:** 16 open (77 created, 61 closed as complete or N/A)
 
 ---
 
@@ -19,7 +19,6 @@
 | RFC-067 | Update skills/zephyr Documentation to Reference zephyr Binary | Draft — v1 | Low | S | RFC-062 |
 | RFC-068 | Remove k3s/ Directory | Draft — v1 | Low | XS | RFC-061 |
 | RFC-069 | Remove example_repo_scoped_zephyr_skill/ Directory | Draft — v1 | Medium | XS | |
-| RFC-070 | Remove run-qwen-demo.sh Demo Script | Draft — v1 | Medium | XS | |
 | RFC-071 | Deduplicate client.Dial in cmd/ Packages | Draft — v1 | Medium | XS | |
 | RFC-072 | Add Unit Tests for metrics_updater.py | Draft — v1 | Medium | S | |
 | RFC-073 | Add Unit Tests for parse_session_events.py | Draft — v1 | Medium | S | |
@@ -33,9 +32,8 @@
 
 1. **RFC-065** — Medium, XS: delete `temporal/examples/steps.json` legacy JSON artifact.
 2. **RFC-069** — Medium, XS: delete orphaned `example_repo_scoped_zephyr_skill/` directory.
-3. **RFC-070** — Medium, XS: delete `temporal/scripts/run-qwen-demo.sh` demo script.
-4. **RFC-071** — Medium, XS: extract `dialTemporal` helper; dedup 4 `client.Dial` call sites.
-5. **RFC-063** — Medium, S: stale lease auto-recovery; prevents user lockout after container crashes.
+3. **RFC-071** — Medium, XS: extract `dialTemporal` helper; dedup 4 `client.Dial` call sites.
+4. **RFC-063** — Medium, S: stale lease auto-recovery; prevents user lockout after container crashes.
 6. **RFC-072** — Medium, S: add ≥5 unit tests for `metrics_updater.py`.
 7. **RFC-073** — Medium, S: add ≥5 unit tests for `parse_session_events.py`.
 8. **RFC-076** — Medium, S: add ≥7 unit tests for `update_major_challenge_state.py`.
@@ -120,3 +118,4 @@ All 59 prior RFCs are closed. See Closed RFCs below.
 | RFC-057 | Add `--dry-run` Flag to `zephyr shell` | Done — SAIL (commit f912081) |
 | RFC-058 | Remove Stale SC2034 Workaround from discover_issues.py | Done — SAIL (commit 923b1a1) |
 | RFC-059 | Remove Deprecated NVIDIA Diagnostic Shims | Done — SAIL (commit 34353b6) |
+| RFC-070 | Remove run-qwen-demo.sh Demo Script | Done — script deleted, SAIL |

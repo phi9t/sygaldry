@@ -1,6 +1,6 @@
 # RFC-070: Remove run-qwen-demo.sh Demo Script
 
-**Status:** Draft — v1
+**Status:** Done — script deleted, closed by SAIL
 **Date:** 2026-03-24
 **Priority:** Low
 **Effort:** XS
