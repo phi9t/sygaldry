@@ -114,6 +114,12 @@ pub enum Command {
         verbose: bool,
     },
 
+    /// Manage resource leases.
+    Lease {
+        #[command(subcommand)]
+        action: LeaseAction,
+    },
+
     /// Run the validation suite.
     Validate {
         /// Skip shellcheck.
@@ -265,6 +271,24 @@ pub enum JobAction {
 pub enum ConfigAction {
     /// Print effective configuration.
     Show,
+}
+
+#[derive(Subcommand, Debug)]
+pub enum LeaseAction {
+    /// Release a stale or held lease.
+    Release {
+        /// Project ID (used to locate the lease directory).
+        #[arg(long)]
+        project_id: String,
+
+        /// Resource name (default: gpu-all).
+        #[arg(long, default_value = "gpu-all")]
+        resource: String,
+
+        /// Force release even if the holding process appears to be running.
+        #[arg(long)]
+        force: bool,
+    },
 }
 
 #[derive(Subcommand, Debug)]

@@ -8,7 +8,7 @@ pub mod lease;
 pub mod requirements;
 pub mod staging;
 
-use crate::cli::{Cli, Command, ConfigAction};
+use crate::cli::{Cli, Command, ConfigAction, LeaseAction};
 use crate::config::{CliOverrides, ZephyrConfig};
 use crate::error::{Result, ZephyrError};
 
@@ -127,6 +127,19 @@ pub fn dispatch(cli: &Cli) -> Result<()> {
                     command: "validate_all.sh".to_string(),
                     code: status.code().unwrap_or(1),
                 })
+            }
+        }
+
+        Some(Command::Lease { action }) => {
+            match action {
+                LeaseAction::Release { project_id, resource, force } => {
+                    let lease_overrides = crate::config::CliOverrides {
+                        project_id: Some(project_id.clone()),
+                        ..Default::default()
+                    };
+                    let config = ZephyrConfig::from_env(&lease_overrides);
+                    lease::release(&config.layout.leases, resource, *force)
+                }
             }
         }
 

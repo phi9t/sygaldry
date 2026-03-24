@@ -75,7 +75,8 @@ pub fn dispatch(cli: &Cli) -> Result<()> {
             | Command::Build { .. }
             | Command::Config { .. }
             | Command::Stage { .. }
-            | Command::Validate { .. },
+            | Command::Validate { .. }
+            | Command::Lease { .. },
         ) => Err(ZephyrError::with_hint(
             "This command is only available on the host.",
             "Run it outside the container.",
