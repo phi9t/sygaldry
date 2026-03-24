@@ -15,6 +15,7 @@ import (
 	"go.temporal.io/sdk/client"
 	"gopkg.in/yaml.v3"
 
+	cmdinternal "temporal-orchestration/cmd/internal"
 	"temporal-orchestration/internal/config"
 	"temporal-orchestration/internal/workflows"
 )
@@ -115,9 +116,9 @@ func run(args []string) error {
 		ClaudeModel:       *claudeModel,
 	}
 
-	c, err := client.Dial(client.Options{HostPort: *address, Namespace: *namespace})
+	c, err := cmdinternal.DialClient(*address, *namespace)
 	if err != nil {
-		return fmt.Errorf("unable to create Temporal client: %w", err)
+		return err
 	}
 	defer c.Close()
 

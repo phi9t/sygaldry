@@ -11,10 +11,10 @@ import (
 	"sync/atomic"
 	"time"
 
-	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/worker"
 	"gopkg.in/yaml.v3"
 
+	cmdinternal "temporal-orchestration/cmd/internal"
 	"temporal-orchestration/internal/activities"
 	"temporal-orchestration/internal/config"
 	"temporal-orchestration/internal/workflows"
@@ -142,12 +142,9 @@ func main() {
 		os.Exit(1)
 	}
 
-	c, err := client.Dial(client.Options{
-		HostPort:  cfg.Address,
-		Namespace: cfg.Namespace,
-	})
+	c, err := cmdinternal.DialClient(cfg.Address, cfg.Namespace)
 	if err != nil {
-		slog.Error("unable to create Temporal client", "address", cfg.Address, "error", err)
+		slog.Error("unable to create Temporal client", "error", err)
 		os.Exit(1)
 	}
 	defer c.Close()
