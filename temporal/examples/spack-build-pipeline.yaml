@@ -12,6 +12,7 @@
 # - Full build history in Temporal UI (localhost:8233)
 # - Extensible: add steps (MLSys build, push, notify) via YAML
 
+version: 1
 steps:
   - id: preflight
     type: command

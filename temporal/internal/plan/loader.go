@@ -3,6 +3,7 @@ package plan
 import (
 	"bytes"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 
@@ -10,6 +11,9 @@ import (
 
 	"temporal-orchestration/internal/workflows"
 )
+
+// SupportedPlanVersion is the highest plan schema version this worker understands.
+const SupportedPlanVersion = 1
 
 type templateImport struct {
 	Templates map[string]workflows.PipelineStep `yaml:"templates"`
@@ -26,6 +30,15 @@ func Load(planPath string) (workflows.PipelineInput, error) {
 	var input workflows.PipelineInput
 	if err := decodeYAMLStrict(data, &input); err != nil {
 		return workflows.PipelineInput{}, fmt.Errorf("unable to parse plan: %w", err)
+	}
+
+	if input.Version == 0 {
+		slog.Warn("plan has no version field; assuming version 1", "file", planPath)
+		input.Version = 1
+	}
+	if input.Version > SupportedPlanVersion {
+		return workflows.PipelineInput{}, fmt.Errorf("plan version %d newer than supported %d; upgrade the worker",
+			input.Version, SupportedPlanVersion)
 	}
 
 	if len(input.Imports) > 0 {

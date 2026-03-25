@@ -125,6 +125,7 @@ type PipelineStep struct {
 }
 
 type PipelineInput struct {
+	Version   int                     `json:"version,omitempty" yaml:"version"`
 	LogDir    string                  `json:"logDir" yaml:"log_dir"`
 	Params    map[string]string       `json:"params,omitempty" yaml:"params"`
 	Env       map[string]string       `json:"env,omitempty" yaml:"env"`

@@ -1,3 +1,4 @@
+version: 1
 params:
   src_dir: ./docs
   summary_file: /tmp/summary.txt

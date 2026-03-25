@@ -1,3 +1,4 @@
+version: 1
 steps:
   - id: download-data
     name: Download dataset

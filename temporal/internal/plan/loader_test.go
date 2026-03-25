@@ -176,6 +176,33 @@ func TestLoadTemplateImportRequiresTemplates(t *testing.T) {
 	}
 }
 
+func TestLoadPlan_MissingVersionDefaults(t *testing.T) {
+	dir := t.TempDir()
+	planPath := filepath.Join(dir, "plan.yaml")
+	if err := os.WriteFile(planPath, []byte("steps:\n  - id: s1\n    type: command\n    command: echo\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	input, err := Load(planPath)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if input.Version != 1 {
+		t.Errorf("Version = %d, want 1", input.Version)
+	}
+}
+
+func TestLoadPlan_FutureVersionReturnsError(t *testing.T) {
+	dir := t.TempDir()
+	planPath := filepath.Join(dir, "plan.yaml")
+	if err := os.WriteFile(planPath, []byte("version: 99\nsteps:\n  - id: s1\n    type: command\n    command: echo\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, err := Load(planPath)
+	if err == nil || !strings.Contains(err.Error(), "newer than supported") {
+		t.Fatalf("Load() error = %v, want 'newer than supported' error", err)
+	}
+}
+
 func TestLoad(t *testing.T) {
 	t.Run("valid plan", func(t *testing.T) {
 		dir := t.TempDir()
