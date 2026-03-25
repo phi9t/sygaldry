@@ -14,7 +14,7 @@ source "${_LIB_DIR}/spack_init.sh"
 
 if ! sygaldry_init_spack; then
     echo "ERROR: Spack setup script not found at /opt/spack_src" >&2
-    echo "HINT:  Are you inside the container? Use sygaldry or launch_container.sh." >&2
+    echo "HINT:  Are you inside the container? Use sygaldry or 'zephyr shell'." >&2
     exit 1
 fi
 

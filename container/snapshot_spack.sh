@@ -139,7 +139,7 @@ log "Validating prerequisites..."
 
 # Base image
 if ! docker image inspect "${BASE_IMAGE}" >/dev/null 2>&1; then
-    error "Base image '${BASE_IMAGE}' not found. Build it first with launch_container.sh."
+    error "Base image '${BASE_IMAGE}' not found. Build it first with 'zephyr build'."
 fi
 log "  Base image: ${BASE_IMAGE} (found)"
 
@@ -308,13 +308,13 @@ log "  # Standalone (no launcher, no host mounts for Spack):"
 log "  docker run --rm -it --gpus all ${SNAPSHOT_TAG}"
 log ""
 log "  # Via launcher:"
-log "  SYGALDRY_IMAGE=${SNAPSHOT_TAG} ./container/launch_container.sh"
+log "  SYGALDRY_IMAGE=${SNAPSHOT_TAG} zephyr shell"
 log ""
 log "  # Multi-repo:"
-log "  SYGALDRY_IMAGE=${SNAPSHOT_TAG} ./container/launch_container.sh --repo /path/to/project"
+log "  SYGALDRY_IMAGE=${SNAPSHOT_TAG} zephyr --repo /path/to/project shell"
 log ""
 log "  # Verify GPU:"
-log "  SYGALDRY_IMAGE=${SNAPSHOT_TAG} ./container/launch_container.sh --entrypoint verify-spack"
+log "  SYGALDRY_IMAGE=${SNAPSHOT_TAG} zephyr --entrypoint verify-spack shell"
 log ""
 if [[ "${PUSH}" == "true" ]]; then
     log "  # Pull from registry:"

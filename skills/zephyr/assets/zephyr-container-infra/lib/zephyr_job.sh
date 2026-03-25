@@ -65,9 +65,9 @@ if [[ -z "${SUBCMD}" ]]; then
   usage; exit 2
 fi
 
-if [[ ! -x "${PROJECT_ROOT}/container/launch_container.sh" ]]; then
-  echo "Launcher not found: ${PROJECT_ROOT}/container/launch_container.sh" >&2
-  echo "Use --project-root to point to the container infra repository." >&2
+if ! command -v zephyr &>/dev/null; then
+  echo "Launcher not found: zephyr not in PATH." >&2
+  echo "Install the zephyr binary or set PATH appropriately." >&2
   exit 2
 fi
 
@@ -155,7 +155,7 @@ WRAP
       SYGALDRY_PROJECT_ID="${PROJECT_ID}" \
       SYGALDRY_RUN_ID="${RUN_ID}" \
       ZEPHYR_LEASE_MODE="${LEASE_MODE}" \
-      "${PROJECT_ROOT}/container/launch_container.sh" \
+      zephyr \
       bash -lc "${RUNNER_CMD}" \
       >>"${RAW_LOG_FILE}" 2>&1 &
 

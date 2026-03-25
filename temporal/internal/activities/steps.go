@@ -364,9 +364,6 @@ func ContainerJob(ctx context.Context, input ContainerJobInput) (RunCommandResul
 	if err != nil {
 		return RunCommandResult{ExitCode: -1}, err
 	}
-	if launcher.usesLegacyShim {
-		slog.Warn("ContainerJob: falling back to legacy launch_container.sh", "launcher", launcher.path)
-	}
 
 	entrypoint := normalizeContainerEntrypointName(input.Entrypoint)
 	if entrypoint == "" {
@@ -400,8 +397,7 @@ func ContainerJob(ctx context.Context, input ContainerJobInput) (RunCommandResul
 }
 
 type containerLauncher struct {
-	path           string
-	usesLegacyShim bool
+	path string
 }
 
 func resolveContainerLauncher() (containerLauncher, error) {
@@ -418,13 +414,13 @@ func resolveContainerLauncherWith(
 			checked = append(checked, candidate)
 		}
 	}
-	check := func(candidate string, usesLegacyShim bool) (containerLauncher, bool) {
+	check := func(candidate string) (containerLauncher, bool) {
 		addChecked(candidate)
 		if candidate == "" {
 			return containerLauncher{}, false
 		}
 		if _, err := os.Stat(candidate); err == nil {
-			return containerLauncher{path: candidate, usesLegacyShim: usesLegacyShim}, true
+			return containerLauncher{path: candidate}, true
 		}
 		return containerLauncher{}, false
 	}
@@ -434,7 +430,7 @@ func resolveContainerLauncherWith(
 			filepath.Join(sygaldryHome, "target", "release", "zephyr"),
 			filepath.Join(sygaldryHome, "crates", "zephyr", "target", "release", "zephyr"),
 		} {
-			if launcher, ok := check(candidate, false); ok {
+			if launcher, ok := check(candidate); ok {
 				return launcher, nil
 			}
 		}
@@ -448,21 +444,13 @@ func resolveContainerLauncherWith(
 		addChecked("PATH:zephyr")
 	}
 
-	candidates := []string{}
-	if sygaldryHome != "" {
-		candidates = append(candidates, filepath.Join(sygaldryHome, "container", "launch_container.sh"))
-	}
-	candidates = append(candidates,
+	candidates := []string{
 		"../crates/zephyr/target/release/zephyr",
 		"./crates/zephyr/target/release/zephyr",
 		"/opt/sygaldry/crates/zephyr/target/release/zephyr",
-		"../container/launch_container.sh",
-		"./container/launch_container.sh",
-		"/opt/sygaldry/container/launch_container.sh",
-	)
+	}
 	for _, candidate := range candidates {
-		usesLegacyShim := strings.HasSuffix(candidate, "launch_container.sh")
-		if launcher, ok := check(candidate, usesLegacyShim); ok {
+		if launcher, ok := check(candidate); ok {
 			return launcher, nil
 		}
 	}

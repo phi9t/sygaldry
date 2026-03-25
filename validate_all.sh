@@ -57,7 +57,6 @@ INFRA=false
 INFRA_FULL=false
 VERIFY_ONLY=false
 MULTI_REPO=false
-MULTI_REPO_UNIT=false
 SNAPSHOT=false
 SNAPSHOT_NO_GPU=false
 UV_LAYERING=false
@@ -88,11 +87,6 @@ while [[ $# -gt 0 ]]; do
             ;;
         --multi-repo)
             MULTI_REPO=true
-            MULTI_REPO_UNIT=true
-            shift
-            ;;
-        --multi-repo-unit)
-            MULTI_REPO_UNIT=true
             shift
             ;;
         --snapshot)
@@ -145,7 +139,7 @@ done
 if [[ "${VERIFY_ONLY}" == "true" ]]; then
     section "Spack Verification (fast, no rebuild)"
     log "Running verify-spack.sh entrypoint..."
-    if "${SCRIPT_DIR}/container/launch_container.sh" --entrypoint=verify-spack.sh; then
+    if zephyr --entrypoint=verify-spack shell; then
         log "PASS: Spack verification"
         log "All checks passed."
         exit 0
@@ -383,11 +377,6 @@ if [[ "${INFRA}" == "true" ]]; then
     fi
 fi
 
-# ---- Multi-repo unit tests (no Docker/GPU needed) ----
-if [[ "${MULTI_REPO_UNIT}" == "true" ]]; then
-    section "Multi-repo: unit tests"
-    run_check "launch_container_test.sh" bash "${SCRIPT_DIR}/container/launch_container_test.sh"
-fi
 
 # ---- Multi-repo integration + E2E tests (Docker + GPU) ----
 if [[ "${MULTI_REPO}" == "true" ]]; then

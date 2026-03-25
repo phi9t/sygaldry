@@ -27,9 +27,6 @@ HOST_ROOT ?= /mnt/data_infra/zephyr_container_infra/$(PROJECT_ID)
 TOOLS_DIR = ../tools
 # TORCH_CUDA_DIR removed - pkg/torch_cuda was deprecated in favor of pkg/zephyr
 
-# Container launcher script
-LAUNCHER = ./launch_container.sh
-
 # =============================================================================
 # Main Targets
 # =============================================================================
@@ -130,7 +127,7 @@ publish-dry-run:
 # Launch interactive development container
 shell: container
 	@echo "🚀 Launching interactive development shell..."
-	$(LAUNCHER)
+	zephyr shell
 
 # Show environment status and information
 status: container

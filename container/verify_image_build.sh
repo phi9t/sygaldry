@@ -43,5 +43,5 @@ fi
 exec env \
   SYGALDRY_PROJECT_ID="${PROJECT_ID}" \
   SYGALDRY_BUILD_IMAGE="${BUILD_POLICY}" \
-  "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/launch_container.sh" \
+  zephyr \
   --entrypoint=default -- bash -lc "true"

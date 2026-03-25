@@ -31,7 +31,7 @@ error() {
 
 if ! sygaldry_init_spack; then
     error "Spack setup script not found at /opt/spack_src" \
-          "Are you inside the container? Use 'sygaldry' or 'launch_container.sh'."
+          "Are you inside the container? Use 'sygaldry' or 'zephyr shell'."
 fi
 
 if ! sygaldry_activate_env; then

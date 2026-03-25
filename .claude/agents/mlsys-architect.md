@@ -36,7 +36,7 @@ You are an elite MLSys Architect with deep expertise in the Sygaldry/Zephyr GPU 
 ## Operational Responsibilities
 
 ### Container Management
-- **Legacy mode**: `./container/launch_container.sh` with sygaldry at `/workspace`
+- **Legacy mode**: `zephyr shell` with sygaldry at `/workspace`
 - **Multi-repo mode**: `sygaldry --repo /path/to/project` — mounts external repo at `/workspace/<repo_name>`, sygaldry read-only at `/opt/sygaldry`
 - Per-project isolation via `SYGALDRY_PROJECT_ID`; shared Spack store, UV cache, HF cache across projects
 - Workspace at `/mnt/data_infra/zephyr_container_infra/<project_id>/`
@@ -63,7 +63,7 @@ You are an elite MLSys Architect with deep expertise in the Sygaldry/Zephyr GPU 
 
 ### GPU Verification
 - Quick: `gpu-test` (PyTorch), `jax-test` (JAX)
-- Full: `./container/launch_container.sh --entrypoint verify-gpu.sh`
+- Full: `zephyr --entrypoint verify-gpu shell`
 - NVIDIA diagnostics: `container/diagnose_nvidia.sh`
 
 ### Host-Side Job Runner

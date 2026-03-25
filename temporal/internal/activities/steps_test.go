@@ -81,20 +81,13 @@ func TestNormalizeContainerEntrypointName(t *testing.T) {
 }
 
 func TestResolveContainerLauncherWith(t *testing.T) {
-	t.Run("prefers zephyr binary over legacy shim", func(t *testing.T) {
+	t.Run("prefers zephyr binary in sygaldry home", func(t *testing.T) {
 		root := t.TempDir()
 		zephyrPath := filepath.Join(root, "crates", "zephyr", "target", "release", "zephyr")
-		shimPath := filepath.Join(root, "container", "launch_container.sh")
 		if err := os.MkdirAll(filepath.Dir(zephyrPath), 0o755); err != nil {
 			t.Fatal(err)
 		}
-		if err := os.MkdirAll(filepath.Dir(shimPath), 0o755); err != nil {
-			t.Fatal(err)
-		}
 		if err := os.WriteFile(zephyrPath, []byte("#!/bin/sh\n"), 0o755); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(shimPath, []byte("#!/bin/sh\n"), 0o755); err != nil {
 			t.Fatal(err)
 		}
 
@@ -106,33 +99,6 @@ func TestResolveContainerLauncherWith(t *testing.T) {
 		}
 		if launcher.path != zephyrPath {
 			t.Fatalf("launcher.path = %q, want %q", launcher.path, zephyrPath)
-		}
-		if launcher.usesLegacyShim {
-			t.Fatal("launcher should not use legacy shim when zephyr exists")
-		}
-	})
-
-	t.Run("falls back to legacy shim when zephyr is absent", func(t *testing.T) {
-		root := t.TempDir()
-		shimPath := filepath.Join(root, "container", "launch_container.sh")
-		if err := os.MkdirAll(filepath.Dir(shimPath), 0o755); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(shimPath, []byte("#!/bin/sh\n"), 0o755); err != nil {
-			t.Fatal(err)
-		}
-
-		launcher, err := resolveContainerLauncherWith(root, func(string) (string, error) {
-			return "", os.ErrNotExist
-		})
-		if err != nil {
-			t.Fatal(err)
-		}
-		if launcher.path != shimPath {
-			t.Fatalf("launcher.path = %q, want %q", launcher.path, shimPath)
-		}
-		if !launcher.usesLegacyShim {
-			t.Fatal("launcher should report legacy shim fallback")
 		}
 	})
 }
@@ -813,6 +779,6 @@ func TestResolveContainerLauncher_WrapperCallable(t *testing.T) {
 	// just verify it doesn't panic and returns a consistent error or result.
 	t.Setenv("SYGALDRY_HOME", t.TempDir()) // non-existent binaries → PATH fallback
 	_, err := resolveContainerLauncher()
-	// May succeed (if zephyr or launch_container.sh is on PATH) or fail — either is valid.
+	// May succeed (if zephyr is on PATH) or fail — either is valid.
 	_ = err
 }

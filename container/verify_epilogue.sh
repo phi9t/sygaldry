@@ -67,15 +67,15 @@ if [[ "${REQUIRE_GPU}" == "true" ]]; then
 fi
 
 # ML validation (torch/jax)
-"${ROOT}/launch_container.sh" bash -lc \
+zephyr bash -lc \
   "cd \${SYGALDRY_ROOT:-/workspace}/pkg/zephyr && ./verify.sh ${REQUIRE_FLAG}"
 
 # uv verification
 if [[ "${RUN_UV}" == "true" ]]; then
   VENV_DIR="${VENV_DIR}" CONSTRAINTS_FILE="${CONSTRAINTS_FILE}" \
-    "${ROOT}/launch_container.sh" --entrypoint=uv-install -- "${UV_PKG}"
+    zephyr --entrypoint=uv-install -- "${UV_PKG}"
 
-  "${ROOT}/launch_container.sh" bash -lc \
+  zephyr bash -lc \
     "source ${VENV_DIR}/bin/activate && python \${SYGALDRY_ROOT:-/workspace}/container/verify_uv_spack.py"
 fi
 

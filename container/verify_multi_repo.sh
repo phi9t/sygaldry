@@ -54,7 +54,7 @@ run_legacy() {
     local cmd="$1"
     SYGALDRY_PROJECT_ID="${TEST_PROJECT_LEGACY}" \
     SYGALDRY_BUILD_IMAGE=never \
-        "${REPO_ROOT}/container/launch_container.sh" \
+        zephyr \
         --entrypoint run-job.sh -- bash -c "${cmd}" 2>/dev/null
 }
 
@@ -63,7 +63,7 @@ run_multi() {
     local cmd="$2"
     SYGALDRY_PROJECT_ID="${TEST_PROJECT_MULTI}" \
     SYGALDRY_BUILD_IMAGE=never \
-        "${REPO_ROOT}/container/launch_container.sh" \
+        zephyr \
         --repo "${repo_path}" \
         --entrypoint run-job.sh -- bash -c "${cmd}" 2>/dev/null
 }

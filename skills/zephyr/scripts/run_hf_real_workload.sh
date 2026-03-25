@@ -202,7 +202,7 @@ mkdir -p "${TARGET_REPO}/zephyr_validation/workloads" "${TARGET_REPO}/zephyr_val
 cp -a "${SKILL_ROOT}/scripts/workloads/hf_inference_real_dataset.py" "${TARGET_REPO}/zephyr_validation/workloads/"
 
 "${REPOCTL}" config show --repo "${TARGET_REPO}" >/dev/null
-# jobctl/launch_container binds host PWD to /workspace in-container.
+# jobctl/zephyr binds host PWD to /workspace in-container.
 # Run from target repo so workload files copied there are visible at /workspace/*.
 cd "${TARGET_REPO}"
 

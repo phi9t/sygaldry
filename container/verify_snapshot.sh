@@ -327,7 +327,7 @@ print(\"OK\")
         result="$(
             SYGALDRY_IMAGE="${IMAGE}" \
             SYGALDRY_BUILD_IMAGE=never \
-                "${REPO_ROOT}/container/launch_container.sh" \
+                zephyr \
                 --entrypoint run-job -- \
                 python3 -c "import torch; assert torch.cuda.is_available(); print('OK')" \
             2>/dev/null
@@ -342,7 +342,7 @@ print(\"OK\")
         launcher_log="$(
             SYGALDRY_IMAGE="${IMAGE}" \
             SYGALDRY_BUILD_IMAGE=never \
-                "${REPO_ROOT}/container/launch_container.sh" \
+                zephyr \
                 --entrypoint run-job -- \
                 echo "done" \
             2>&1

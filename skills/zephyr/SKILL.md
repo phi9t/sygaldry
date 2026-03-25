@@ -10,7 +10,7 @@ description: Run GPU container jobs with Spack (PyTorch/JAX), build and validate
 
 The Zephyr skill provides two operating modes:
 
-**Mode A — Direct usage from the sygaldry repo.** Use `container/launch_container.sh` to
+**Mode A — Direct usage from the sygaldry repo.** Use `zephyr shell` to
 launch the Docker container backed by the shared Spack store (PyTorch, JAX, CUDA).
 
 **Mode B — Vendored kit in a target repo.** After running `zephyr_mlsys_vendor.sh install`,
@@ -36,19 +36,19 @@ is the single hermetic baseline for both modes.
 
 ```bash
 # Interactive shell (builds image if needed)
-./container/launch_container.sh
+zephyr shell
 
 # Run a command inside the container
-./container/launch_container.sh -- python train.py
+zephyr -- python train.py
 
 # Multi-repo mode: mount an external repo
-./container/launch_container.sh --repo /path/to/my-project -- python train.py
+zephyr --repo /path/to/my-project -- python train.py
 
 # Run with a named entrypoint
-./container/launch_container.sh --entrypoint verify-gpu.sh
+zephyr --entrypoint verify-gpu shell
 
 # Download a HuggingFace model
-./container/launch_container.sh --entrypoint hf-download.sh -- model Qwen/Qwen3-0.6B-Base
+zephyr --entrypoint hf-download shell -- model Qwen/Qwen3-0.6B-Base
 ```
 
 **Key flags:**
@@ -115,8 +115,8 @@ repoctl verify uv-layering  --repo <path>
 Quick GPU checks inside the container:
 
 ```bash
-./container/launch_container.sh --entrypoint verify-gpu.sh   # PyTorch + JAX
-./container/launch_container.sh --entrypoint verify-spack.sh # Fast Spack only
+zephyr --entrypoint verify-gpu shell   # PyTorch + JAX
+zephyr --entrypoint verify-spack shell # Fast Spack only
 ```
 
 ---

@@ -102,7 +102,7 @@ echo "  Running verify-spack.sh entrypoint (torch + jax + tensor ops + NN ops)..
 
 if SYGALDRY_PROJECT_ID="${TEST_PROJECT_LEGACY}" \
    SYGALDRY_BUILD_IMAGE=never \
-   "${REPO_ROOT}/container/launch_container.sh" \
+   zephyr \
    --entrypoint verify-spack 2>&1 | tail -5; then
     pass "Legacy: verify-spack passes (torch + jax GPU validation)"
 else
@@ -134,7 +134,7 @@ echo "  Running GPU test from external repo via shared Spack store..."
 
 result="$(SYGALDRY_PROJECT_ID="${TEST_PROJECT_MULTI}" \
     SYGALDRY_BUILD_IMAGE=never \
-    "${REPO_ROOT}/container/launch_container.sh" \
+    zephyr \
     --repo "${FAKE_REPO}" \
     --entrypoint run-job.sh -- \
     bash -c "source /opt/spack_src/share/spack/setup-env.sh && spack env activate \${SYGALDRY_ROOT}/pkg/zephyr && python \$(pwd)/test_gpu.py" 2>&1 | tail -5)" || true
@@ -162,7 +162,7 @@ echo "marker" > "${FAKE_REPO2}/MARKER"
 # Note: aliases may not expand in non-interactive bash -c, so use the underlying commands.
 result="$(SYGALDRY_PROJECT_ID="${TEST_PROJECT_MULTI}" \
     SYGALDRY_BUILD_IMAGE=never \
-    "${REPO_ROOT}/container/launch_container.sh" \
+    zephyr \
     --repo "${FAKE_REPO2}" \
     --entrypoint default -- \
     bash -c 'python3 -c "import torch; print(f\"CUDA: {torch.cuda.is_available()}\")" && python3 -c "import jax; print(f\"Devices: {jax.devices()}\")"' 2>&1 | tail -5)" || true
@@ -187,7 +187,7 @@ CLEANUP_DIRS+=("${REPO_A}" "${REPO_B}")
 echo "  Creating marker in project A workspace..."
 SYGALDRY_PROJECT_ID="${TEST_PROJECT_A}" \
 SYGALDRY_BUILD_IMAGE=never \
-    "${REPO_ROOT}/container/launch_container.sh" \
+    zephyr \
     --repo "${REPO_A}" \
     --entrypoint run-job.sh -- \
     bash -c 'echo "project-a-marker" > /workspace/isolation-test.txt' 2>/dev/null || true
@@ -195,7 +195,7 @@ SYGALDRY_BUILD_IMAGE=never \
 echo "  Checking project B workspace does not see project A's files..."
 result="$(SYGALDRY_PROJECT_ID="${TEST_PROJECT_B}" \
     SYGALDRY_BUILD_IMAGE=never \
-    "${REPO_ROOT}/container/launch_container.sh" \
+    zephyr \
     --repo "${REPO_B}" \
     --entrypoint run-job.sh -- \
     bash -c 'test ! -f /workspace/isolation-test.txt && echo ISOLATED || echo LEAKED' 2>/dev/null)" || true
@@ -219,7 +219,7 @@ CLEANUP_DIRS+=("${REPO_PERSIST}")
 echo "  Launch 1: writing persist marker..."
 SYGALDRY_PROJECT_ID="${TEST_PROJECT_PERSIST}" \
 SYGALDRY_BUILD_IMAGE=never \
-    "${REPO_ROOT}/container/launch_container.sh" \
+    zephyr \
     --repo "${REPO_PERSIST}" \
     --entrypoint run-job.sh -- \
     bash -c 'echo "survived-relaunch" > /workspace/persist-marker.txt' 2>/dev/null || true
@@ -227,7 +227,7 @@ SYGALDRY_BUILD_IMAGE=never \
 echo "  Launch 2: reading persist marker..."
 result="$(SYGALDRY_PROJECT_ID="${TEST_PROJECT_PERSIST}" \
     SYGALDRY_BUILD_IMAGE=never \
-    "${REPO_ROOT}/container/launch_container.sh" \
+    zephyr \
     --repo "${REPO_PERSIST}" \
     --entrypoint run-job.sh -- \
     bash -c 'cat /workspace/persist-marker.txt 2>/dev/null || echo MISSING' 2>/dev/null)" || true

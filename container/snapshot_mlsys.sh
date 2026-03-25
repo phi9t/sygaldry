@@ -356,7 +356,7 @@ if [[ ${#BUILT_IMAGES[@]} -gt 0 ]]; then
     log "  docker run --rm -it --gpus all ${first_img}"
     log ""
     log "  # Via launcher:"
-    log "  SYGALDRY_IMAGE=${first_img} ./container/launch_container.sh"
+    log "  SYGALDRY_IMAGE=${first_img} zephyr shell"
     log ""
 fi
 

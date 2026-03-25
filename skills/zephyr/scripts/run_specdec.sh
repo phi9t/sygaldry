@@ -6,7 +6,7 @@ gpu="true"
 max_tokens="32"
 spec_length="4"
 extra_args=()
-launcher="${SYGALDRY_LAUNCHER:-container/launch_container.sh}"
+launcher="${SYGALDRY_LAUNCHER:-zephyr}"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in

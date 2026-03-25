@@ -26,7 +26,7 @@ required_paths=(
     "${TARGET_ROOT}/scripts/zephyr_vendor_infra.sh"
     "${TARGET_ROOT}/assets/zephyr-container-infra/bin/repoctl"
     "${TARGET_ROOT}/assets/zephyr-container-infra/bin/jobctl"
-    "${TARGET_ROOT}/assets/zephyr-container-infra/container/launch_container.sh"
+    "${TARGET_ROOT}/assets/zephyr-container-infra/bin/zephyr"
     "${TARGET_ROOT}/assets/zephyr-container-infra/infra.yaml"
 )
 

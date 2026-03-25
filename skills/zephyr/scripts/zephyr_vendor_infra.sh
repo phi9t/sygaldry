@@ -117,7 +117,6 @@ copy_kit() {
         cp -a "${KIT_SRC}/." "${target_kit}/"
     fi
     chmod +x "${target_kit}/bin/repoctl" "${target_kit}/bin/jobctl"
-    chmod +x "${target_kit}/container/launch_container.sh"
     chmod +x "${target_kit}/container/entrypoints/"*.sh
     chmod +x "${target_kit}/container/lib/"*.sh
     chmod +x "${target_kit}/container/verify_uv_layering.sh"
@@ -238,7 +237,6 @@ while [[ $# -gt 0 ]]; do
 done
 
 [[ -d "${KIT_SRC}" ]] || err "Portable kit not found at ${KIT_SRC}"
-[[ -f "${KIT_SRC}/container/launch_container.sh" ]] || err "Portable kit missing launch_container.sh"
 [[ -f "${KIT_SRC}/build_repo_image.sh" ]] || err "Portable kit missing build_repo_image.sh"
 [[ -f "${KIT_SRC}/Dockerfile.zephyr" ]] || err "Portable kit missing Dockerfile.zephyr"
 

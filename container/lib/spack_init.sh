@@ -32,7 +32,7 @@ sygaldry_init_spack() {
     if [[ ! -f "${spack_setup}" ]]; then
         error_with_hint \
             "Spack setup script not found at /opt/spack_src." \
-            "Are you inside the container? Use 'sygaldry' or 'launch_container.sh'."
+            "Are you inside the container? Use 'sygaldry' or 'zephyr shell'."
         return 1
     fi
     # shellcheck disable=SC1090
