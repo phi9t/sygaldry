@@ -19,15 +19,10 @@ Always run this general health scan regardless of which RFCs are open:
 # ── General codebase health scan ──────────────────────────────────────────────
 
 # File sizes (flag files >500 lines for decomposition review)
-# Use xargs to tolerate missing files instead of failing the whole command.
-ls temporal/cmd/orchestrate/main.go \
-   temporal/internal/workflows/rfc_impl.go \
-   temporal/internal/activities/steps.go \
-   temporal/cmd/worker/main.go \
-   tools/agentic/sail_supervisor.py \
-   crates/zephyr/src/config.rs \
-   crates/zephyr/src/host/docker_args.rs \
-   2>/dev/null | xargs wc -l 2>/dev/null
+# Scan ALL Go, Rust, and Python production files automatically — no hardcoded list.
+find temporal/ -name '*.go' ! -name '*_test.go' -exec wc -l {} + 2>/dev/null | sort -rn | head -20
+find crates/ -name '*.rs' ! -name '*.rs' -path '*/tests/*' -not -path '*/target/*' -exec wc -l {} + 2>/dev/null | sort -rn | head -20
+find tools/agentic/ -name '*.py' ! -name 'test_*' ! -name '*_test.py' -exec wc -l {} + 2>/dev/null | sort -rn | head -10
 
 # Go: TODO/FIXME/HACK (excluding tests)
 grep -rn 'TODO\|FIXME\|HACK\|XXX' temporal/ --include='*.go' | grep -v '_test.go' | head -20
@@ -41,7 +36,8 @@ grep -rn 'TODO\|FIXME\|HACK\|XXX' temporal/ --include='*.go' | grep -v '_test.go
 grep -rn '_ = \|_ =' temporal/ --include='*.go' | grep -v '_test.go\|//.*_ =' | head -20
 
 # Go: hardcoded Temporal defaults (should be env-overridable)
-grep -rn '"localhost:7233\|"default"\|"orchestration"' temporal/ --include='*.go' | grep -v '_test.go' | head -20
+# Note: "default" alone is too noisy; match only full Temporal address/namespace/queue literals.
+grep -rn '"localhost:7233"\|"default".*[Nn]amespace\|[Nn]amespace.*"default"\|"orchestration"' temporal/ --include='*.go' | grep -v '_test.go' | head -20
 
 # Go: duplicated function definitions across cmd/ packages
 grep -rn '^func envOr\b\|^func envOrInt\b' temporal/ --include='*.go' | head -10
@@ -64,9 +60,16 @@ grep -rn 'TODO\|FIXME\|HACK' crates/zephyr/src/ --include='*.rs' | grep -v targe
 # Rust: unit test count
 grep -rn '^\s*#\[test\]' crates/zephyr/src/ --include='*.rs' | grep -v target | wc -l
 
-# Rust: unwrap() in non-test production code (test code is OK)
-grep -rn '\.unwrap()' crates/zephyr/src/ --include='*.rs' | grep -v target \
-  | grep -v 'fn test_\|#\[test\]\|#\[cfg(test)\]' | head -10
+# Rust: unwrap() / expect() / panic!() in non-test production code (test code is OK)
+grep -rn '\.unwrap()\|\.expect(\|panic!(' crates/zephyr/src/ --include='*.rs' | grep -v target \
+  | grep -v '#\[cfg(test)\]\|mod tests' | head -20
+
+# Rust: println!/eprintln! in non-test production code (should use tracing/log macros)
+grep -rn 'println!\|eprintln!' crates/zephyr/src/ --include='*.rs' | grep -v target \
+  | grep -v '#\[cfg(test)\]\|mod tests' | head -10
+
+# Rust: clippy warnings (flag any -D warnings failures)
+cargo clippy -p zephyr -- -D warnings 2>&1 | grep '^error' | head -20
 
 # Go: unit test count
 grep -rn '^func Test' temporal/ --include='*_test.go' | wc -l
@@ -223,6 +226,9 @@ Good candidates come from:
   validate_all.sh suppresses a warning class, discover_issues.py should match or vice versa
 - RFC solution code snippets that reference logging APIs (`slog.Warn`) when the target file
   uses `workflow.GetLogger(ctx)` — always verify which logger the file already uses
+- `unwrap()`, `expect(...)`, or `panic!(...)` in non-test Rust production code paths
+- `println!` / `eprintln!` in non-test Rust production code (should use tracing/log macros)
+- `cargo clippy -D warnings` failures that are not already tracked by an open RFC
 
 **Do not create RFCs for:**
 - `fmt.Printf` / `fmt.Println` in `cmd/` packages used for user-facing output (e.g., plan
@@ -252,8 +258,13 @@ ls docs/RFC-*.md | wc -l
 # No closed RFC numbers appear in the open table
 # (verify manually that the Open RFCs table has no rows for closed RFC numbers)
 
-# No code was changed
-./validate_all.sh --quick   # must pass
+# discover_issues picks up all new open RFCs
+python3 tools/agentic/discover_issues.py --sources open_rfcs 2>/dev/null \
+  | python3 -c "import json,sys; issues=json.load(sys.stdin); print(len(issues),'open RFCs found')"
+
+# Only run validate_all.sh if any production code was modified (not just docs/RFC-*.md changes).
+# If only RFC markdown files changed, skip this step.
+git diff --name-only HEAD | grep -qv '^docs/' && ./validate_all.sh --quick || echo "docs-only change; skipping validate_all.sh"
 ```
 
 Also verify RFC-INDEX.md:

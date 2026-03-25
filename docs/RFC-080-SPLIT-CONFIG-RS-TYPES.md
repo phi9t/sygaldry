@@ -25,17 +25,39 @@ Types to extract:
 
 ## Solution
 
-Create `crates/zephyr/src/config_types.rs` with the 5 type definitions.
+Create `crates/zephyr/src/config_types.rs` with the 5 type definitions and
+their `impl` blocks (each enum has a `parse()` method that must move with it).
 
-In `crates/zephyr/src/config.rs`, replace the inline definitions with:
-```rust
-use crate::config_types::{BuildPolicy, LeaseMode, CacheProfile, LaunchMode, SharedCaches};
-```
+**`crates/zephyr/src/config_types.rs` must contain:**
+- `use std::path::PathBuf;` (required by `LaunchMode`)
+- `pub enum BuildPolicy` + `impl BuildPolicy` (lines 6–21)
+- `pub enum LeaseMode` + `impl LeaseMode` (lines 25–40)
+- `pub enum CacheProfile` + `impl CacheProfile` (lines 44–59)
+- `pub enum LaunchMode` (lines 63–66; no impl block)
+- `pub(crate) struct SharedCaches` (lines 333–342; was `struct SharedCaches`, must
+  stay at least `pub(crate)` so `config.rs` can use it after moving)
 
-In `crates/zephyr/src/lib.rs`, add:
-```rust
-pub mod config_types;
-```
+**`crates/zephyr/src/config.rs` changes:**
+- Remove the 5 type definitions and their `impl` blocks.
+- Add at the top (after existing `use` lines):
+  ```rust
+  pub use crate::config_types::{BuildPolicy, CacheProfile, LaunchMode, LeaseMode};
+  use crate::config_types::SharedCaches;
+  ```
+  The `pub use` re-exports are required because `lease.rs`, `image.rs`, and
+  `docker_args.rs` all import these types from `crate::config::` — those
+  callers must NOT be changed.
+
+**`crates/zephyr/src/main.rs` changes** (note: this is a binary crate — there is
+no `lib.rs`):
+- Add the module declaration after the existing `mod config;` line:
+  ```rust
+  mod config_types;
+  ```
+
+**Ordering:** Create `config_types.rs` first, then edit `config.rs` to add the
+`pub use` lines and remove the inline definitions, then edit `main.rs` to add
+`mod config_types;`.
 
 ---
 

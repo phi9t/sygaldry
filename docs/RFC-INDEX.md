@@ -1,7 +1,7 @@
 # RFC Index
 
 **Last updated:** 2026-03-25
-**Total RFCs:** 5 open (81 created, 76 closed as complete or N/A)
+**Total RFCs:** 7 open (84 created, 77 closed as complete or N/A)
 
 ---
 
@@ -9,10 +9,12 @@
 
 | # | Title | Priority | Effort | Status |
 |---|-------|----------|--------|--------|
-| RFC-077 | Fix Rust Test Count Scan in rfc-review-prompt.md | Medium | XS | Open |
 | RFC-078 | Extract rfc_impl.go Helpers to rfc_impl_util.go | Medium | XS | Open |
-| RFC-079 | Extract HttpServer Class from sail_supervisor.py | Medium | S | Open |
+| RFC-079 | Extract HttpServer Class from sail_supervisor.py | Medium | M | Open |
+| RFC-082 | Add cargo_clippy Source to discover_issues.py | Medium | S | Open |
+| RFC-083 | Remove Stale k3s Subcommand from bin/sygaldry | Medium | XS | Open |
 | RFC-080 | Split config.rs Enums to config_types.rs | Low | S | Open |
+| RFC-084 | Extract stepContext Helper from startActivity in pipeline.go | Low | S | Open |
 | RFC-081 | Decompose docker_args.rs into docker_env.rs and docker_mounts.rs | Low | M | Open |
 
 ---
@@ -97,3 +99,4 @@
 | RFC-074 | Refactor staging.rs Private Functions to Use StageContext Struct | Done — SAIL (commit 931b722) |
 | RFC-075 | Extract Log-Writer Infrastructure from steps.go to logging.go | Done — SAIL (commit 56e96e4) |
 | RFC-076 | Add Unit Tests for update_major_challenge_state.py | Done — SAIL (commit fb561a6) |
+| RFC-077 | Fix Rust Test Count Scan in rfc-review-prompt.md | Done — rfc-review-prompt.md:61 already uses `'^\s*#\[test\]'` |
