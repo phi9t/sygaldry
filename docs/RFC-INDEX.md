@@ -1,13 +1,19 @@
 # RFC Index
 
 **Last updated:** 2026-03-25
-**Total RFCs:** 0 open (76 created, 76 closed as complete or N/A)
+**Total RFCs:** 5 open (81 created, 76 closed as complete or N/A)
 
 ---
 
 ## Open RFCs
 
-None. All RFCs have been resolved.
+| # | Title | Priority | Effort | Status |
+|---|-------|----------|--------|--------|
+| RFC-077 | Fix Rust Test Count Scan in rfc-review-prompt.md | Medium | XS | Open |
+| RFC-078 | Extract rfc_impl.go Helpers to rfc_impl_util.go | Medium | XS | Open |
+| RFC-079 | Extract HttpServer Class from sail_supervisor.py | Medium | S | Open |
+| RFC-080 | Split config.rs Enums to config_types.rs | Low | S | Open |
+| RFC-081 | Decompose docker_args.rs into docker_env.rs and docker_mounts.rs | Low | M | Open |
 
 ---
 

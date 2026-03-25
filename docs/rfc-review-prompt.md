@@ -33,6 +33,11 @@ ls temporal/cmd/orchestrate/main.go \
 grep -rn 'TODO\|FIXME\|HACK\|XXX' temporal/ --include='*.go' | grep -v '_test.go' | head -20
 
 # Go: swallowed errors
+# NOTE: The following patterns are intentional and must NOT be flagged as RFCs:
+#   _ = workflow.GetVersion(...)      — Temporal versioning API requires consuming the return
+#   _, _ = file.Write(...)            — log-sink I/O; write errors are non-actionable
+#   _, _ = fmt.Fprintln(...)          — log-sink I/O; write errors are non-actionable
+#   _ = workflow.UpsertSearchAttributes(...) — non-critical attribute update
 grep -rn '_ = \|_ =' temporal/ --include='*.go' | grep -v '_test.go\|//.*_ =' | head -20
 
 # Go: hardcoded Temporal defaults (should be env-overridable)
@@ -57,7 +62,7 @@ grep -rn '#\[allow(' crates/zephyr/src/ --include='*.rs' | grep -v target | head
 grep -rn 'TODO\|FIXME\|HACK' crates/zephyr/src/ --include='*.rs' | grep -v target | head -20
 
 # Rust: unit test count
-grep -rn '^#\[test\]' crates/zephyr/src/ --include='*.rs' | grep -v target | wc -l
+grep -rn '^\s*#\[test\]' crates/zephyr/src/ --include='*.rs' | grep -v target | wc -l
 
 # Rust: unwrap() in non-test production code (test code is OK)
 grep -rn '\.unwrap()' crates/zephyr/src/ --include='*.rs' | grep -v target \
@@ -222,6 +227,9 @@ Good candidates come from:
 **Do not create RFCs for:**
 - `fmt.Printf` / `fmt.Println` in `cmd/` packages used for user-facing output (e.g., plan
   validation summary, status JSON output) — these are intentional stdout writes, not logging
+- Intentional `_ =` suppressions in Temporal workflow code: `workflow.GetVersion(...)`,
+  `workflow.UpsertSearchAttributes(...)`, `file.Write(...)`, `fmt.Fprintln(...)` in log sinks
+- `validate_all.sh` coverage gaps for Rust — it already runs `cargo test` and `cargo clippy`
 - Issues that are outside the repository scope (e.g., upstream Spack packages)
 - Issues that require an external service or API change
 
