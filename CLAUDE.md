@@ -112,13 +112,6 @@ zephyr --entrypoint verify-spack shell  # Fast Spack verification (no rebuild)
 ./validate_all.sh --verify-only # Quick Spack/GPU verification only (no rebuild)
 ```
 
-**Automated Spack builds with retry:**
-```bash
-tools/zephyr_autobuild.sh       # One-shot Spack build with GPU validation
-tools/zephyr_autoretry.sh       # Retry loop around autobuild with remediation
-tools/zephyr_autoretry_tmux.sh  # tmux wrapper for long-running builds
-```
-
 ## Temporal Orchestration
 
 The `temporal/` directory contains a Go-based workflow orchestration system for running pipelines.
@@ -261,7 +254,6 @@ temporal/
 tools/
   build.sh                     # Builds base Spack environment
   zephyr_job                   # Host-side job runner CLI
-  zephyr_autobuild.sh          # One-shot Spack build with GPU validation
 pkg/
   zephyr/                      # Primary AI/ML Spack environment (PyTorch, JAX, CUDA)
 skills/

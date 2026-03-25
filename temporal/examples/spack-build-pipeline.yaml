@@ -1,7 +1,7 @@
 # Spack Build Pipeline
 # ====================
 #
-# Replaces the shell-based zephyr_autobuild.sh / zephyr_autoretry.sh with
+# Replaced the shell-based zephyr_autobuild.sh / zephyr_autoretry.sh with
 # a Temporal-orchestrated pipeline. Run with:
 #
 #   go run ./cmd/orchestrate -plan examples/spack-build-pipeline.yaml
