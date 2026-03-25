@@ -2,8 +2,6 @@
 
 import json
 
-import pytest
-
 from tools.agentic.update_major_challenge_state import (
     append_history,
     load_state,
