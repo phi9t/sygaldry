@@ -12,7 +12,9 @@ from tools.agentic.parse_session_events import (
 )
 
 
-def _make_structured_line(ev: dict, stream: str = "stdout", partial: bool = False) -> str:
+def _make_structured_line(
+    ev: dict, stream: str = "stdout", partial: bool = False
+) -> str:
     return json.dumps(
         {
             "timestamp": "2026-01-01T00:00:00Z",

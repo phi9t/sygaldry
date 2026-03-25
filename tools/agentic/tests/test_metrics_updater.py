@@ -19,13 +19,11 @@ def test_load_attempts_filters_by_cutoff(tmp_path: Path) -> None:
     sub = run_dir / "primary"
     sub.mkdir(parents=True)
     records = [
-        {"startedAt": _ts(1), "status": "success"},   # inside window
-        {"startedAt": _ts(48), "status": "failed"},   # outside window (2 days ago)
+        {"startedAt": _ts(1), "status": "success"},  # inside window
+        {"startedAt": _ts(48), "status": "failed"},  # outside window (2 days ago)
     ]
     jsonl = sub / "issue_attempts.jsonl"
-    jsonl.write_text(
-        "\n".join(json.dumps(r) for r in records) + "\n", encoding="utf-8"
-    )
+    jsonl.write_text("\n".join(json.dumps(r) for r in records) + "\n", encoding="utf-8")
 
     cutoff = dt.datetime.now(_UTC) - dt.timedelta(hours=24)
     results = load_attempts(tmp_path, cutoff)
@@ -79,6 +77,7 @@ def test_count_runs_counts_matching_dirs(tmp_path: Path) -> None:
     # Make old dir appear old by setting mtime far in the past
     past = dt.datetime(2020, 1, 1, tzinfo=_UTC).timestamp()
     import os
+
     os.utime(old, (past, past))
 
     cutoff = dt.datetime.now(_UTC) - dt.timedelta(days=1)

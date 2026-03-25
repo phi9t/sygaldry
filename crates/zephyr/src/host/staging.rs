@@ -48,6 +48,14 @@ impl StagePaths {
     }
 }
 
+struct StageContext<'a> {
+    paths: &'a StagePaths,
+    config: &'a StageConfig,
+    specs_csv: &'a str,
+    forbidden_csv: &'a str,
+    stage_env: &'a str,
+}
+
 /// Result status for final_status.json.
 #[derive(serde::Serialize)]
 struct FinalStatus {
@@ -128,57 +136,47 @@ pub fn run_stage(config: &StageConfig) -> Result<()> {
         analyze_args.push(spec.clone());
     }
 
+    let ctx_init = StageContext { paths: &paths, config, specs_csv: &specs_csv, forbidden_csv: &forbidden_csv, stage_env: "" };
     run_step(
         &analyze_tool.display().to_string(),
         &analyze_args,
         "analyze",
         EXIT_ANALYZE_FAILED,
-        &paths,
-        config,
-        &specs_csv,
-        &forbidden_csv,
-        "",
+        &ctx_init,
     )?;
 
     // Extract stage_env from analysis report
     let stage_env = extract_stage_dir(&paths.analyze_report)?;
+    let ctx = StageContext { paths: &paths, config, specs_csv: &specs_csv, forbidden_csv: &forbidden_csv, stage_env: &stage_env };
 
     // Step 2: Generate new requirements list
     generate_new_requirements(&paths.analyze_report, &paths.new_req_txt).map_err(|e| {
-        write_final_status(&paths, config, &specs_csv, &forbidden_csv, &stage_env, "failed", "new_requirements", &e.to_string());
+        write_final_status(&ctx, "failed", "new_requirements", &e.to_string());
         ZephyrError::CommandFailed { command: "generate new requirements".into(), code: EXIT_NEW_REQ_FAILED }
     })?;
 
     // Step 3: Check forbidden guard
     check_forbidden_guard(&paths.analyze_report, &config.forbidden_names, config.verbose).map_err(|e| {
-        write_final_status(&paths, config, &specs_csv, &forbidden_csv, &stage_env, "failed", "core_guard", &e.to_string());
+        write_final_status(&ctx, "failed", "core_guard", &e.to_string());
         ZephyrError::CommandFailed { command: "forbidden guard check".into(), code: EXIT_FORBIDDEN }
     })?;
 
     // Step 4: Install
     run_spack_cmd(
         &["install"],
-        &stage_env,
         &paths.install_log,
         "install",
         EXIT_INSTALL_FAILED,
-        &paths,
-        config,
-        &specs_csv,
-        &forbidden_csv,
+        &ctx,
     )?;
 
     // Step 5: Regenerate view
     run_spack_cmd(
         &["env", "view", "regenerate"],
-        &stage_env,
         &paths.install_log,
         "view_regenerate",
         EXIT_VIEW_REGEN_FAILED,
-        &paths,
-        config,
-        &specs_csv,
-        &forbidden_csv,
+        &ctx,
     )?;
 
     // Step 6: GPU verification
@@ -192,7 +190,7 @@ pub fn run_stage(config: &StageConfig) -> Result<()> {
             if let Ok(output) = &status {
                 let _ = std::fs::write(&paths.verify_zephyr_log, &output.stdout);
                 if !output.status.success() {
-                    write_final_status(&paths, config, &specs_csv, &forbidden_csv, &stage_env, "failed", "verify_pkg_zephyr", "pkg/zephyr/verify.sh failed");
+                    write_final_status(&ctx, "failed", "verify_pkg_zephyr", "pkg/zephyr/verify.sh failed");
                     return Err(ZephyrError::CommandFailed { command: "verify.sh".into(), code: EXIT_VERIFY_ZEPHYR_FAILED });
                 }
             }
@@ -206,7 +204,7 @@ pub fn run_stage(config: &StageConfig) -> Result<()> {
             if let Ok(output) = &status {
                 let _ = std::fs::write(&paths.verify_gpu_log, &output.stdout);
                 if !output.status.success() {
-                    write_final_status(&paths, config, &specs_csv, &forbidden_csv, &stage_env, "failed", "verify_gpu", "verify-gpu.sh failed");
+                    write_final_status(&ctx, "failed", "verify_gpu", "verify-gpu.sh failed");
                     return Err(ZephyrError::CommandFailed { command: "verify-gpu.sh".into(), code: EXIT_VERIFY_GPU_FAILED });
                 }
             }
@@ -231,14 +229,14 @@ for m in mods:
         if let Ok(out) = &output {
             let _ = std::fs::write(&paths.verify_imports_log, &out.stdout);
             if !out.status.success() {
-                write_final_status(&paths, config, &specs_csv, &forbidden_csv, &stage_env, "failed", "verify_imports", "Python import verification failed");
+                write_final_status(&ctx, "failed", "verify_imports", "Python import verification failed");
                 return Err(ZephyrError::CommandFailed { command: "verify imports".into(), code: EXIT_VERIFY_IMPORTS_FAILED });
             }
         }
     }
 
     // Success
-    write_final_status(&paths, config, &specs_csv, &forbidden_csv, &stage_env, "ok", "", "");
+    write_final_status(&ctx, "ok", "", "");
 
     println!("RUN_ROOT={}", config.run_root.display());
     println!("STAGE_ENV={stage_env}");
@@ -343,41 +341,31 @@ fn check_forbidden_guard(report_path: &Path, forbidden_names: &[String], verbose
     Ok(())
 }
 
-#[allow(clippy::too_many_arguments)]
 fn run_step(
     program: &str,
     args: &[String],
     step_name: &str,
     exit_code: i32,
-    paths: &StagePaths,
-    config: &StageConfig,
-    specs_csv: &str,
-    forbidden_csv: &str,
-    stage_env: &str,
+    ctx: &StageContext<'_>,
 ) -> Result<()> {
     let arg_refs: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
     let status = Command::new(program).args(&arg_refs).status()?;
     if !status.success() {
         let msg = format!("{step_name} failed");
-        write_final_status(paths, config, specs_csv, forbidden_csv, stage_env, "failed", step_name, &msg);
+        write_final_status(ctx, "failed", step_name, &msg);
         return Err(ZephyrError::CommandFailed { command: step_name.into(), code: exit_code });
     }
     Ok(())
 }
 
-#[allow(clippy::too_many_arguments)]
 fn run_spack_cmd(
     spack_args: &[&str],
-    stage_env: &str,
     log_file: &Path,
     step_name: &str,
     exit_code: i32,
-    paths: &StagePaths,
-    config: &StageConfig,
-    specs_csv: &str,
-    forbidden_csv: &str,
+    ctx: &StageContext<'_>,
 ) -> Result<()> {
-    let mut args = vec!["-e", stage_env];
+    let mut args = vec!["-e", ctx.stage_env];
     args.extend(spack_args);
     let output = Command::new("spack").args(&args).output()?;
 
@@ -392,41 +380,36 @@ fn run_spack_cmd(
 
     if !output.status.success() {
         let msg = format!("{step_name} failed");
-        write_final_status(paths, config, specs_csv, forbidden_csv, stage_env, "failed", step_name, &msg);
+        write_final_status(ctx, "failed", step_name, &msg);
         return Err(ZephyrError::CommandFailed { command: step_name.into(), code: exit_code });
     }
     Ok(())
 }
 
-#[allow(clippy::too_many_arguments)]
 fn write_final_status(
-    paths: &StagePaths,
-    config: &StageConfig,
-    specs_csv: &str,
-    forbidden_csv: &str,
-    stage_env: &str,
+    ctx: &StageContext<'_>,
     status: &str,
     failed_step: &str,
     failure_message: &str,
 ) {
     let payload = FinalStatus {
-        run_root: config.run_root.display().to_string(),
-        source_yaml: config.source_yaml.display().to_string(),
-        specs_csv: specs_csv.to_string(),
-        forbidden_names_csv: forbidden_csv.to_string(),
-        stage_env: stage_env.to_string(),
-        analyze_report: paths.analyze_report.display().to_string(),
-        new_requirements: paths.new_req_txt.display().to_string(),
-        install_log: paths.install_log.display().to_string(),
-        verify_pkg_zephyr_log: paths.verify_zephyr_log.display().to_string(),
-        verify_gpu_log: paths.verify_gpu_log.display().to_string(),
-        verify_imports_log: paths.verify_imports_log.display().to_string(),
+        run_root: ctx.config.run_root.display().to_string(),
+        source_yaml: ctx.config.source_yaml.display().to_string(),
+        specs_csv: ctx.specs_csv.to_string(),
+        forbidden_names_csv: ctx.forbidden_csv.to_string(),
+        stage_env: ctx.stage_env.to_string(),
+        analyze_report: ctx.paths.analyze_report.display().to_string(),
+        new_requirements: ctx.paths.new_req_txt.display().to_string(),
+        install_log: ctx.paths.install_log.display().to_string(),
+        verify_pkg_zephyr_log: ctx.paths.verify_zephyr_log.display().to_string(),
+        verify_gpu_log: ctx.paths.verify_gpu_log.display().to_string(),
+        verify_imports_log: ctx.paths.verify_imports_log.display().to_string(),
         status: status.to_string(),
         failed_step: failed_step.to_string(),
         failure_message: failure_message.to_string(),
     };
     if let Ok(json) = serde_json::to_string_pretty(&payload) {
-        let _ = std::fs::write(&paths.final_status, format!("{json}\n"));
+        let _ = std::fs::write(&ctx.paths.final_status, format!("{json}\n"));
     }
 }
 
@@ -545,7 +528,8 @@ mod tests {
             sygaldry_home: PathBuf::from("/opt/sygaldry"),
         };
 
-        write_final_status(&paths, &config, "", "", "", "ok", "", "");
+        let ctx = StageContext { paths: &paths, config: &config, specs_csv: "", forbidden_csv: "", stage_env: "" };
+        write_final_status(&ctx, "ok", "", "");
 
         let content = std::fs::read_to_string(&paths.final_status).unwrap();
         let parsed: serde_json::Value = serde_json::from_str(&content).unwrap();
@@ -571,7 +555,8 @@ mod tests {
             sygaldry_home: PathBuf::from("/opt/sygaldry"),
         };
 
-        write_final_status(&paths, &config, "py-soundfile", "py-torch,py-jax", "/tmp/stage", "failed", "core_guard", "forbidden packages found");
+        let ctx = StageContext { paths: &paths, config: &config, specs_csv: "py-soundfile", forbidden_csv: "py-torch,py-jax", stage_env: "/tmp/stage" };
+        write_final_status(&ctx, "failed", "core_guard", "forbidden packages found");
 
         let content = std::fs::read_to_string(&paths.final_status).unwrap();
         let parsed: serde_json::Value = serde_json::from_str(&content).unwrap();
