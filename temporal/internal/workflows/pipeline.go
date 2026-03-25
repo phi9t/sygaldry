@@ -75,17 +75,6 @@ type HFDownloadModelSpec struct {
 	CacheDir string `json:"cacheDir" yaml:"cache_dir"`
 }
 
-type K8sJobSpec struct {
-	ProjectID  string            `json:"projectId" yaml:"project_id"`
-	Entrypoint string            `json:"entrypoint" yaml:"entrypoint"`
-	Command    string            `json:"command" yaml:"command"`
-	Env        map[string]string `json:"env" yaml:"env"`
-	GPU        bool              `json:"gpu" yaml:"gpu"`
-	GPUCount   int               `json:"gpuCount" yaml:"gpu_count"`
-	Image      string            `json:"image" yaml:"image"`
-	Namespace  string            `json:"namespace" yaml:"namespace"`
-}
-
 type AgentTaskSpec struct {
 	Engine     string            `json:"engine" yaml:"engine"`
 	Model      string            `json:"model" yaml:"model"`
@@ -131,7 +120,6 @@ type PipelineStep struct {
 	ContainerJob      *ContainerJobSpec      `json:"containerJob" yaml:"container_job"`
 	HFDownloadDataset *HFDownloadDatasetSpec `json:"hfDownloadDataset" yaml:"hf_download_dataset"`
 	HFDownloadModel   *HFDownloadModelSpec   `json:"hfDownloadModel" yaml:"hf_download_model"`
-	K8sJob            *K8sJobSpec            `json:"k8sJob" yaml:"k8s_job"`
 	AgentTask         *AgentTaskSpec         `json:"agentTask" yaml:"agent_task"`
 	GitOp             *GitOpSpec             `json:"gitOp" yaml:"git_op"`
 }
@@ -503,9 +491,6 @@ func prepareStep(step PipelineStep, input PipelineInput, outcomes map[string]Ste
 	if rendered.ContainerJob != nil {
 		rendered.ContainerJob.Env = maputil.MergeStringMaps(planEnv, rendered.ContainerJob.Env)
 	}
-	if rendered.K8sJob != nil {
-		rendered.K8sJob.Env = maputil.MergeStringMaps(planEnv, rendered.K8sJob.Env)
-	}
 	if rendered.AgentTask != nil {
 		rendered.AgentTask.Env = maputil.MergeStringMaps(planEnv, rendered.AgentTask.Env)
 	}
@@ -520,9 +505,6 @@ func prepareStep(step PipelineStep, input PipelineInput, outcomes map[string]Ste
 	}
 	if rendered.ContainerJob != nil {
 		envLookup = maputil.MergeStringMaps(envLookup, rendered.ContainerJob.Env)
-	}
-	if rendered.K8sJob != nil {
-		envLookup = maputil.MergeStringMaps(envLookup, rendered.K8sJob.Env)
 	}
 	if rendered.AgentTask != nil {
 		envLookup = maputil.MergeStringMaps(envLookup, rendered.AgentTask.Env)
@@ -825,27 +807,6 @@ func startActivity(ctx workflow.Context, info *workflow.Info, logDir string, ste
 			LogDir:      logDir,
 			ModelID:     spec.ModelID,
 			CacheDir:    spec.CacheDir,
-			TimeoutSecs: step.TimeoutSeconds,
-		})
-	case "k8s_job":
-		spec := step.K8sJob
-		if spec == nil {
-			spec = &K8sJobSpec{}
-		}
-		return workflow.ExecuteActivity(ctx, activities.K8sJob, activities.K8sJobInput{
-			Name:        stepName(step),
-			WorkflowID:  info.WorkflowExecution.ID,
-			RunID:       info.WorkflowExecution.RunID,
-			StepID:      step.ID,
-			LogDir:      logDir,
-			ProjectID:   spec.ProjectID,
-			Entrypoint:  spec.Entrypoint,
-			Command:     spec.Command,
-			Env:         spec.Env,
-			GPU:         spec.GPU,
-			GPUCount:    spec.GPUCount,
-			Image:       spec.Image,
-			Namespace:   spec.Namespace,
 			TimeoutSecs: step.TimeoutSeconds,
 		})
 	case "agent_task":

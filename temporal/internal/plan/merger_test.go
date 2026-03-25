@@ -312,67 +312,6 @@ func TestMergeHFDownloadModelSpecBaseNil(t *testing.T) {
 	}
 }
 
-func TestMergeK8sJobSpec(t *testing.T) {
-	got := mergeK8sJobSpec(
-		&workflows.K8sJobSpec{
-			ProjectID:  "base-project",
-			Entrypoint: "default",
-			Command:    "python base.py",
-			Env:        map[string]string{"BASE": "1", "KEEP": "yes"},
-			GPUCount:   1,
-			Image:      "base:image",
-			Namespace:  "base-ns",
-		},
-		&workflows.K8sJobSpec{
-			Command:   "python override.py",
-			Env:       map[string]string{"BASE": "2"},
-			GPU:       true,
-			GPUCount:  4,
-			Image:     "override:image",
-			Namespace: "override-ns",
-		},
-	)
-	want := &workflows.K8sJobSpec{
-		ProjectID:  "base-project",
-		Entrypoint: "default",
-		Command:    "python override.py",
-		Env:        map[string]string{"BASE": "2", "KEEP": "yes"},
-		GPU:        true,
-		GPUCount:   4,
-		Image:      "override:image",
-		Namespace:  "override-ns",
-	}
-	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("mergeK8sJobSpec() = %+v, want %+v", got, want)
-	}
-}
-
-func TestMergeK8sJobSpecBaseNil(t *testing.T) {
-	got := mergeK8sJobSpec(nil, &workflows.K8sJobSpec{
-		ProjectID:  "project",
-		Entrypoint: "run-job",
-		Command:    "python train.py",
-		Env:        map[string]string{"A": "1"},
-		GPU:        true,
-		GPUCount:   2,
-		Image:      "trainer:image",
-		Namespace:  "ml",
-	})
-	want := &workflows.K8sJobSpec{
-		ProjectID:  "project",
-		Entrypoint: "run-job",
-		Command:    "python train.py",
-		Env:        map[string]string{"A": "1"},
-		GPU:        true,
-		GPUCount:   2,
-		Image:      "trainer:image",
-		Namespace:  "ml",
-	}
-	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("mergeK8sJobSpec(nil, override) = %+v, want %+v", got, want)
-	}
-}
-
 func TestMergeAgentTaskSpec(t *testing.T) {
 	got := mergeAgentTaskSpec(
 		&workflows.AgentTaskSpec{

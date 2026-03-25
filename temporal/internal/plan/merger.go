@@ -70,9 +70,6 @@ func MergeStep(base, override workflows.PipelineStep) workflows.PipelineStep {
 	if override.HFDownloadModel != nil {
 		merged.HFDownloadModel = mergeHFDownloadModelSpec(merged.HFDownloadModel, override.HFDownloadModel)
 	}
-	if override.K8sJob != nil {
-		merged.K8sJob = mergeK8sJobSpec(merged.K8sJob, override.K8sJob)
-	}
 	if override.AgentTask != nil {
 		merged.AgentTask = mergeAgentTaskSpec(merged.AgentTask, override.AgentTask)
 	}
@@ -233,38 +230,6 @@ func mergeHFDownloadModelSpec(base, override *workflows.HFDownloadModelSpec) *wo
 	}
 	if override.CacheDir != "" {
 		merged.CacheDir = override.CacheDir
-	}
-	return &merged
-}
-
-func mergeK8sJobSpec(base, override *workflows.K8sJobSpec) *workflows.K8sJobSpec {
-	if base == nil {
-		base = &workflows.K8sJobSpec{}
-	}
-	merged := *base
-	if override.ProjectID != "" {
-		merged.ProjectID = override.ProjectID
-	}
-	if override.Entrypoint != "" {
-		merged.Entrypoint = override.Entrypoint
-	}
-	if override.Command != "" {
-		merged.Command = override.Command
-	}
-	if override.Env != nil {
-		merged.Env = maputil.MergeStringMaps(merged.Env, override.Env)
-	}
-	if override.GPU {
-		merged.GPU = true
-	}
-	if override.GPUCount > 0 {
-		merged.GPUCount = override.GPUCount
-	}
-	if override.Image != "" {
-		merged.Image = override.Image
-	}
-	if override.Namespace != "" {
-		merged.Namespace = override.Namespace
 	}
 	return &merged
 }

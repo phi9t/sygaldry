@@ -18,7 +18,6 @@ var allowedTypes = map[string]bool{
 	"container_job":       true,
 	"hf_download_dataset": true,
 	"hf_download_model":   true,
-	"k8s_job":             true,
 	"agent_task":          true,
 	"git_op":              true,
 }
@@ -89,10 +88,6 @@ func Validate(input *workflows.PipelineInput) error {
 			case "hf_download_model":
 				if step.HFDownloadModel == nil || step.HFDownloadModel.ModelID == "" {
 					errs = append(errs, fmt.Errorf("step %s hf_download_model requires model_id", step.ID))
-				}
-			case "k8s_job":
-				if step.K8sJob == nil || step.K8sJob.Command == "" {
-					errs = append(errs, fmt.Errorf("step %s k8s_job requires command", step.ID))
 				}
 			case "agent_task":
 				if step.AgentTask == nil {

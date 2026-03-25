@@ -445,17 +445,6 @@ func TestContainerJobValidation(t *testing.T) {
 	}
 }
 
-func TestK8sJobValidation(t *testing.T) {
-	_, err := K8sJob(context.Background(), K8sJobInput{Command: ""})
-	if err == nil {
-		t.Error("expected error for empty command")
-	}
-	_, err = K8sJob(context.Background(), K8sJobInput{Command: "   "})
-	if err == nil {
-		t.Error("expected error for whitespace-only command")
-	}
-}
-
 func TestHFDownloadDatasetValidation(t *testing.T) {
 	_, err := HFDownloadDataset(context.Background(), HFDownloadDatasetInput{DatasetID: ""})
 	if err == nil {

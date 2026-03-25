@@ -74,8 +74,6 @@ func TestValidateAllTypes(t *testing.T) {
 				step.HFDownloadDataset = &workflows.HFDownloadDatasetSpec{DatasetID: "ns/ds"}
 			case "hf_download_model":
 				step.HFDownloadModel = &workflows.HFDownloadModelSpec{ModelID: "ns/model"}
-			case "k8s_job":
-				step.K8sJob = &workflows.K8sJobSpec{Command: "nvidia-smi"}
 			case "agent_task":
 				step.AgentTask = &workflows.AgentTaskSpec{Engine: "claude", Prompt: "hello"}
 			case "git_op":
@@ -105,7 +103,6 @@ func TestValidateMissingRequiredFields(t *testing.T) {
 		{"container_job nil", workflows.PipelineStep{ID: "a", Type: "container_job"}, "container_job requires command"},
 		{"hf_download_dataset nil", workflows.PipelineStep{ID: "a", Type: "hf_download_dataset"}, "hf_download_dataset requires dataset_id"},
 		{"hf_download_model nil", workflows.PipelineStep{ID: "a", Type: "hf_download_model"}, "hf_download_model requires model_id"},
-		{"k8s_job nil", workflows.PipelineStep{ID: "a", Type: "k8s_job"}, "k8s_job requires command"},
 		{"agent_task nil", workflows.PipelineStep{ID: "a", Type: "agent_task"}, "agent_task requires agent_task config"},
 		{"agent_task no engine", workflows.PipelineStep{ID: "a", Type: "agent_task", AgentTask: &workflows.AgentTaskSpec{Prompt: "hi"}}, "agent_task requires engine"},
 		{"agent_task no prompt", workflows.PipelineStep{ID: "a", Type: "agent_task", AgentTask: &workflows.AgentTaskSpec{Engine: "claude"}}, "agent_task requires prompt or prompt_file"},

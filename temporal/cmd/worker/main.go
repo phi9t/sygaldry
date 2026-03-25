@@ -165,7 +165,6 @@ func main() {
 	w.RegisterActivity(activities.ContainerJob)
 	w.RegisterActivity(activities.HFDownloadDataset)
 	w.RegisterActivity(activities.HFDownloadModel)
-	w.RegisterActivity(activities.K8sJob)
 	w.RegisterActivity(activities.AgentTask)
 	w.RegisterActivity(activities.GitOp)
 	w.RegisterActivity(activities.MultiEngineAgentTask)

@@ -15,7 +15,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"sort"
-	"strconv"
 	"strings"
 	"time"
 
@@ -159,23 +158,6 @@ type HFDownloadModelInput struct {
 	ModelID     string `json:"modelId"`
 	CacheDir    string `json:"cacheDir"`
 	TimeoutSecs int    `json:"timeoutSeconds"`
-}
-
-type K8sJobInput struct {
-	Name        string            `json:"name"`
-	WorkflowID  string            `json:"workflowId"`
-	RunID       string            `json:"runId"`
-	StepID      string            `json:"stepId"`
-	LogDir      string            `json:"logDir"`
-	ProjectID   string            `json:"projectId"`
-	Entrypoint  string            `json:"entrypoint"`
-	Command     string            `json:"command"`
-	Env         map[string]string `json:"env"`
-	GPU         bool              `json:"gpu"`
-	GPUCount    int               `json:"gpuCount"`
-	Image       string            `json:"image"`
-	Namespace   string            `json:"namespace"`
-	TimeoutSecs int               `json:"timeoutSeconds"`
 }
 
 func RunCommand(ctx context.Context, input RunCommandInput) (RunCommandResult, error) {
@@ -495,91 +477,6 @@ func normalizeContainerEntrypointName(name string) string {
 	name = strings.TrimSpace(name)
 	name = strings.TrimSuffix(name, ".sh")
 	return name
-}
-
-func K8sJob(ctx context.Context, input K8sJobInput) (RunCommandResult, error) {
-	if strings.TrimSpace(input.Command) == "" {
-		return RunCommandResult{ExitCode: -1}, errors.New("command is required")
-	}
-
-	namespace := input.Namespace
-	if namespace == "" {
-		namespace = "sygaldry"
-	}
-	projectID := input.ProjectID
-	if projectID == "" {
-		projectID = "default"
-	}
-	image := input.Image
-	if image == "" {
-		image = "sygaldry/zephyr:base"
-	}
-	gpuCount := input.GPUCount
-	if gpuCount <= 0 {
-		if input.GPU {
-			gpuCount = 1
-		}
-	}
-	entrypoint := input.Entrypoint
-	if entrypoint == "" {
-		entrypoint = "run-job.sh"
-	}
-
-	// Use kjob CLI to submit and monitor the job
-	jobName := safeName(input.StepID)
-	if jobName == "" {
-		jobName = safeName(input.Name)
-	}
-
-	args := []string{
-		"run",
-		"--project-id", projectID,
-		"--job", jobName,
-		"--gpu", strconv.Itoa(gpuCount),
-		"--image", image,
-		"--namespace", namespace,
-		"--", input.Command,
-	}
-
-	// Determine kjob path relative to SYGALDRY_HOME.
-	// In container context the sygaldry repo is always mounted at /opt/sygaldry.
-	sygaldryHome := os.Getenv("SYGALDRY_HOME")
-	if sygaldryHome == "" {
-		sygaldryHome = "/opt/sygaldry"
-	}
-	kjobPath := sygaldryHome + "/k3s/bin/kjob"
-	if _, statErr := os.Stat(kjobPath); statErr != nil {
-		return RunCommandResult{ExitCode: -1}, fmt.Errorf(
-			"kjob not found at %s: set SYGALDRY_HOME to the sygaldry repo root (on host) or /opt/sygaldry (in container): %w",
-			kjobPath, statErr,
-		)
-	}
-
-	env := make(map[string]string)
-	for key, value := range input.Env {
-		env[key] = value
-	}
-	if projectID != "" {
-		env["SYGALDRY_PROJECT_ID"] = projectID
-	}
-	if image != "" {
-		env["SYGALDRY_IMAGE"] = image
-	}
-	if gpuCount > 0 {
-		env["SYGALDRY_GPU_COUNT"] = strconv.Itoa(gpuCount)
-	}
-
-	return runCommand(ctx, RunCommandInput{
-		Name:        input.Name,
-		WorkflowID:  input.WorkflowID,
-		RunID:       input.RunID,
-		StepID:      input.StepID,
-		LogDir:      input.LogDir,
-		Command:     kjobPath,
-		Args:        args,
-		Env:         env,
-		TimeoutSecs: input.TimeoutSecs,
-	})
 }
 
 func HFDownloadDataset(ctx context.Context, input HFDownloadDatasetInput) (RunCommandResult, error) {
