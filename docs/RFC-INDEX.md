@@ -1,21 +1,13 @@
 # RFC Index
 
-**Last updated:** 2026-03-25
-**Total RFCs:** 7 open (84 created, 77 closed as complete or N/A)
+**Last updated:** 2026-03-26
+**Total RFCs:** 0 open (84 created, 84 closed as complete or N/A)
 
 ---
 
 ## Open RFCs
 
-| # | Title | Priority | Effort | Status |
-|---|-------|----------|--------|--------|
-| RFC-078 | Extract rfc_impl.go Helpers to rfc_impl_util.go | Medium | XS | Open |
-| RFC-079 | Extract HttpServer Class from sail_supervisor.py | Medium | M | Open |
-| RFC-082 | Add cargo_clippy Source to discover_issues.py | Medium | S | Open |
-| RFC-083 | Remove Stale k3s Subcommand from bin/sygaldry | Medium | XS | Open |
-| RFC-080 | Split config.rs Enums to config_types.rs | Low | S | Open |
-| RFC-084 | Extract stepContext Helper from startActivity in pipeline.go | Low | S | Open |
-| RFC-081 | Decompose docker_args.rs into docker_env.rs and docker_mounts.rs | Low | M | Open |
+None. All RFCs have been resolved.
 
 ---
 
@@ -100,3 +92,10 @@
 | RFC-075 | Extract Log-Writer Infrastructure from steps.go to logging.go | Done — SAIL (commit 56e96e4) |
 | RFC-076 | Add Unit Tests for update_major_challenge_state.py | Done — SAIL (commit fb561a6) |
 | RFC-077 | Fix Rust Test Count Scan in rfc-review-prompt.md | Done — rfc-review-prompt.md:61 already uses `'^\s*#\[test\]'` |
+| RFC-078 | Extract rfc_impl.go Helpers to rfc_impl_util.go | Done — 10 helpers extracted to rfc_impl_util.go; rfc_impl.go reduced to 666 lines |
+| RFC-079 | Extract HttpServer Class from sail_supervisor.py | Done — HttpServer class extracted to sail_http_server.py; sail_supervisor.py reduced to 854 lines |
+| RFC-080 | Split config.rs Enums to config_types.rs | Done — 5 types extracted to config_types.rs; pub use re-exports preserve callers |
+| RFC-081 | Decompose docker_args.rs into docker_env.rs and docker_mounts.rs | Done — docker_env.rs and docker_mounts.rs created; docker_args.rs reduced to 188 production lines |
+| RFC-082 | Add cargo_clippy Source to discover_issues.py | Done — discover_cargo_clippy() added; mirrors validate_all.sh toolchain resolution |
+| RFC-083 | Remove Stale k3s Subcommand from bin/sygaldry | Done — k3s subcommand block and completions removed from bin/sygaldry |
+| RFC-084 | Extract stepContext Helper from startActivity in pipeline.go | Done — stepContext struct extracted; 11 repetitions eliminated in startActivity |

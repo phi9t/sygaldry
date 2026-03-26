@@ -1,6 +1,8 @@
 pub mod cuda;
 pub mod dirs;
 pub mod docker_args;
+pub(super) mod docker_env;
+pub(super) mod docker_mounts;
 pub mod image;
 pub mod job;
 pub mod launcher;
