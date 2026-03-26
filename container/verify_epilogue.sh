@@ -60,7 +60,6 @@ if [[ -z "${CONSTRAINTS_FILE}" ]]; then
   CONSTRAINTS_FILE="${VENV_DIR}/spack-constraints.txt"
 fi
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REQUIRE_FLAG=""
 if [[ "${REQUIRE_GPU}" == "true" ]]; then
   REQUIRE_FLAG="--require-gpu"

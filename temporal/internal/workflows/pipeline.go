@@ -678,15 +678,41 @@ func cloneMap(in map[string]string) map[string]string {
 	return out
 }
 
+type stepContext struct {
+	name       string
+	workflowID string
+	runID      string
+	stepID     string
+	logDir     string
+}
+
+func newStepContext(ctx workflow.Context, step PipelineStep, logDir string) stepContext {
+	info := workflow.GetInfo(ctx)
+	return stepContext{
+		name:       stepName(step),
+		workflowID: info.WorkflowExecution.ID,
+		runID:      info.WorkflowExecution.RunID,
+		stepID:     step.ID,
+		logDir:     logDir,
+	}
+}
+
 func startActivity(ctx workflow.Context, info *workflow.Info, logDir string, step PipelineStep) workflow.Future {
+	sc := stepContext{
+		name:       stepName(step),
+		workflowID: info.WorkflowExecution.ID,
+		runID:      info.WorkflowExecution.RunID,
+		stepID:     step.ID,
+		logDir:     logDir,
+	}
 	switch step.Type {
 	case "command":
 		return workflow.ExecuteActivity(ctx, activities.RunCommand, activities.RunCommandInput{
-			Name:        stepName(step),
-			WorkflowID:  info.WorkflowExecution.ID,
-			RunID:       info.WorkflowExecution.RunID,
-			StepID:      step.ID,
-			LogDir:      logDir,
+			Name:        sc.name,
+			WorkflowID:  sc.workflowID,
+			RunID:       sc.runID,
+			StepID:      sc.stepID,
+			LogDir:      sc.logDir,
 			Command:     step.Command,
 			Args:        step.Args,
 			Env:         step.Env,
@@ -699,11 +725,11 @@ func startActivity(ctx workflow.Context, info *workflow.Info, logDir string, ste
 			spec = &DownloadSpec{}
 		}
 		return workflow.ExecuteActivity(ctx, activities.DownloadFile, activities.DownloadInput{
-			Name:        stepName(step),
-			WorkflowID:  info.WorkflowExecution.ID,
-			RunID:       info.WorkflowExecution.RunID,
-			StepID:      step.ID,
-			LogDir:      logDir,
+			Name:        sc.name,
+			WorkflowID:  sc.workflowID,
+			RunID:       sc.runID,
+			StepID:      sc.stepID,
+			LogDir:      sc.logDir,
 			URL:         spec.URL,
 			OutputPath:  spec.Output,
 			Sha256:      spec.Sha256,
@@ -715,11 +741,11 @@ func startActivity(ctx workflow.Context, info *workflow.Info, logDir string, ste
 			spec = &DockerBuildSpec{}
 		}
 		return workflow.ExecuteActivity(ctx, activities.DockerBuild, activities.DockerBuildInput{
-			Name:        stepName(step),
-			WorkflowID:  info.WorkflowExecution.ID,
-			RunID:       info.WorkflowExecution.RunID,
-			StepID:      step.ID,
-			LogDir:      logDir,
+			Name:        sc.name,
+			WorkflowID:  sc.workflowID,
+			RunID:       sc.runID,
+			StepID:      sc.stepID,
+			LogDir:      sc.logDir,
 			Image:       spec.Image,
 			Context:     spec.Context,
 			Dockerfile:  spec.Dockerfile,
@@ -735,11 +761,11 @@ func startActivity(ctx workflow.Context, info *workflow.Info, logDir string, ste
 			spec = &DockerPushSpec{}
 		}
 		return workflow.ExecuteActivity(ctx, activities.DockerPush, activities.DockerPushInput{
-			Name:        stepName(step),
-			WorkflowID:  info.WorkflowExecution.ID,
-			RunID:       info.WorkflowExecution.RunID,
-			StepID:      step.ID,
-			LogDir:      logDir,
+			Name:        sc.name,
+			WorkflowID:  sc.workflowID,
+			RunID:       sc.runID,
+			StepID:      sc.stepID,
+			LogDir:      sc.logDir,
 			Image:       spec.Image,
 			TimeoutSecs: step.TimeoutSeconds,
 		})
@@ -749,11 +775,11 @@ func startActivity(ctx workflow.Context, info *workflow.Info, logDir string, ste
 			spec = &PackageBuildSpec{}
 		}
 		return workflow.ExecuteActivity(ctx, activities.PackageBuild, activities.PackageBuildInput{
-			Name:        stepName(step),
-			WorkflowID:  info.WorkflowExecution.ID,
-			RunID:       info.WorkflowExecution.RunID,
-			StepID:      step.ID,
-			LogDir:      logDir,
+			Name:        sc.name,
+			WorkflowID:  sc.workflowID,
+			RunID:       sc.runID,
+			StepID:      sc.stepID,
+			LogDir:      sc.logDir,
 			Command:     spec.Command,
 			Args:        spec.Args,
 			Env:         spec.Env,
@@ -766,11 +792,11 @@ func startActivity(ctx workflow.Context, info *workflow.Info, logDir string, ste
 			spec = &ContainerJobSpec{}
 		}
 		return workflow.ExecuteActivity(ctx, activities.ContainerJob, activities.ContainerJobInput{
-			Name:        stepName(step),
-			WorkflowID:  info.WorkflowExecution.ID,
-			RunID:       info.WorkflowExecution.RunID,
-			StepID:      step.ID,
-			LogDir:      logDir,
+			Name:        sc.name,
+			WorkflowID:  sc.workflowID,
+			RunID:       sc.runID,
+			StepID:      sc.stepID,
+			LogDir:      sc.logDir,
 			ProjectID:   spec.ProjectID,
 			Entrypoint:  spec.Entrypoint,
 			Command:     spec.Command,
@@ -784,11 +810,11 @@ func startActivity(ctx workflow.Context, info *workflow.Info, logDir string, ste
 			spec = &HFDownloadDatasetSpec{}
 		}
 		return workflow.ExecuteActivity(ctx, activities.HFDownloadDataset, activities.HFDownloadDatasetInput{
-			Name:        stepName(step),
-			WorkflowID:  info.WorkflowExecution.ID,
-			RunID:       info.WorkflowExecution.RunID,
-			StepID:      step.ID,
-			LogDir:      logDir,
+			Name:        sc.name,
+			WorkflowID:  sc.workflowID,
+			RunID:       sc.runID,
+			StepID:      sc.stepID,
+			LogDir:      sc.logDir,
 			DatasetID:   spec.DatasetID,
 			Config:      spec.Config,
 			Split:       spec.Split,
@@ -801,11 +827,11 @@ func startActivity(ctx workflow.Context, info *workflow.Info, logDir string, ste
 			spec = &HFDownloadModelSpec{}
 		}
 		return workflow.ExecuteActivity(ctx, activities.HFDownloadModel, activities.HFDownloadModelInput{
-			Name:        stepName(step),
-			WorkflowID:  info.WorkflowExecution.ID,
-			RunID:       info.WorkflowExecution.RunID,
-			StepID:      step.ID,
-			LogDir:      logDir,
+			Name:        sc.name,
+			WorkflowID:  sc.workflowID,
+			RunID:       sc.runID,
+			StepID:      sc.stepID,
+			LogDir:      sc.logDir,
 			ModelID:     spec.ModelID,
 			CacheDir:    spec.CacheDir,
 			TimeoutSecs: step.TimeoutSeconds,
@@ -816,11 +842,11 @@ func startActivity(ctx workflow.Context, info *workflow.Info, logDir string, ste
 			spec = &AgentTaskSpec{}
 		}
 		return workflow.ExecuteActivity(ctx, activities.AgentTask, activities.AgentTaskInput{
-			Name:        stepName(step),
-			WorkflowID:  info.WorkflowExecution.ID,
-			RunID:       info.WorkflowExecution.RunID,
-			StepID:      step.ID,
-			LogDir:      logDir,
+			Name:        sc.name,
+			WorkflowID:  sc.workflowID,
+			RunID:       sc.runID,
+			StepID:      sc.stepID,
+			LogDir:      sc.logDir,
 			Engine:      activities.AgentTaskEngine(spec.Engine),
 			Model:       spec.Model,
 			Prompt:      spec.Prompt,
@@ -837,11 +863,11 @@ func startActivity(ctx workflow.Context, info *workflow.Info, logDir string, ste
 			spec = &GitOpSpec{}
 		}
 		return workflow.ExecuteActivity(ctx, activities.GitOp, activities.GitOpInput{
-			Name:          stepName(step),
-			WorkflowID:    info.WorkflowExecution.ID,
-			RunID:         info.WorkflowExecution.RunID,
-			StepID:        step.ID,
-			LogDir:        logDir,
+			Name:          sc.name,
+			WorkflowID:    sc.workflowID,
+			RunID:         sc.runID,
+			StepID:        sc.stepID,
+			LogDir:        sc.logDir,
 			Op:            spec.Op,
 			RepoDir:       spec.RepoDir,
 			Branch:        spec.Branch,
@@ -855,11 +881,11 @@ func startActivity(ctx workflow.Context, info *workflow.Info, logDir string, ste
 		})
 	default:
 		return workflow.ExecuteActivity(ctx, activities.RunCommand, activities.RunCommandInput{
-			Name:        stepName(step),
-			WorkflowID:  info.WorkflowExecution.ID,
-			RunID:       info.WorkflowExecution.RunID,
-			StepID:      step.ID,
-			LogDir:      logDir,
+			Name:        sc.name,
+			WorkflowID:  sc.workflowID,
+			RunID:       sc.runID,
+			StepID:      sc.stepID,
+			LogDir:      sc.logDir,
 			Command:     step.Command,
 			Args:        step.Args,
 			Env:         step.Env,

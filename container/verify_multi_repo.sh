@@ -25,8 +25,6 @@ set -eu -o pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly SCRIPT_DIR
-REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
-readonly REPO_ROOT
 source "${SCRIPT_DIR}/lib/verify_common.sh"
 
 verify_reset_counters

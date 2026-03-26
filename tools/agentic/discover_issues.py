@@ -18,7 +18,7 @@ Output: JSON array of issues sorted by priority (1=critical, 2=high, 3=normal),
         {
           "id":          "<type>-<hash>",
           "priority":    1|2|3,
-          "type":        "todo|shellcheck|go_test|ruff|foundation_drift|go_vet|go_coverage|rust_coverage|rfc",
+          "type":        "todo|shellcheck|go_test|ruff|foundation_drift|go_vet|go_coverage|rust_coverage|cargo_clippy|rfc",
           "title":       "<short description>",
           "description": "<detail>",
           "files":       ["<path>", ...],
@@ -37,6 +37,7 @@ import hashlib
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import time
@@ -692,6 +693,119 @@ def discover_open_rfcs(repo_dir: Path, max_per_type: int) -> list[Issue]:
 
 
 # ---------------------------------------------------------------------------
+# Source 10: cargo clippy errors
+# ---------------------------------------------------------------------------
+
+
+def discover_cargo_clippy(repo_dir: Path, max_per_type: int) -> list[Issue]:
+    if shutil.which("cargo") is None:
+        return []
+
+    crate_dir = repo_dir / "crates" / "zephyr"
+    manifest = crate_dir / "Cargo.toml"
+    if not manifest.exists():
+        return []
+
+    env = dict(os.environ)
+
+    toolchain_file = crate_dir / "rust-toolchain.toml"
+    if toolchain_file.exists() and shutil.which("rustup") is not None:
+        try:
+            channel_result = subprocess.run(
+                ["grep", "-o", 'channel = "[^"]*"', str(toolchain_file)],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            channel_raw = channel_result.stdout.strip()
+            if channel_raw:
+                channel = channel_raw.split('"')[1]
+                triple_result = subprocess.run(
+                    ["rustc", "-vV"],
+                    capture_output=True,
+                    text=True,
+                    timeout=5,
+                )
+                triple = ""
+                for line in triple_result.stdout.splitlines():
+                    if line.startswith("host:"):
+                        triple = line.split(None, 1)[1].strip()
+                        break
+                if channel and triple:
+                    home = os.environ.get("HOME", "")
+                    tc_bin = os.path.join(
+                        home, ".rustup", "toolchains", f"{channel}-{triple}", "bin"
+                    )
+                    if os.path.isfile(os.path.join(tc_bin, "cargo")) and os.access(
+                        os.path.join(tc_bin, "cargo"), os.X_OK
+                    ):
+                        env["PATH"] = tc_bin + ":" + env.get("PATH", "")
+        except (subprocess.TimeoutExpired, FileNotFoundError, IndexError):
+            pass
+
+    try:
+        result = subprocess.run(
+            [
+                "cargo",
+                "clippy",
+                "--manifest-path",
+                str(manifest),
+                "--message-format",
+                "json",
+                "--",
+                "-D",
+                "warnings",
+            ],
+            cwd=repo_dir,
+            capture_output=False,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            timeout=120,
+            env=env,
+        )
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        return []
+
+    issues: list[Issue] = []
+    for line in result.stdout.splitlines():
+        try:
+            msg = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if msg.get("reason") != "compiler-message":
+            continue
+        inner = msg.get("message", {})
+        if inner.get("level") != "error":
+            continue
+        rendered = inner.get("rendered", inner.get("message", ""))
+        spans = inner.get("spans", [])
+        if spans:
+            file_path = spans[0].get("file_name", str(crate_dir))
+            lineno = spans[0].get("line_start", 0)
+            cite = f"{file_path}:{lineno}"
+        else:
+            file_path = str(crate_dir)
+            cite = str(crate_dir)
+
+        text_key = f"{file_path}:{lineno if spans else 0}:{rendered[:120]}"
+        issues.append(
+            {
+                "id": _issue_id("cargo_clippy", text_key),
+                "priority": 2,
+                "type": "cargo_clippy",
+                "title": f"clippy error: {rendered[:80].splitlines()[0] if rendered else 'error'}",
+                "description": f"{cite}: {rendered[:200]}",
+                "files": [file_path],
+                "context": rendered[:500],
+            }
+        )
+        if len(issues) >= max_per_type:
+            break
+    return issues
+
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
@@ -741,6 +855,7 @@ def main() -> None:
         ("ruff", discover_ruff),
         ("foundation_drift", discover_foundation_drift),
         ("open_rfcs", discover_open_rfcs),
+        ("cargo_clippy", discover_cargo_clippy),
     ]
 
     if args.sources:

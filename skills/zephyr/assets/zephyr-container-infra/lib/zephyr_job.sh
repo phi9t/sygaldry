@@ -20,12 +20,6 @@ Notes:
 USAGE
 }
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-readonly SCRIPT_DIR
-DEFAULT_PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
-readonly DEFAULT_PROJECT_ROOT
-
-PROJECT_ROOT="${SYGALDRY_HOME:-${DEFAULT_PROJECT_ROOT}}"
 CACHE_ROOT="${ZEPHYR_CACHE_ROOT:-/mnt/data_infra/zephyr_container_infra}"
 PROJECTS_ROOT="${ZEPHYR_PROJECTS_ROOT:-${CACHE_ROOT}/projects}"
 
@@ -40,8 +34,6 @@ LEASE_MODE="${ZEPHYR_LEASE_MODE:-warn}"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --project-root)
-      PROJECT_ROOT="$2"; shift 2 ;;
     --project-id)
       PROJECT_ID="$2"; shift 2 ;;
     --job|--job-name)

@@ -89,29 +89,6 @@ if [[ -x "${ZEPHYR_BIN}" ]]; then
             shift
             exec "${SYGALDRY_HOME}/validate_all.sh" "$@"
             ;;
-        k3s)
-            shift
-            case "${1:-}" in
-                enter|"")
-                    shift 2>/dev/null || true
-                    exec "${SYGALDRY_HOME}/k3s/bin/kentai" "$@"
-                    ;;
-                job)
-                    shift
-                    exec "${SYGALDRY_HOME}/k3s/bin/kjob" "$@"
-                    ;;
-                setup)
-                    echo "Run these as root:" >&2
-                    echo "  sudo ${SYGALDRY_HOME}/k3s/bootstrap/install-k3s.sh" >&2
-                    echo "  sudo ${SYGALDRY_HOME}/k3s/bootstrap/setup-nvidia.sh" >&2
-                    exit 0
-                    ;;
-                *)
-                    echo "Usage: sygaldry k3s [enter|job|setup]" >&2
-                    exit 2
-                    ;;
-            esac
-            ;;
         completions)
             declare -f _sygaldry_completions
             echo "complete -F _sygaldry_completions sygaldry"
@@ -139,7 +116,7 @@ exit 127
 _sygaldry_completions() {
     local cur="${COMP_WORDS[COMP_CWORD]}"
     local prev="${COMP_WORDS[COMP_CWORD-1]}"
-    local subcommands="shell run job config snapshot validate completions version k3s sail --help --repo"
+    local subcommands="shell run job config snapshot validate completions version sail --help --repo"
 
     case "${prev}" in
         snapshot)
@@ -150,9 +127,6 @@ _sygaldry_completions() {
             return ;;
         config)
             mapfile -t COMPREPLY < <(compgen -W "show" -- "${cur}")
-            return ;;
-        k3s)
-            mapfile -t COMPREPLY < <(compgen -W "enter job setup" -- "${cur}")
             return ;;
         sail)
             mapfile -t COMPREPLY < <(compgen -W "status pause resume discover discover-major worker cron ensure-infra supervisor analyze-run validate-plan --dry-run --repo-dir --run-id --artifacts-dir --issues-file --run-dir --output-dir --once --no-fix --runtime-root --poll-secs --stall-secs --empty-streak --min-empty-streak --backlog-file --watch --json --runs" -- "${cur}")

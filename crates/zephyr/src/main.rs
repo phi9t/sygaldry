@@ -1,5 +1,6 @@
 mod cli;
 mod config;
+mod config_types;
 mod context;
 mod error;
 mod paths;

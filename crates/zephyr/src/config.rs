@@ -1,69 +1,8 @@
 use crate::paths::{HostLayout, DEFAULT_CACHE_ROOT};
 use std::path::{Path, PathBuf};
 
-/// Docker image build policy.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum BuildPolicy {
-    Auto,
-    Always,
-    Never,
-}
-
-impl BuildPolicy {
-    pub fn parse(s: &str) -> Option<Self> {
-        match s {
-            "auto" => Some(Self::Auto),
-            "always" => Some(Self::Always),
-            "never" => Some(Self::Never),
-            _ => None,
-        }
-    }
-}
-
-/// Lease conflict resolution mode.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum LeaseMode {
-    Off,
-    Warn,
-    Enforce,
-}
-
-impl LeaseMode {
-    pub fn parse(s: &str) -> Option<Self> {
-        match s {
-            "off" => Some(Self::Off),
-            "warn" => Some(Self::Warn),
-            "enforce" => Some(Self::Enforce),
-            _ => None,
-        }
-    }
-}
-
-/// Cache isolation profile.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum CacheProfile {
-    Shared,
-    Isolated,
-    Hybrid,
-}
-
-impl CacheProfile {
-    pub fn parse(s: &str) -> Option<Self> {
-        match s {
-            "shared" => Some(Self::Shared),
-            "isolated" => Some(Self::Isolated),
-            "hybrid" => Some(Self::Hybrid),
-            _ => None,
-        }
-    }
-}
-
-/// Launch mode: legacy (sygaldry at /workspace) vs multi-repo.
-#[derive(Debug, Clone)]
-pub enum LaunchMode {
-    Legacy,
-    MultiRepo { repo_path: PathBuf },
-}
+pub use crate::config_types::{BuildPolicy, CacheProfile, LaunchMode, LeaseMode};
+use crate::config_types::SharedCaches;
 
 /// Complete Zephyr configuration.
 ///
@@ -328,17 +267,6 @@ fn build_host_layout(project_id: &str) -> HostLayout {
         nv_compute_cache: shared_caches.nv_compute_cache,
         jax_cache: shared_caches.jax_cache,
     }
-}
-
-struct SharedCaches {
-    spack_store: PathBuf,
-    bazel_cache: PathBuf,
-    hf_cache: PathBuf,
-    uv_cache: PathBuf,
-    torch_cache: PathBuf,
-    triton_cache: PathBuf,
-    nv_compute_cache: PathBuf,
-    jax_cache: PathBuf,
 }
 
 /// Resolve shared cache paths with legacy env var fallbacks.
